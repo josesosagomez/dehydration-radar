@@ -1,0 +1,10 @@
+# WST parameters (implementation_plan.md "WST parameterization"). Consumed from M4.
+#
+# The three tilings themselves are frozen constants and live in code
+# (src/dehyd/config.py WSTConfig); overriding `tilings` here is rejected on purpose.
+# J and the output shape are DERIVED and MEASURED at build time from the instantiated
+# kymatio filter bank — never hard-coded here.
+
+wst:
+  max_order: 2       # orders 0/1/2 kept
+  log_epsilon: 1.0e-6  # log(S + eps) on orders 1-2 only; order 0 stays linear

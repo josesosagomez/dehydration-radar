@@ -1,0 +1,45 @@
+[project]
+name = "dehyd"
+version = "0.1.0"
+description = "Radar-based dehydration monitoring — Python rebuild and rigorous extension"
+requires-python = ">=3.11"
+
+# Pinned lower bounds only here; exact versions are frozen in uv.lock.
+# torch and h5py are deliberately absent at milestone 1:
+#   h5py  -> milestone 2 (77 GHz audit)
+#   torch -> milestone 4 (WST numpy/torch cross-backend validation)
+dependencies = [
+    "numpy>=1.26",
+    # Upper bound forced by kymatio 0.3.0: its scattering3d filter bank imports
+    # scipy.special.sph_harm, which scipy removed in 1.17 (replaced by sph_harm_y).
+    # Without this, `from kymatio.numpy import Scattering1D` raises ImportError.
+    # Revisit when kymatio ships a release that uses sph_harm_y.
+    "scipy>=1.11,<1.17",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "PyYAML>=6.0",
+    "scikit-learn>=1.3",
+    "kymatio>=0.3",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dehyd"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The default .pytest_cache/ at the repo root exists with an unreadable ACL on this
+# machine (cannot be read, chown'd, or removed without elevation), which makes pytest
+# emit a PytestCacheWarning on every run. Point the cache somewhere writable instead.
+cache_dir = ".cache/pytest"
+markers = [
+    # Registration only silences the unknown-marker warning; the actual gating
+    # (skip by default, hard-fail under --realdata) lives in tests/conftest.py.
+    "realdata: requires the private raw dataset; skipped unless --realdata is passed",
+]

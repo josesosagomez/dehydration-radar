@@ -1,0 +1,23 @@
+# Experiment A — fluid-loss (Delta m%) regression, session-level, nested LOSO.
+#
+# Composes the shared configs so no scientific constant is duplicated. Include paths
+# resolve against THIS file's directory; path values inside resolve against the repo
+# root. A per-machine overlay (e.g. configs/ibex.yaml) is passed as a later --config.
+include:
+  - data.yaml
+  - preprocess.yaml
+  - wst.yaml
+
+run:
+  seed: 20260721
+  # Five distinct seeds for stochastic models; the inner metric is their mean and each
+  # seed is scored separately at the outer level (never ensembled into one prediction).
+  seed_set: [1, 2, 3, 4, 5]
+  device: cpu
+
+split:
+  n_inner_max: 5        # GroupKFold(min(5, n_train)) over outer-training subjects
+  min_train_subjects: 3 # below this an outer fold is non-selectable, not degenerate
+
+# The Exp A search space is NOT defined here yet — it is fixed at the milestone-5
+# config-freeze gate, before any outer results are inspected.

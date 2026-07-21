@@ -1,0 +1,21 @@
+# Frozen QC + preprocessing constants (implementation_plan.md "QC screens &
+# thresholds" and "Preprocessing — executable sequence"). Consumed from M2/M3.
+#
+# These are stated explicitly rather than left to code defaults so a run's YAML is a
+# complete record of what produced it. The values match src/dehyd/config.py defaults.
+
+qc:
+  histogram_bins: 200            # flatline histogram, per chirp
+  flatline_max_bin_fraction: 0.25  # reject if any bin holds >= 25% of the 534 samples
+  min_in_band_energy_ratio: 0.30   # reject below this in-band/total power ratio
+  rms_robust_z_threshold: 4.5      # diagnostic flag only, not a sole reject
+  qc_gate_m: [0.9, 3.0]            # ONE fixed wider gate for QC, for all candidates
+  min_frame_fraction: 0.5          # session kept iff >= ceil(0.5 * actual frame count)
+
+preprocess:
+  butter_order: 4                # scipy butter(4, ...) -> 8 poles, as in the reference
+  model_gate_m: [1.0, 2.0]       # physically-motivated default (subject seated ~1 m)
+  edge_trim: 32                  # drop filtfilt edge transients, AFTER reduction
+  fs_hz: 520834.0
+  bandwidth_hz: 500.0e6
+  chirp_time_s: 1024.0e-6

@@ -1,0 +1,7 @@
+# Data paths. Relative paths resolve against the repository root (never the CWD).
+# Session names/order are NOT here — src/dehyd/data/sessions.py is their single
+# definition, so the two can never drift apart.
+paths:
+  data_10ghz_dir: data/10ghz
+  weight_xlsx: data/weight/metadata_subjects_info.xlsx
+  results_dir: results

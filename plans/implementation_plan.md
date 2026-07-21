@@ -64,11 +64,14 @@ CLAUDE.md / ROADMAP §1.
   (S0 = 8am, col E); **negative = fluid lost**. Near-monotone-decreasing, ≈0 to
   ≈ −2%. `ground_truth.py` cross-checks the computed S4 values two ways, each
   sign-aware and with an explicit tolerance, failing loudly on disagreement:
-  (i) **column J is a signed kg change** → compare against computed
-  `m(S4) − m(S0)` with `|diff| ≤ 0.05 kg` (weights recorded to 0.1 kg);
+  (i) **column J is a signed kg change** (an `=I−E` formula; read via cached values)
+  → compare against computed `m(S4) − m(S0)` with `|diff| ≤ 0.05 kg`;
   (ii) **column K is positive text** ("Loss of 1.74%…") → parse the positive
-  percentage and compare against `abs(Δm%(S4))` with `≤ 0.05%` tolerance to absorb
-  the column's two-decimal rounding.
+  percentage and compare against `abs(Δm%(S4))` with `≤ 0.05%` tolerance.
+  Tolerances are conservative bounds justified by direct workbook inspection — most
+  weights are recorded to 0.1 kg but Subject 15 uses 0.05-kg increments, and column K
+  is not always conventional two-decimal rounding (truncation observed; max deviation
+  ≈0.01 pct-points) — not claims about uniform recording precision.
   **No heart-rate column** — confirmed absent (see Exp F).
 - **Subject identity — confirmed by the dataset owner.** Radar `subject_N` is the
   same person as workbook "Subject N" (direct identity mapping). The historical MATLAB
@@ -465,6 +468,20 @@ does not), so a mutation cannot legitimately alter the fold composition itself; 
 the bit-for-bit comparison runs on a **deterministic CPU fixture** (fixed seeds,
 single-threaded) rather than relying on GPU determinism. This catches any dependence
 of selection or training on outer-test data, not just leaked scaler statistics.
+The mutation property is asserted at **both CV levels**: in addition to the
+outer-test mutation above, mutating an **inner-validation** subject must leave that
+inner fold's fitted transforms and model parameters (functions of inner-train only)
+bit-identical — only its validation predictions/scores, and hence possibly the
+selected configuration, may change; folds where that subject is inner-*train* change
+legitimately and are not constrained. The fit-audit distinguishes roles: every
+inner-selection fit is estimated from exactly that fold's inner-train subjects, the
+final refit from exactly the full outer-training set.
+*Staging:* at milestone 1 the test runs against a test-local sklearn reference
+procedure that defines the selection/refit contract `harness.py` must satisfy; at
+milestone 6 it rebinds to the real `harness.py`. torch enters the environment at
+milestone 4 (WST cross-backend validation), but the torch-path mutation assertions
+stay skip-marked until the torch fit path exists in `harness.py` (milestone 6), and
+must be green before any torch result is reported.
 
 **Reporting the selection, not a single "winning model."** Nested CV may select
 different reduction branches, tilings, gates, normalization, or model families in
