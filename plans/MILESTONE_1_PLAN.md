@@ -1,10 +1,17 @@
 # MILESTONE 1 PLAN — Scaffold + config + `tests/test_no_leakage.py`
 
 _Task-level execution plan for milestone 1 **only** (ROADMAP §7.1; implementation_plan.md
-"Build order" §1). Status: **awaiting approval — no implementation until approved.**
-Revised 2026-07-21 after four rounds of independent (Codex) review: all 25 review
-comments (10 + 8 + 5 + 2) verified against the real data, the installed libraries, and
-the main plan, and incorporated (see §7)._
+"Build order" §1)._
+
+_**Status: IMPLEMENTED AND COMMITTED (2026-07-21, `f3fbade`).** All ten build steps
+executed, all definition-of-done items (§5 D1–D7) met: `uv run pytest` → 151 passed /
+8 skipped; `uv run pytest --realdata` → 158 passed / 1 skipped (T18). This document is
+now a **record of what was built and why**, not a proposal — see HISTORY.md for the
+per-step implementation log and the deviations discovered during the build._
+
+_Planned 2026-07-21 and revised over four rounds of independent (Codex) review: all 25
+review comments (10 + 8 + 5 + 2) verified against the real data, the installed
+libraries, and the main plan, and incorporated (see §7)._
 
 This document adds the execution detail the main plan intentionally omits. It does not
 restate design decisions; where a decision is needed it cites
@@ -864,9 +871,22 @@ artifact, implementation_plan.md §Fit-on-train-only):
 
 ---
 
-## Approval gate
+## Outcome (closed 2026-07-21)
 
-Implementation of milestone 1 starts only after this document is approved. The
-implementation_plan.md amendments (A1, A7) are already applied. On approval: append
-the HISTORY.md planning entry, then execute §1 in order.
+Approved and implemented in full; the implementation_plan.md amendments (A1, A7) were
+applied during review. Commit `f3fbade` — 34 files, 5783 insertions, 159 tests.
+
+**What the build changed relative to this plan** (details in HISTORY.md):
+- **§2.1 env risk resolved differently than predicted.** The flagged kymatio↔numpy-2
+  conflict does not exist; the real one is **kymatio 0.3.0 ↔ scipy ≥1.17**
+  (`scipy.special.sph_harm` removed). Pinned `scipy>=1.11,<1.17`. Subtle because
+  `import kymatio` succeeds — only `from kymatio.numpy import Scattering1D` fails.
+- **§2.4 loader fallback not needed.** `whosmat` measured at 0.017 s/file, so
+  header-only inspection stands; no full-`loadmat` fallback was taken.
+- **§4 Part C contract extended.** `FoldResult` gained `train_subjects` — the fit audit
+  cannot verify roles without it, so `harness.py` must expose it too at M6.
+- **Not created:** `configs/ibex.yaml` (would name paths that fail input validation
+  locally; written at the first IBEX milestone). `results/runs/` is gitignored.
+- **Post-plan fix:** `.gitignore`'s unanchored `data*/` was excluding `src/dehyd/data/`;
+  anchored to `/data*/`.
 

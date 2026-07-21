@@ -6,6 +6,36 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-21 — M1 commit: `.gitignore` was silently excluding `src/dehyd/data/`.
+## **Bug found and fixed at commit time.**
+
+**What happened.** Staging the milestone-1 commit, the file list was missing **all five
+files** of `src/dehyd/data/` — `sessions.py`, `loader_10ghz.py`, `ground_truth.py`,
+`manifest.py`, `__init__.py`. Everything else staged normally.
+
+**Cause.** The `.gitignore` inherited from the initial commit contained `data*/`, which
+in gitignore syntax is **unanchored** — a pattern without a leading slash matches at
+*any* directory depth, so it excluded `src/dehyd/data/` along with the intended raw-data
+tree. Confirmed with `git check-ignore -v src/dehyd/data/manifest.py` →
+`.gitignore:4:data*/`.
+
+**Fix.** Anchored the rule to the repository root: **`/data*/`**. Both directions
+re-verified — `data/10ghz/*.mat` and `data/weight/*.xlsx` are still ignored, and
+`src/dehyd/data/*` is now tracked.
+
+**Why this matters and how it was caught.** The local working tree and the full test
+suite were completely unaffected — the files existed on disk, so all 159 tests passed
+either way. The failure would only have appeared on a **fresh clone or on IBEX**, as a
+`dehyd.data` package that imports nothing, with the original machine looking healthy.
+It was caught only by *reading the staged file list* before committing rather than
+trusting `git add -A`. Lesson recorded: for a commit that introduces a new package
+directory, check the staged list against the intended tree, especially when the
+repository ignores a directory whose name is a common word.
+
+**Commit:** `f3fbade` — 34 files, 5783 insertions, working tree clean afterwards.
+
+---
+
 ## 2026-07-21 — **MILESTONE 1 COMPLETE.** Definition of done met in full.
 
 **D1 — mandatory suite, no private data.** `uv run pytest` → **151 passed, 8 skipped**

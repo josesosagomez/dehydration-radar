@@ -135,10 +135,13 @@ and nothing MATLAB-derived is reported.)
 
 ## Build order (ROADMAP §7 milestones)
 
-1. **Scaffold + config + `test_no_leakage.py`.** Pinned env (uv), config loader,
-   manifest builder (with the fail-on-mismatch checks above), nested-LOSO splitter,
-   provenance recorder, leakage test — green before any modeling. Also creates
-   `HISTORY.md`, `SECOND_CHAPTER.md` and `archive/{code,results}/`.
+1. ✅ **DONE (2026-07-21, `f3fbade`) — Scaffold + config + `test_no_leakage.py`.**
+   Pinned env (uv), config loader, manifest builder (with the fail-on-mismatch checks
+   above), nested-LOSO splitter, provenance recorder, leakage test — green before any
+   modeling. Also creates `HISTORY.md`, `SECOND_CHAPTER.md` and `archive/{code,results}/`.
+   *Execution detail and outcome: `plans/MILESTONE_1_PLAN.md`; per-step log: HISTORY.md.
+   Note: the ground-truth xlsx parse + cross-check listed under milestone 2 below was
+   built here (the manifest needs labels), so milestone 2 inherits it complete.*
 2. **Loader + QC screens** (10 GHz) **plus a minimal 77 GHz audit.** Deterministic
    xlsx parse + cross-check; 10 GHz QC screens with frozen thresholds and per-frame
    reason codes; log per-subject/session removal counts; in-band energy computed

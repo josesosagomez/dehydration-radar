@@ -1,108 +1,181 @@
-# HANDOFF — resume point for a new chat (starting milestone 1)
+# HANDOFF — resume point for a new chat (starting milestone 2)
 
-_Written 2026-07-21. Purpose: let a fresh Claude Code session start implementing
-**milestone 1** without re-deriving context._
+_Written 2026-07-21, after milestone 1 was completed and committed. Purpose: let a
+fresh Claude Code session start **milestone 2** without re-deriving context._
 
 ## TL;DR
-Planning is **done and locked**. The full spec is `plans/implementation_plan.md`
-(hardened over 7 rounds of independent review — reviewer's final word:
-"implementation-ready"). No project code exists yet. Next action: **build milestone 1**
-(scaffold + config + green `tests/test_no_leakage.py`) before any modeling.
+
+**Milestone 1 is done and committed** (`f3fbade` on branch `v1_milestone_1`): pinned uv
+env, config system, 10 GHz loader, ground-truth parser, frame manifest, nested-LOSO
+splitter, provenance recorder, and a green `tests/test_no_leakage.py`. 159 tests.
+**Next: milestone 2 — 10 GHz QC screens + a minimal 77 GHz audit.**
 
 ## Read first (in this order)
-1. `CLAUDE.md` / `AGENTS.md` — hard invariants, style, journal + file-hygiene rules.
-2. `ROADMAP.md` — the study spec (§1 invariants, §7 milestones).
-3. `plans/implementation_plan.md` — **the detailed design to implement.** This is the
-   source of truth for every decision below; when in doubt, follow it.
-4. `HISTORY.md` — newest entry has the planning record + verified data facts.
 
-## Hard invariants (never violate — a failing check should stop the build)
-- **LOSO**: splits at the subject level; no frame of any session from a held-out
-  subject in training. No frame-level random splitting as an evaluation protocol.
-- **Fit-on-train-only**: every fitted transform (scaler/PCA/selector/class weights/CNN
-  norm/early-stopping) fit inside the CV loop on training folds only — sklearn **and**
-  torch paths.
+1. `CLAUDE.md` / `AGENTS.md` — hard invariants, code style, journal + file-hygiene rules.
+2. `plans/implementation_plan.md` — **the approved design; source of truth.** For M2 read
+   §"QC screens & thresholds", §"Confirmed data facts" (77 GHz bullet), and Build order §2.
+3. `HISTORY.md` — **newest entries only.** The M1 step log is there; do not read it all.
+4. `plans/MILESTONE_1_PLAN.md` — what M1 built and why (now a record, not a proposal).
+   Useful as the template if you want an M2 plan document of the same shape.
+
+## Hard invariants (never violate — a failing check stops the build)
+
+- **LOSO**: splits at the subject level; no frame of any session from a held-out subject
+  in training. Frame-level random splitting is not a valid protocol.
+- **Fit-on-train-only**: every fitted transform fit inside the CV loop on training folds
+  only — sklearn **and** torch paths.
 - **No test-set tuning**: tilings/hyperparameters/thresholds via nested CV or held-out
   subject validation, never chosen on test subjects.
 - **Primary target continuous** (Δm% fluid loss); 5-class secondary, ordinal metrics.
 - Keep `tests/test_no_leakage.py` green at all times.
 
-## Verified data facts (already confirmed — don't re-assume from the paper)
-- **10 GHz** `data/10ghz/subject_<1..16>_<8am|10am|12pm|2pm|4pm>.mat` (80 files): MAT
-  v5, `scipy.io.loadmat`. Var `framesRadar` = double `[534 fast × 20 chirps × 100
-  frames]`, complex, **loads as complex128** (stored int16 on disk). Ignore
-  `framesRadarIQ`. One file = one subject/session = 100 frames.
-- **77 GHz**: MAT v7.3/HDF5, ~285 MB each, needs `h5py`. Deferred; a **minimal audit**
-  happens at milestone 2 (installs h5py, confirms dtype/shape/complex, raw-axis check).
-- **Ground truth** `data/weight/metadata_subjects_info.xlsx` sheet `MetaData` rows 3–18:
-  two-row merged header → parse by **fixed cell addresses**. Cols E–I = weights
-  8am→4pm. Signed `Δm% = (m(s)−m(S0))/m(S0)×100` (negative = loss). Cross-check S4 vs
-  col J (signed kg, ±0.05 kg) and col K (positive % text, ±0.05%).
-- **Subject identity** confirmed by owner: radar `subject_N` = workbook "Subject N"
-  (old MATLAB 5–20 renumbered to 1–16, same subjects/order).
-- Radar params (reference): fs=520834 Hz, B=500e6, Tchirp=1024e-6.
+## What exists now (all committed, all tested)
 
-## Milestone 1 — the task for the new chat
-Deliverables (see plan "Repo structure" + "Build order" §1 and the LOSO/no-leakage
-section):
-1. **Env**: `pyproject.toml` + lockfile via **uv**, Python 3.11+, pinned. Deps: numpy,
-   scipy, pandas, openpyxl, PyYAML, scikit-learn, kymatio, pytest (torch/h5py can wait).
-   NOTE: scipy/h5py are **not installed** in the current shell — the env must be created.
-2. **`src/dehyd/config.py`** — load/validate YAML, resolve seeds & device.
-3. **`src/dehyd/data/ground_truth.py`** — fixed-cell xlsx parse → signed Δm%, 5-class
-   label, covariates; the two sign-aware cross-checks; fail loudly on disagreement.
-4. **`src/dehyd/data/manifest.py`** — frame index table (subject, session, frame_idx,
-   label); **fails on any missing / duplicate / unmatched** file↔weight-row record.
-5. **`src/dehyd/eval/splits.py`** — the **single** source of folds: nested-LOSO API
-   yielding `(train_subjects, val_subjects, test_subject)` **subject id sets**; adaptive
-   inner `GroupKFold(min(5, n_train))`, ≥3 training subjects required.
-6. **`src/dehyd/provenance.py`** — per-run: raw-file hashes, resolved config, fold
-   manifest, versions, git rev, device, seed(s), (IBEX) Slurm ID.
-7. **`tests/test_no_leakage.py`** — asserts (a) train/val/test subject sets pairwise
-   disjoint; (b) every frame → one subject, no held-out subject's frames in training;
-   (c) the strong mutation property test (see plan): mutating outer-test features/labels
-   leaves selected config, inner scores, epoch budget, fitted params, training preds &
-   model params bit-identical — only the held-out score may change. Runs **after
-   eligibility is frozen**, eligibility-preserving mutations, **deterministic CPU
-   fixture**.
-8. `configs/` scaffolding (data/preprocess/wst/exp YAMLs), `experiments/` entry-point
-   stubs. `archive/{code,results}/` already exist.
-9. Loader `loader_10ghz.py` can be minimal here or lead into milestone 2 — follow the
-   plan's milestone split (loader + QC screens is milestone 2).
+```
+pyproject.toml / uv.lock     python 3.11.15; numpy 2.4.6, scipy 1.16.3 (PINNED <1.17),
+                             kymatio 0.3.0, sklearn 1.9.0, pandas, openpyxl, PyYAML, pytest
+configs/                     data.yaml, preprocess.yaml, wst.yaml, exp_a_regression.yaml
+src/dehyd/
+  config.py                  load_config(*paths) -> frozen Config; include-composition;
+                             path VALUES resolve to repo root, `include:` to declaring file
+  data/sessions.py           SESSION_NAMES = ("8am","10am","12pm","2pm","4pm") == S0..S4
+  data/loader_10ghz.py       parse_10ghz_filename / inspect_10ghz_file (whosmat, 17ms) /
+                             load_10ghz_file -> complex128 [534, 20, N]
+  data/ground_truth.py       load_ground_truth(xlsx) -> GroundTruth(sessions, subjects);
+                             helpers _validate_layout / _read_values / check_targets
+  data/manifest.py           build_manifest(paths, gt) -> per-frame DataFrame; resolve_path
+  eval/splits.py             nested_loso_splits(...) -> [OuterFold]; iter_triples
+  provenance.py              record_run(config, manifest, folds, extra) -> Path
+experiments/run_regression.py  M1 smoke: config -> gt -> manifest -> folds -> provenance
+tests/                       conftest.py (--realdata gate), reference_procedure.py,
+                             test_{env,config,loader,ground_truth,manifest,splits,
+                             provenance,no_leakage}.py
+```
 
-**Definition of done for M1:** `pytest` green on `test_no_leakage.py` (+ loader/manifest/
-ground-truth/metrics tests as they land), manifest builds and validates on the real 80
-files, and nested-LOSO splits are produced only by `eval/splits.py`.
+**Commands:**
+```
+uv run pytest                                              # 151 passed, 8 skipped
+uv run pytest --realdata                                   # 158 passed, 1 skipped (T18)
+uv run pytest tests/test_no_leakage.py -m "not realdata"   # 24 passed, 1 skipped = T18 only
+uv run python experiments/run_regression.py --config configs/exp_a_regression.yaml
+```
 
-## Do NOT re-litigate (decided over 7 review rounds — in the plan)
+## Verified data facts (confirmed against the real files — don't re-derive)
+
+- **10 GHz**: `data/10ghz/subject_<1..16>_<8am|10am|12pm|2pm|4pm>.mat`, 80 files, MAT v5.
+  `framesRadar` = MATLAB class **double**, shape **[534 fast × 20 chirps × 100 frames]**,
+  loads as **complex128**. Ignore `framesRadarIQ`. All 80 verified. 8000 frames total.
+- **Ground truth**: all 16 subjects parse; **both cross-checks pass**; Δm% spans
+  **−2.02 … 0.00** (negative = loss), S0 identically 0.
+- **Workbook quirks** (already handled): sheet reports 1000×113 from stray formatting;
+  col J is an `=I-E` **formula** (needs `data_only=True` for the cached value); row-2
+  header mixes `datetime.time` cells with the literal string `'12 Noon'` (G2); Subject 15
+  uses 0.05-kg increments; col K truncates rather than rounds (Subject 13).
+- **77 GHz**: MAT **v7.3/HDF5**, ~285 MB each (~23 GB). `h5py` **not yet installed**.
+  Reviewer-sampled h5py shape `(16,256,256,125) = (Nrx,Nchirps,Nfast,Nframes)`; loader
+  must apply a full axis reversal → `(Nframes,Nfast,Nchirps,Nrx)`. **Re-confirm on the
+  first real load.** Fast-time↔chirp (both 256) cannot be disambiguated by shape —
+  needs the raw-data semantic check (below).
+- Radar params: fs=520834 Hz, B=500e6, Tchirp=1024e-6.
+
+## Milestone 2 — the task
+
+Per implementation_plan.md Build order §2. **Note the xlsx parse + cross-check listed
+there was already built in M1** — M2 inherits it complete.
+
+1. **`src/dehyd/qc/screens.py`** — 10 GHz QC on the **raw** cube, thresholds frozen in
+   `configs/preprocess.yaml` (already present as `QCConfig`): NaN/Inf; flatline
+   (200-bin magnitude histogram per chirp, reject if any bin ≥25% of 534 samples);
+   in-band energy ratio <0.30 computed with a Hann-windowed 534-pt FFT **before any
+   filtering**; robust-RMS z>4.5 as a **diagnostic flag only**, not a sole reject.
+   Reject = NaN/Inf **or** flatline **or** low in-band energy.
+2. **QC uses ONE fixed gate — the wider 0.9–3.0 m** (`config.qc.qc_gate_m`) for all
+   candidates, so the QC-passing population never varies with the model gate chosen
+   later in inner CV.
+3. **Per-frame reason codes + session eligibility into `manifest.py`.** A session is
+   retained iff **≥ `ceil(0.5 × actual_frame_count)`** frames survive (use the real
+   per-file count, already in `n_frames_in_file` — never a hard-coded 100). Dropped
+   sessions are **absent, never imputed**. Record per-subject/session retained counts
+   and drop reasons.
+4. **Minimal 77 GHz audit** (not full extraction — that is M9): add `h5py`, load **one**
+   real file, confirm dtype/shape/complex representation, run the **raw-data axis
+   semantic check** (range structure on the proposed fast-time axis; near-zero-Doppler
+   on the proposed chirp axis — **before** any clutter subtraction, since MTI would
+   remove the static subject and defeat the check), and verify the proposed QC +
+   range-Doppler ops give **non-degenerate (nonzero-energy)** data. Log findings; they
+   feed the milestone-5 freeze.
+5. **Tests**: `tests/test_qc.py` (each screen fires on a crafted frame and passes a clean
+   one; thresholds read from config), manifest eligibility tests, and a `realdata` test
+   reporting real per-subject/session QC survival. Keep `test_no_leakage.py` green —
+   **QC must be frozen and data-independent, so it does not enter CV.**
+
+**Suggested working pattern** (worked well in M1): write a
+`plans/MILESTONE_2_PLAN.md` first, get it reviewed/approved, then implement step by
+step, appending a HISTORY.md entry as each step resolves.
+
+## Do NOT re-litigate (settled; in the plan or owner-decided)
+
 - MATLAB is **reference-only**; Python is the sole source of reported numbers.
 - Analysis unit is **session-level** (aggregate frames → 1 vector/session; concat
-  mean+median). Per-frame is diagnostic only, never headline / never frame-IID CIs.
-- Scoring counts use **N_eval**; session eligibility `≥ ceil(0.5×actual_frame_count)`.
+  mean+median). Per-frame is diagnostic only, never headline, never frame-IID CIs.
+- Scoring counts use **N_eval**; eligibility `≥ ceil(0.5 × actual_frame_count)`.
 - Departures from reference: median/MAD standardize; range gate = config (default
   1–2 m); order-aware WST log (`log(S+ε)` orders 1–2, ε=1e-6; order 0 linear);
-  EdgeTrim=32 after reduction.
-- Stats: subject-cluster bootstrap B=10000, seeds collapsed (metric-type-aware), CIs/
-  p-values labeled conditional/exploratory.
+  EdgeTrim=32 **after** reduction; no Hamming window in the primary path.
+- **Owner decisions:** T18 (torch mutation leg) activates at **M6** with the harness,
+  not at M4 when torch first enters the env. `min_train_subjects` constrains the
+  **outer-training pool**, not each inner fit (config floor is 3).
 - 77 GHz primary = slow-time (Doppler) **I/Q** WST, **per-Rx → feature-space** fusion.
+
 If you think one of these is wrong, raise it explicitly — don't silently change it.
 
+## Traps already paid for (don't rediscover)
+
+- **`.gitignore` patterns without a leading slash match at any depth.** `data*/` was
+  silently excluding `src/dehyd/data/`; it is now `/data*/`. **Check the staged file
+  list** when a commit adds a new package directory.
+- **kymatio 0.3.0 breaks on scipy ≥1.17** (`scipy.special.sph_harm` removed).
+  `import kymatio` still succeeds — only `from kymatio.numpy import Scattering1D` fails.
+  scipy is pinned `<1.17`; revisit when kymatio ships a `sph_harm_y` release.
+  Also: `Scattering1D(J=7, shape=(470,), ...)` warns "signal support too small to avoid
+  border effects" — **an M4 concern**; the plan already requires measuring padding and
+  output shape from the instantiated filter bank rather than assuming.
+- **openpyxl never evaluates formulas**: a written formula has **no** cached value
+  (`data_only=True` → `None`). A synthetic workbook can hold a formula *or* a number,
+  never both — hence the three-helper split in `ground_truth.py`.
+- **`ws.cell(row, col, value=None)` is a no-op** in openpyxl; assign `.value = None`.
+- **`rel_path` string order ≠ session order**: `subject_1_10am.mat` sorts before
+  `subject_1_8am.mat`. Look provenance/manifest entries up **by path, never by index**.
+- `tests/` is not a package — use absolute imports (`from reference_procedure import …`).
+- The repo-root `.pytest_cache/` has an unreadable ACL on this machine; pytest's cache is
+  redirected to `.cache/pytest` in `pyproject.toml`. Leave it alone.
+
 ## Environment / compute
-- Local (this machine, Windows, git-bash + PowerShell): scaffolding, CPU smoke tests
-  (**≥6-subject** subset so nested CV actually runs), all classical models, stats.
-- **IBEX** (KAUST Slurm, GPU): DL baselines / any NN as `sbatch` jobs under
-  `scripts/ibex/`; same code, config-only differences (device/epochs/subset). No GPU
-  training in interactive runs.
+
+- **Local (Windows, git-bash + PowerShell):** scaffolding, QC, preprocessing, WST,
+  all classical models, stats. CPU smoke tests use a **≥6-subject** subset so nested CV
+  genuinely runs.
+- **IBEX (KAUST Slurm, GPU):** DL baselines / any NN as `sbatch` jobs under
+  `scripts/ibex/` (not created yet). Same code, **config-only** differences via an
+  overlay YAML passed as a later `--config` (mechanism implemented and tested;
+  `configs/ibex.yaml` is written when the real cluster roots are known). No GPU training
+  in interactive runs.
 
 ## Journal & hygiene (keep doing)
-- **HISTORY.md**: append an entry per resolved attempt (what/why/params), newest-first,
-  failures kept. Log each reference-departure with its reason.
-- **SECOND_CHAPTER.md**: fill the relevant section as each milestone closes.
-- **HANDOFF.md**: update **only when asked**.
-- Superseded/broken code or stale results → `archive/{code,results}/`, noted in HISTORY.
-  Valid negative results / ablations are current results — they stay in `results/`.
 
-## Open items (none blocking M1)
-- `h5py` install + 77 GHz axis confirmation → milestone 2 (not needed for M1).
-- `AGENTS.md` is a parallel context file that differs slightly from `CLAUDE.md`; both
-  encode the same invariants — follow them, no action needed.
+- **HISTORY.md**: append an entry per resolved attempt (what/why/params, failures kept),
+  newest-first. Log each reference-departure with its reason.
+- **SECOND_CHAPTER.md**: §0.1 (evaluation protocol + M1 data integrity) is written;
+  fill §1 "Data & ground truth" as M2 closes.
+- **HANDOFF.md**: update **only when asked**.
+- Superseded code / stale results → `archive/{code,results}/`, noted in HISTORY.
+  Valid negative results and ablations are current results — they stay in `results/`.
+
+## Open items
+
+- `h5py` not installed; 77 GHz axis order unconfirmed on a real file → **milestone 2**.
+- `configs/ibex.yaml`, `scripts/ibex/` → first IBEX milestone.
+- `results/runs/` is gitignored (per-run provenance regenerates each invocation);
+  `results/` stays for curated artifacts. Reversible if you want full history in git.
+- Nothing is pushed — no upstream is configured for `v1_milestone_1`.

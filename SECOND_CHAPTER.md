@@ -141,7 +141,58 @@ data root, so a record is identical whether produced on a workstation or the clu
 *Provenance of the numbers in this section: HISTORY.md entries for milestone 1 steps
 1–9 (2026-07-21), and `plans/MILESTONE_1_PLAN.md` §§2–5 for the specifications.*
 
-## 1. Data & ground truth  *(fill at milestone 2)*
+## 1. Data & ground truth  *(acquisition/target text below is final; QC survival
+## statistics fill at milestone 2)*
+
+**Cohort and acquisition.** Sixteen fasting subjects were recorded at five times of day
+— 08:00, 10:00, 12:00, 14:00, 16:00, denoted S0–S4 — giving 80 acquisitions. Each
+acquisition contains 100 frames, and each frame is a complex 534 fast-time × 20 chirp
+matrix from a 10 GHz frequency-modulated continuous-wave radar (sampling rate
+520 834 Hz, 500 MHz sweep bandwidth, 1024 µs chirp). The complete indexed dataset is
+therefore 8000 frames before quality control.
+
+**Target definition and sign.** The hydration reference is body mass. Fluid loss is
+expressed as a signed percentage of each subject's own 08:00 baseline,
+
+  Δm%(subject, s) = [m(subject, s) − m(subject, S0)] / m(subject, S0) × 100,
+
+which is **negative for loss** and identically zero at S0 by construction. Normalising
+to the subject's own baseline rather than using absolute mass change removes
+between-subject body-size differences from the target, which matters at this sample
+size. Across the cohort Δm% spans 0 to −2.02%, a narrow dynamic range that is itself a
+central difficulty of the problem and is reflected in how results are reported.
+
+**Why body mass, and its limits.** Short-term body-mass change is the only objective
+hydration reference available for this cohort: no temperature, osmolality, or blood
+measurements exist, and the environmental logs were lost. Mass change over a fasting
+day conflates fluid loss with other mass fluxes, so it is treated as a *proxy* with a
+known direction rather than a gold standard. This is the principal reason the study is
+framed as a feasibility assessment.
+
+**Verification of the reference.** Because the entire study rests on this one
+reference, its transcription is verified rather than assumed. Each subject's computed
+08:00→16:00 mass change is cross-checked against two independently recorded quantities
+in the source record — a signed change in kilograms, and a separately written
+percentage — with tolerances of 0.05 kg and 0.05 percentage points respectively. The
+tolerances are conservative bounds established by inspecting the source rather than
+assumed from nominal precision: most masses are recorded to 0.1 kg but one subject's
+to 0.05 kg, and the percentage entries are not consistently rounded to two decimals
+(at least one is truncated). The largest observed discrepancy across the cohort is
+0.01 percentage points, roughly five times smaller than the tolerance. All sixteen
+subjects pass both checks. Subject identity is parsed from the record and asserted to
+be exactly the sixteen expected subjects, rather than inferred from position, and any
+additional record anywhere in the source is treated as an error.
+
+**Structural completeness.** The correspondence between acquisitions and reference
+records is verified as a one-to-one mapping in both directions, together with checks
+for duplicate, missing, unrecognised, and structurally invalid acquisitions, and with
+frame counts read from each file rather than assumed constant. The cohort passes all
+of these, giving exactly 8000 indexed frames. Frame counts are read per acquisition
+because the session-eligibility rule applied after quality control is defined as a
+fraction of each acquisition's own frame count.
+
+*(Milestone 2 adds: quality-control screen definitions and frozen thresholds,
+per-subject and per-session frame survival, and the resulting evaluable cohort size.)*
 
 ## 2. Preprocessing  *(fill at milestone 3)*
 
