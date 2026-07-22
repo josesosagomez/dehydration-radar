@@ -6,6 +6,29 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-21 — M2 commit + push; branch `v1_milestone_3` opened for M3 planning.
+
+**Commit `395eb62`** on `v1_milestone_2` — 20 files, pushed to
+`origin/v1_milestone_2` (new upstream). Staged list checked file-by-file before
+committing, per the M1 lesson: both `src/dehyd/qc/__init__.py` and
+`src/dehyd/qc/screens.py` are present (the `.gitignore`-swallows-a-new-package trap did
+**not** recur), both curated artifacts (`results/qc/qc_survival_10ghz.csv`,
+`results/qc/audit_77ghz.json`) are in, and `results/runs/` is correctly excluded —
+verified with `git add -An` rather than assumed.
+
+**Branch `v1_milestone_3`** created from `v1_milestone_2` and checked out. HANDOFF.md
+rewritten for the milestone-3 bootstrap (owner-requested — it is never updated
+automatically). Nothing is merged to `main` yet; `v1_milestone_1`, `v1_milestone_2`
+are pushed.
+
+**M3 starts from:** `eligible_frames(manifest_qc)` = 7168 frames across 73 sessions and
+16 evaluable subjects, and implementation_plan.md §"Preprocessing — executable
+sequence" (order-4 SOS Butterworth zero-phase on the complex fast-time axis using the
+**model** gate, Options A/B reduction, EdgeTrim 32 **after** reduction → 470 samples,
+median/MAD robust standardisation).
+
+---
+
 ## 2026-07-21 — **MILESTONE 2 COMPLETE.** Definition of done met in full.
 
 **D1 — mandatory suite, no private data.** `uv run pytest` → **260 passed, 10 skipped**

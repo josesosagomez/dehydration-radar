@@ -151,7 +151,12 @@ and nothing MATLAB-derived is reported.)
    *Execution detail and outcome: `plans/MILESTONE_1_PLAN.md`; per-step log: HISTORY.md.
    Note: the ground-truth xlsx parse + cross-check listed under milestone 2 below was
    built here (the manifest needs labels), so milestone 2 inherits it complete.*
-2. **Loader + QC screens** (10 GHz) **plus a minimal 77 GHz audit.** Deterministic
+2. ✅ **DONE (2026-07-21, `395eb62`) — Loader + QC screens** (10 GHz) **plus a minimal
+   77 GHz audit.** Frozen screens with per-frame reason codes, session eligibility and
+   the survival report; 77 GHz axis hypothesis confirmed on a real file.
+   *Outcome: 7330/8000 frames pass, 73/80 sessions eligible, N_eval = 16. Execution
+   detail: `plans/MILESTONE_2_PLAN.md`; per-step log: HISTORY.md.*
+   Original scope, for reference: Deterministic
    xlsx parse + cross-check; 10 GHz QC screens with frozen thresholds and per-frame
    reason codes; log per-subject/session removal counts; in-band energy computed
    **before** bandpass filtering. **The milestone-5 freeze fixes 77 GHz QC/tilings/
