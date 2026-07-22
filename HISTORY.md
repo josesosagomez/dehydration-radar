@@ -6,7 +6,279 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
-## 2026-07-21 — M2 commit + push; branch `v1_milestone_3` opened for M3 planning.
+## 2026-07-23 — **MILESTONE 3 COMPLETE.** Definition of done met in full.
+
+**D1 — mandatory suite, no private data.** `uv run pytest` → **319 passed, 11 skipped**
+(was 260/10 at M2 close; +59 tests, 45 of them in `test_preprocess.py`).
+**D2 — real-cohort acceptance.** `uv run pytest --realdata` → **329 passed, 1 skipped**
+(T18 only, as designed until M6).
+**D3 —** `experiments/run_preprocess.py` wrote and re-verified
+`results/preprocess/preprocess_diagnostics_10ghz.csv` (73 rows); distributions recorded
+in the step-6 entry below.
+**D4 —** `tests/test_no_leakage.py` is **byte-for-byte unmodified since M1**
+(`git diff f3fbade HEAD -- tests/test_no_leakage.py` empty) and green — 24 passed,
+2 skipped.
+**D5 —** HISTORY.md carries an entry per resolved step, including all three required
+departure logs: no-window-in-the-primary-path, the median/MAD form with its eps
+placement, and the Option-B mask correction.
+**D6 —** SECOND_CHAPTER.md §2 "Preprocessing" written: the paper-vs-code ambiguity
+resolved as a methodological argument, the provenance of every parameter, the
+finite-record measurements, the three cohort findings, and the correctness argument.
+**D7 —** amendments **A-M3-1..A-M3-7** are live in `plans/implementation_plan.md`
+(§Preprocessing steps 3–4, §Deliberate departures, the repo tree, Build order §3 and
+§5); the two plan documents agree.
+
+**The invariant held.** Preprocessing is a per-frame function of one frame plus frozen
+constants: T-PP20 asserts a frame's output is identical whether processed alone or
+beside an arbitrary companion — including one scaled ×1000 — and T-PP22 asserts
+bit-identical repeats. Nothing here is fitted, so nothing enters the CV loop.
+
+**Milestone-3 scoreboard.** 5 new source modules
+(`preprocess/{__init__,filters,reduce,standardize,pipeline}.py`), 1 new experiment
+entry point, 1 new test module, **59 new tests** (319 vs 260). Five config fields added,
+each classified as search axis / pre-declared ablation / frozen protocol constant before
+any result existed. Three deliberate departures from the reference logged with reasons.
+**Four facts discovered empirically rather than assumed** — the arithmetic-vs-geometric
+mid-band ambiguity, the finite-record energy reality, the windowed-vs-unwindowed
+zero-ROI counterexample, and the 1.50 m target range — none of which changed a frozen
+parameter.
+
+**Open for M4:**
+- Feature extraction consumes `preprocess_cube(...)` → float64 [n_frames × C × 470].
+  The kymatio border-effect warning at `Scattering1D(J=7, shape=(470,))` is an M4
+  concern: measure padding and output shape from the instantiated filter bank, never
+  assume them.
+- torch enters the environment at M4 (cross-backend WST check); the T18 torch mutation
+  leg stays skip-marked until M6 — owner decision, unchanged.
+- `configs/ibex.yaml`, `scripts/ibex/` still deferred to the first IBEX milestone.
+- The 77 GHz any-trace flatline rule remains parked for an owner decision at M5.
+- Nothing committed yet — awaiting the owner's word, per the ground rules.
+
+---
+
+## 2026-07-23 — M3 step 6: `run_preprocess.py` over the full cohort. **The beat sits
+## at 1.50 m and the ROI peak is genuinely dominant (peak_share 0.51 vs 0.33 uniform).**
+
+Thin CLI, all logic in pure helpers (M2 audit pattern) so the diagnostics are testable
+without a cohort run. **Primary-only guard:** the script compares the consumed
+`config.preprocess` against the whole canonical `PreprocessConfig()` and refuses to run
+otherwise, naming the deviating fields — checking just the two ablation switches would
+have let `model_gate_m: [0.9, 3.0]` (an inner-CV *candidate*) overwrite the primary CSV
+under a "primary" label.
+
+### Cohort result (73 sessions, 7168 eligible frames, 16 subjects — matches M2 exactly)
+
+```
+peak bin (mode)   5           bin 4: 1 session, bin 5: 41, bin 6: 31
+peak Hz median    4876.7  ->  1.50 m
+energy retention  median 0.407   [0.061, 0.644]
+roi/total         median 0.930   [0.775, 0.977]
+peak_share        median 0.512   [0.410, 0.739]
+missing cells     0            all four variants finite in every session
+```
+
+**Findings, recorded not acted on:**
+
+1. **The target range is ~1.50–1.80 m, not the ~1 m the config comment assumed.**
+   72 of 73 sessions put the dominant beat in bin 5 or 6 (4877 / 5852 Hz = 1.50 /
+   1.80 m). The frozen 1–2 m model gate contains this comfortably — the gate is better
+   justified by the data than by the assumption that motivated it — but the *stated
+   reason* ("subject seated ~1 m") is now known to be off by half a metre. Left as is:
+   changing the gate on seeing this would be exactly the data-driven retune the
+   milestone forbids. The correct reading goes in SECOND_CHAPTER §2.
+2. **The peak is genuinely dominant.** This is the measure Codex's round-1 comment 4
+   asked for, and it answers it: with 3 ROI bins, a flat spectrum would give
+   `peak_share = 0.333`; the observed median is **0.512** (min 0.410), so one bin
+   really does carry the return. Option-B's premise holds on this data.
+3. **Caveat on `roi_to_total` (0.930) — it is measured POST-filter, as the plan
+   specifies, so it is largely a filter-selectivity descriptor and cannot be low by
+   construction.** It is not evidence of target presence; `peak_share`, which compares
+   *within* the ROI, is. Recorded so the chapter does not over-read it.
+4. **Per-session peak stability is high:** 45 of 73 sessions have every frame on one
+   bin, 22 span 1 bin, 6 span 2. The detection is not jittering frame to frame.
+5. **Energy retention varies 10× across sessions** (0.061 to 0.644, median 0.407) —
+   far below the 0.76 a pure mid-band tone retains (T-PP6), as expected since real
+   frames carry energy across and outside the band. The three weakest (s11 10am 0.061,
+   s12 2pm 0.070, s5 4pm 0.095) still pass QC and still show high roi/total, so this is
+   overall signal level, not a band mismatch. Noted for M4.
+
+**One test fixture was impossible and revealed a real property.** T-PP23's aggregation
+case originally fed all-zero frames to `session_diagnostics` to force a missing
+`peak_share` — but `energy_retention` raises on a zero-energy frame *by contract*
+(QC's in-band ratio ≥ 0.30 is impossible at zero power). Chasing that showed the
+"all-missing session → empty CSV cell" path is **unreachable for eligible frames**:
+`peak_share` is undefined only at exactly-zero ROI power, and any frame with energy
+leaves float-positive power there. The rule was factored into a
+`median_skipping_missing` helper and tested directly; the guard stays so "undefined"
+remains distinguishable from "zero", but it is documented as not expected to fire —
+and the cohort run confirms it, with **0 missing cells in 73 sessions**.
+
+Artifact written and re-verified: `results/preprocess/preprocess_diagnostics_10ghz.csv`
+(73 rows). Provenance carries `analysis_role: "primary"`, the full `filter_spec`
+(padlen 27, Wn, band edges) and the ROI bins. **Suite: 319 passed / 11 skipped;
+`--realdata` 329 passed / 1 skipped (T18).** Staged-file list checked with `git add -An`
+per the M1 lesson: all five `src/dehyd/preprocess/*.py` appear — the `.gitignore`
+package trap did not recur.
+
+---
+
+## 2026-07-23 — M3 steps 3–5: reduction, standardization, pipeline. **First real-data
+## contact: the dominant beat sits at ~1.50 m, not the assumed ~1 m.**
+
+**Step 3 — `reduce.py`.** Option A (chirp mean), `detect_option_b_peak` →
+`OptionBDetection(peak_bin, power, roi_bins)`, `option_b_mask`, `reduce_option_b`,
+`edge_trim`. ROI = model gate, **no margin**, half-spectrum bins 0..266 → **bins 4,5,6**
+at the default config (df = 975.34 Hz), verified against independent arithmetic; the
+0.9–3.0 m candidate gives bins 4..10 (bin 3 = 2926.0 Hz misses the 2931.7 Hz edge by
+5.7 Hz). `edge_trim` **raises rather than clamps** — the reference's silent
+`min(EdgeTrim, N/4)` would hide a mis-set config.
+
+**Departure logged — the Option-B mask is a correction, not a port.** `wst_extract.m`
+keeps only `peakBin + (0:nb)` (**one-sided**, contradicting its own "±bins" docstring)
+and then applies MATLAB's endpoint-zero `hann(numel(idx))` across the concatenated
+positive+mirror block: at nb = 1 that is `[0, .75, .75, 0]`, which **zeroes the detected
+peak itself**, leaving only bin peak+1 at 75%. We implement the form the docstring and
+the main plan describe — symmetric ±nb, **full weight on the peak**, Hann shoulders:
+weights = interior of `hann(2nb+3)` → nb=0 [1.0], nb=1 **[0.5, 1.0, 0.5]**, nb=2
+[0.25, 0.75, 1.0, 0.75, 0.25]. Mirrors take the same weight; a self-mirroring bin
+(DC/Nyquist) takes the **max**, never the sum. A mask that would keep every bin raises
+(a pass-through Option B is a disabled reduction, not a configuration).
+
+**The zero-ROI claim was wrong in an earlier draft and is now pinned by an adversarial
+fixture** (Codex review round 4). Detection is Hann-windowed; the mask is applied
+*unwindowed*. The frequency-domain periodic-Hann kernel [−¼, ½, −¼] can annihilate the
+windowed ROI while the unwindowed bins under the mask stay nonzero. Constructed and
+**confirmed numerically**: unwindowed bins 3..7 = [1, 0, −1, −2, −3] → windowed ROI
+power ≈ 1e-34 (exactly zero to float precision) yet the reduced output carries
+9.4e-4 of energy. So the frozen behaviour is "mask the first ROI bin, whatever that
+yields" — finite, deterministic, and flagged downstream by `peak_share = NaN`. An
+exactly-zero frame is tested separately, where the argmax tie-break genuinely does
+return the first ROI bin.
+
+**Step 4 — `standardize.py`.** `robust_standardize` = `(x − median)/(1.4826·MAD + eps)`
+with **eps = float64 machine epsilon placed OUTSIDE the scale factor** (the reference
+uses `1.4826·(MAD + eps)`; numerically irrelevant — it is a division guard, not a
+tuning constant — but one form must be frozen for bit-reproducibility). This is the
+settled departure from the reference's mean-centre/MAD-scale mix. `meanstd_standardize`
+uses **ddof = 0** (numpy's population convention; MATLAB's `std` defaults to ddof = 1
+and no reference constrains the choice), pinned by an exact hand-computation test that
+a ddof = 1 implementation fails. Channels are standardized **each from its own
+statistics**.
+
+**Step 5 — `pipeline.py`.** `preprocess_frame` / `preprocess_cube`, the sequence
+readable in one screen: gate → reduce → trim → channel → standardize → float64
+[C × 470]. `reduction`/`channel` are **call arguments, not config** (they are inner-CV
+axes at M6, so one config must produce every variant). T-PP15 makes the
+trim-after-reduction ordering structural rather than a comment: trimming first would
+change the FFT bin grid (470-pt → df = 1108 Hz, ROI bins 3..5), so the two orders
+genuinely disagree and the test can tell them apart.
+
+### First contact with real data (`subject_1_8am.mat`, 35 QC-passing frames)
+
+```
+option-B peak bins  {4: 1, 5: 34}      df = 975.3 Hz
+peak Hz median      4876.7   ->  4876.7 / 3257.5 Hz/m = 1.50 m
+peak_share median   0.460
+```
+
+**The dominant beat sits at ≈1.50 m, not the ≈1 m the plan assumed** when it called the
+1–2 m gate "physically motivated (subject seated ~1 m)". The value lands comfortably
+inside the 1–2 m model gate — near its centre, in fact — so the frozen gate is
+*better* justified by the data than by the assumption behind it. Nothing was changed:
+this is recorded as a finding. (Note s1 8am is one of the 7 QC-**ineligible** sessions
+from M2 at 35/100; the frames used here are still genuine QC-passing frames, and the
+test is about pipeline mechanics, not about that session's eligibility.)
+
+**Suite: 309 passed, 11 skipped** (36 in `test_preprocess.py`, one of them realdata).
+`tests/test_no_leakage.py` is **byte-for-byte unmodified** (`git diff` empty) and green
+— 24 passed, 2 skipped.
+
+---
+
+## 2026-07-23 — M3 step 2: `preprocess/filters.py` — the band gate. Three test
+## fixtures were wrong on first contact; all three taught something.
+
+`design_bandpass_sos` / `bandpass_filtfilt` / `fft_gate` / `apply_band_gate` /
+`filter_spec`, written **shape- and fs-agnostic** so the 77 GHz chain (M9, fs = 500 kHz,
+N = 256) reuses them unchanged. Band from the **model** gate (1–2 m →
+3257.5–6514.9 Hz, Wn ≈ 0.0125–0.0250), never the QC gate. `padlen = 27` is passed
+**explicitly** (not left to scipy's default) and T-PP1 pins both the value and its
+bit-identity with the library default. **9 tests pass.**
+
+**Departure logged — no window before the time-domain filter (ROADMAP §3.2).** The
+ROADMAP lists "Hamming window; range FFT; SOS Butterworth". A window suppresses FFT
+spectral leakage, which is meaningless for a time-domain IIR filter, and pre-tapering
+the chirp would attenuate real signal energy at its edges. Windows are applied only
+where an FFT is actually taken (QC in-band screen, Option-B detection, the FFT-gate
+ablation). filtfilt's edge transients are handled by EdgeTrim instead.
+
+**Three fixture failures, each a real fact about the filter — the module was not
+changed to accommodate any of them (§5's "no parameter chasing" rule):**
+
+1. **"Mid-band" was ambiguous.** I probed at the *geometric* mean (4606.7 Hz) while the
+   plan's regression values were measured at the *arithmetic* centre (4886.2 Hz). Both
+   are inside the passband; only one matches the recorded numbers. Fixed by defining
+   mid-band **once**, as the arithmetic centre, in a fixture every probe now uses.
+2. **The zero-phase fixture was too narrow.** A σ = 40-sample Gaussian burst has ~2 kHz
+   of bandwidth against a 3.3 kHz passband, so the filter distorts it enough to move
+   the envelope peak by one sample. σ = 80 fits inside the band and lands the peak
+   exactly at centre. (σ = 120 is *worse* — the envelope becomes so flat that its
+   argmax is noise-dominated, 273 vs 267.) The test now also asserts a **single causal
+   pass shifts the same burst by ~131 samples**, so it demonstrably has the power to
+   catch a non-zero-phase implementation instead of passing vacuously.
+3. **The stopband assertion assumed steady state.** A 2.6 m tone under the 1–2 m gate
+   retains **3.5%** of its energy, not < 1% — the same finite-record leakage the plan
+   already pins in T-PP6 (a 534-sample record cannot reach the design stopband). The
+   assertion now states the honest claim: kept ≈ 0.81, rejected < 0.1, and kept is
+   > 10× rejected.
+
+**Also measured (recorded, not asserted):** filtfilt with `padtype='odd'` is **not**
+exactly time-reversal-symmetric on a 534-sample noise record (max |diff| ≈ 0.49 in the
+interior). I had considered using that identity as the zero-phase test; it is not a
+property scipy guarantees under edge padding, so the cross-correlation-lag test is used
+instead. Noted so nobody re-derives it.
+
+---
+
+## 2026-07-23 — M3 step 1: preprocessing config fields + cross-field band validation.
+
+`plans/MILESTONE_3_PLAN.md` was approved after **4 review rounds (15 comments, all
+applied, none disputed)**; amendments A-M3-6 and A-M3-7 were propagated into
+`implementation_plan.md` during review. Implementation starts here.
+
+**Five new `PreprocessConfig` fields**, each classified before M6 so no alternative can
+become an undeclared search axis:
+`gate_method="butterworth"` and `standardize="robust"` are **ablation switches**
+(non-default = pre-declared ablation only); `peak_neighbors=1`, `mask_taper=True`,
+`fft_gate_transition_hz=500.0` are **frozen protocol constants** (non-default is
+test-only, rejected by modelling entrypoints). `peak_neighbors=1 + mask_taper=True`
+*is* the plan's "±1-bin two-sided Hann-tapered mask" — they are constants, not knobs.
+
+**Validation added.** Field level: `gate_method`/`standardize` from fixed choice
+tuples; `mask_taper` strictly bool (0/1 rejected — YAML has real booleans, so an int
+is a typo); `peak_neighbors` integer ≥ 0 (0 = keep the peak bin alone, legitimate in
+tests). This forced `_int_field` to take a `minimum` (it hard-coded `> 0`); its
+message became "must be >= N", and three existing M1/M2 parametrised cases had their
+expected regex updated — same assertions, new wording.
+
+**New cross-field check `_check_model_band`,** three failures, all hard errors:
+1. **whole band strictly below Nyquist** (`0 < f_lo < f_hi < fs/2`). Deliberately
+   stricter than `_check_qc_band`, which only rejects a band *starting* above Nyquist:
+   the QC screen is an FFT mask whose upper edge is legitimately Nyquist-clamped
+   (frozen at M2), but `scipy.signal.butter` raises on `Wn ≥ 1`, so a *straddling*
+   gate would pass config load and fail deep inside the filter — exactly what the
+   fail-at-config-load rule forbids. Clamping instead would make the two gate methods
+   filter different bands under one config.
+2. **`model_gate_m ⊆ qc_gate_m`** (inclusive, so the 0.9–3.0 m inner-CV candidate —
+   which equals the QC gate — still loads). QC fixed the frame population on the wider
+   gate; a model gate reaching outside it would use energy QC never screened for.
+3. **FFT-gate non-vacuity** (skirts covering the whole spectrum = a filter that
+   filters nothing), checked only on the `fft` path.
+
+`configs/preprocess.yaml` mirrors all five with their classification stated in the
+comments. **Result: `tests/test_config.py` 67 passed, 1 skipped** — including the
+straddling-Nyquist case, which needed the QC gate widened to 70–90 m so the QC check
+passes first and the *model* rule is what actually fires.
 
 **Commit `395eb62`** on `v1_milestone_2` — 20 files, pushed to
 `origin/v1_milestone_2` (new upstream). Staged list checked file-by-file before

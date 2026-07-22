@@ -16,11 +16,26 @@ qc:
   min_frame_fraction: 0.5          # session kept iff >= ceil(0.5 * actual frame count)
 
 preprocess:
+  # -- inner-CV search axis (selected per outer fold, on inner folds only) -----------
+  model_gate_m: [1.0, 2.0]       # physically-motivated default (subject seated ~1 m);
+                                 # the 0.9-3.0 m candidate is the other option. Must
+                                 # stay inside qc.qc_gate_m (enforced at config load).
+  # -- frozen protocol constants (test-only overrides; modelling entrypoints reject
+  #    non-default values -- see MILESTONE_3_PLAN.md §0) -----------------------------
   butter_order: 4                # scipy butter(4, ...) -> 8 poles, as in the reference
-  model_gate_m: [1.0, 2.0]       # physically-motivated default (subject seated ~1 m)
   edge_trim: 32                  # drop filtfilt edge transients, AFTER reduction
+  peak_neighbors: 1              # Option B: +/-1 bin around the detected peak
+  mask_taper: true               # Option B: Hann shoulders [0.5, 1.0, 0.5] at nb=1.
+                                 # peak_neighbors=1 + mask_taper IS the plan's
+                                 # "+/-1-bin two-sided Hann-tapered mask".
+  fft_gate_transition_hz: 500.0  # filter_gpt_fft.m `tw_hz`; one fixed variant of the
+                                 # FFT ablation, not itself varied.
   fs_hz: 520834.0
   # NOTE the signed exponents: YAML 1.1 only recognises a float when the exponent
   # carries a sign, so `500.0e6` would silently load as the STRING "500.0e6".
   bandwidth_hz: 500.0e+6
   chirp_time_s: 1024.0e-6
+  # -- ablation switches: non-default values are PRE-DECLARED ABLATIONS, never
+  #    inner-CV candidates and never able to displace the primary --------------------
+  gate_method: butterworth       # primary; "fft" = the tapered-mask ablation
+  standardize: robust            # primary median/MAD z; "meanstd" = plain-z ablation

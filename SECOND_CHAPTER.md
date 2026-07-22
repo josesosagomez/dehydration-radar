@@ -307,9 +307,192 @@ established that these recordings are stored as **real-valued** samples, so the 
 representation used by the cross-band feature chain arises at the range transform and
 not in the raw data.
 
-*(Milestone 3 adds: the preprocessing sequence and its self-consistency validation.)*
+## 2. Preprocessing  *(milestone 3 — complete)*
 
-## 2. Preprocessing  *(fill at milestone 3)*
+Between a quality-controlled frame and the feature extractor sits a short, fixed
+sequence: restrict the signal to the range band where the subject is, collapse the
+frame's repeated chirps into a single trace, discard the filter's edge transients, and
+normalise what remains. Every step is a deterministic function of one frame and a
+frozen constant. Nothing is estimated from a population, so no quantity computed here
+can carry information between subjects, and the whole sequence sits outside the
+cross-validation loop by construction rather than by convention.
+
+### Resolving an ambiguity in the published description
+
+The published account of this work describes preprocessing as a window, a range
+transform, and a bandpass filter. That ordering is not what the analysis actually
+requires, and taken literally it is self-defeating. In a frequency-modulated
+continuous-wave radar the beat frequency of a return is proportional to the target's
+range, so restricting the signal to a band of beat frequencies **is** the range gate:
+once the filter is expressed in the time domain there is no transform to take. A window
+serves only to suppress spectral leakage, which is a property of a finite Fourier
+transform; applying one before a time-domain recursive filter would taper genuine
+signal energy at the ends of the chirp while suppressing nothing. The sequence adopted
+here therefore applies a window **only where a transform is actually taken** — the
+quality-control energy screen, the peak detection described below, and the
+spectrogram-based comparison model — and filters in the time domain everywhere else.
+The departure from the published wording is deliberate and is recorded as such.
+
+### The band gate
+
+The gate is a fourth-order Butterworth bandpass, realised as second-order sections and
+applied **forward and backward** along fast time, independently per chirp, to the
+complex signal. Three properties of that sentence carry weight.
+
+*Fourth order, in second-order sections.* The band is narrow relative to the sampling
+rate — roughly 3.3 kHz within a 520.8 kHz band — so the normalised cutoffs are of order
+0.01. A direct transfer-function realisation loses its poles to floating-point error at
+that scale; the factored form is a numerical necessity, not a stylistic preference, and
+pole stability is asserted by test rather than assumed.
+
+*Forward and backward.* Running the filter in both directions cancels its phase
+response exactly, which matters because the features extracted downstream are sensitive
+to the temporal position of structure within the trace. A single causal pass would
+displace a mid-band pulse in this configuration by roughly 131 samples — a quarter of
+the record — so the property is verified against that alternative rather than merely
+asserted. The cost is that the magnitude response is applied twice, so the nominal
+half-power edges of the design sit at a quarter power in use; the reported band edges
+are stated with that in mind.
+
+*On the complex signal.* Real and imaginary parts are filtered separately through the
+same real filter, which is equivalent to filtering the complex signal and is written
+out explicitly so the equivalence is visible rather than delegated.
+
+The padding used to initialise the recursion is fixed by the code rather than inherited
+from a library default, so the treatment of the record's ends cannot change beneath the
+analysis when a dependency is upgraded.
+
+**A finite record does not behave like the design.** The frequency response of a filter
+describes its steady state; a 534-sample record of a narrowband filter is dominated by
+its transient. Measured on this configuration, a mid-band tone retains 76% of its
+energy over the full chirp and 83% after edge trimming, and an out-of-band tone is
+suppressed by 17 dB and 20 dB respectively — not the far larger figures the design
+response would suggest. Both facts are recorded as measurements and pinned by
+regression tests. **No filter parameter was adjusted to make the realised behaviour
+approach the idealised one**; the discrepancy is a property of short records, and the
+improvement from edge trimming is itself the empirical case for that step.
+
+### Two range gates, deliberately different
+
+Quality control screens frames on a **wider** band (0.9–3.0 m) than the band the model
+uses (1–2 m by default). The separation is what makes the analysis population
+independent of a modelling choice: were the screen tied to the model's gate, changing
+that gate would change which frames exist, and a hyperparameter would silently alter
+the dataset. The wider screening band also avoids rejecting a frame for energy that a
+wider candidate gate would legitimately use. The relationship is enforced — a model
+gate that reached outside the screening band would be rejected before any data were
+read.
+
+### Collapsing the chirps
+
+Each frame contains twenty repetitions of the same measurement, and two ways of
+combining them are carried forward as alternatives, resolved later by validation on
+training subjects only.
+
+The first simply averages them. For a stationary target the returns add coherently
+while noise averages down, and nothing about the range profile is presumed.
+
+The second isolates the dominant return. The frame's own chirps are transformed, their
+power spectra averaged, and the strongest bin **within the range gate** located; a
+narrow tapered neighbourhood of that bin is retained and the rest discarded before
+transforming back. Two details are stated because they are easy to get wrong. The
+window used to *find* the peak is not applied to the signal that is *reconstructed* —
+detection and reconstruction are separate operations, and tapering twice would distort
+the result. And the retained neighbourhood is symmetric about the peak with **full
+weight on the peak itself**, tapering only on its shoulders; a taper that reached zero
+at the edges of the retained block would annihilate the very bin the procedure exists
+to isolate.
+
+The detection region is the model's range band with **no tolerance margin**. The margin
+used by the quality-control screen exists to keep a frame from being rejected over
+leakage at a boundary; it has no bearing on where a peak may legitimately be found, and
+importing it here would widen the search for no reason. At the default configuration
+the region is three frequency bins.
+
+One degenerate case is defined rather than assumed away. If the detection region
+carries no power, the search returns its first bin and the reconstruction proceeds from
+there. It is tempting to state that the output is then zero, but that is **false**:
+detection is windowed and reconstruction is not, and the windowing operation can cancel
+the detection region exactly while leaving the reconstructed bins non-zero. The
+behaviour is therefore specified as what it is, and such a frame is flagged in the
+diagnostics rather than silently described by a fabricated value.
+
+### Trimming, and why it comes last
+
+Edge trimming removes 32 samples from each end, leaving 470. It is applied **after**
+the chirps are combined, not before: the peak-isolation branch transforms the full
+chirp, and trimming first would change the frequency grid the search runs on — at 470
+samples the bin spacing is 1108 Hz rather than 975 Hz, and the detection region shifts
+accordingly. The ordering is verified by a test that would fail if the two steps were
+exchanged. An over-large trim is refused rather than quietly reduced, so a mis-set
+value surfaces immediately instead of producing a shorter signal than intended.
+
+### Normalisation
+
+Each trace is standardised against its own statistics: centred on its median and scaled
+by its median absolute deviation, with the customary consistency factor that makes the
+scale comparable to a standard deviation. Using a robust centre with a robust scale is
+a correction — pairing a mean with a median absolute deviation, as an earlier
+implementation did, mixes a statistic that an outlier moves with one that it does not,
+and the combination is neither robust nor interpretable. A single extreme sample shifts
+the bulk of a normalised trace by under 0.05 under this form and by more than an order
+of magnitude more under mean-and-standard-deviation scaling.
+
+Because each trace is normalised by its own statistics, normalisation is not a fitted
+transform: nothing is estimated on one set of frames and applied to another. This is
+what allows a step that would ordinarily have to live inside the cross-validation loop
+to sit safely outside it. The magnitude channel and the two quadrature channels are
+each normalised separately, from their own statistics.
+
+### What the sequence does to this dataset
+
+Run over all 7168 analysable frames of the 73 eligible sessions, the sequence produces
+finite output of the expected length for every frame and every combination of the
+alternatives above. Three measurements characterise it.
+
+**The subject sits at 1.50–1.80 m, not at 1 m.** The dominant return falls in one of
+two adjacent frequency bins in 72 of the 73 sessions, corresponding to 1.50 m and
+1.80 m. The default 1–2 m gate was chosen in advance from the reasoning that a seated
+subject would be about a metre from the antenna; that reasoning was **wrong by roughly
+half a metre**, and the gate happens to be well chosen anyway — the measured range sits
+near its centre. The gate was not adjusted after this was observed, and the
+justification recorded here is the measurement rather than the original assumption.
+
+**The dominant return is genuinely dominant.** That a detected peak lies inside the
+search region is true by construction and therefore evidence of nothing. The
+informative quantity is how much of the region's power the peak actually holds: with
+three bins in the region, an unstructured spectrum would place a third of the power in
+the strongest bin, and the observed median is **0.512**, with no session below 0.410.
+The premise of the peak-isolation branch — that there is a single dominant return to
+isolate — holds on this data. Detection is also stable within a session: in 45 of 73
+sessions every frame agrees on the same bin, and no session spans more than three.
+
+**Band-gate retention varies widely between sessions**, with a median of 0.41 and a
+range from 0.06 to 0.64. The low end reflects overall signal level rather than a
+mismatched band — the weakest sessions still concentrate their remaining power in the
+gate — but the spread is recorded here because it describes how unequal these
+recordings are before any feature is computed.
+
+One quantity is deliberately *not* over-read. The fraction of spectral power falling
+inside the range gate is measured after filtering, where it cannot be low: it describes
+the selectivity of the filter, not the presence of a target. It is reported for
+completeness and carries no evidential weight.
+
+### How correctness was established
+
+No numerical comparison against the earlier implementation is made anywhere. Instead
+the sequence is pinned by properties that are true of a correct implementation and
+false of plausible incorrect ones: the designed filter passes its band and stops
+outside it; the two-directional application has zero group delay, demonstrated against
+a single-pass alternative that does not; the batched application over a whole session
+is bit-identical to filtering each chirp alone; the detection region matches
+independently computed arithmetic; the retained mask has the stated weights, keeps the
+peak at full weight, and refuses to expand until it keeps everything; trimming happens
+after combination and cannot be exchanged with it; normalisation matches its formula
+exactly, including the convention for the divisor; a frame's output is identical
+whether it is processed alone or beside arbitrary companions; and repeated runs are
+bit-identical. The last two together are what make the claim of a per-frame,
+population-independent sequence executable rather than asserted.
 
 ## 3. WST features  *(fill at milestone 4)*
 
@@ -329,3 +512,13 @@ entry. Key ones to carry into the chapter: robust-standardization form (median/M
 range gate, WST tiling Q + invariance scales and their kymatio (J,T) mapping, the
 order-aware log transform, QC thresholds, session-eligibility rule, and the 77 GHz
 Doppler/I-Q/per-Rx feature choice.
+
+**Settled at milestone 3** (detail in HISTORY.md, 2026-07-23 entries): filter order 4
+and its second-order-section realisation; forward-backward application and the
+consequent quarter-power band edges; the explicit padding length; the absence of a
+window in the primary path; the separation of the screening gate from the model gate;
+the peak-detection region as the model gate without margin; the retained-mask weights
+and their full weight on the peak; edge trimming after combination; the robust
+standardisation form and the placement of its numerical guard; and the measured
+1.50–1.80 m target range that now justifies the default gate in place of the original
+seating assumption.

@@ -117,6 +117,7 @@ src/dehyd/
     filters.py                  # SOS Butterworth zero-phase bandpass on complex fast-time; optional FFT-gate
     reduce.py                   # Option A (chirp mean) & Option B (Hann-detected peak isolation + tapered mask)
     standardize.py              # per-signal robust standardization
+    pipeline.py                 # the whole sequence as one linear function (frame -> [C x 470])
   features/
     wst.py                      # kymatio Scattering1D; ms->samples->(J,T) mapping; 3 tilings; mag & I/Q
     pooling.py                  # mean/std over global+halves; raw-flatten; session-level aggregation
@@ -130,6 +131,7 @@ src/dehyd/
   provenance.py                 # per-run: raw-file hashes, resolved config, fold manifest, versions, git rev, device, seed, Slurm ID
 experiments/                    # thin CLI entry points, one per ROADMAP experiment A..H
   run_regression.py, run_clock_decoupling.py, run_ordinal.py, run_baselines.py, ...
+  run_qc.py, run_preprocess.py  # one-command cohort passes (curated artifacts + provenance)
 scripts/ibex/                   # sbatch templates for GPU jobs (DL baselines / NN)
 tests/
   test_no_leakage.py            # subject-disjoint train/val/test + fit-on-train-only (sklearn AND torch)
@@ -167,8 +169,15 @@ and nothing MATLAB-derived is reported.)
    (range structure vs near-zero-Doppler, before clutter subtraction), and verify the
    proposed QC + range-Doppler operations produce **non-degenerate (nonzero-energy)**
    data. Findings are logged and feed the milestone-5 freeze.
-3. **Preprocessing** — the executable sequence below, validated by self-consistency
-   checks (filter response, zero-phase, energy, Option-B ROI) on Python output.
+3. ✅ **DONE (2026-07-23) — Preprocessing:** the executable sequence below, validated
+   by self-consistency checks (filter response, zero-phase, finite-record energy,
+   Option-B ROI/mask, determinism) on Python output. *Execution detail:
+   `plans/MILESTONE_3_PLAN.md`; per-step log: HISTORY.md. Outcome: `src/dehyd/
+   preprocess/{filters,reduce,standardize,pipeline}.py`, 45 new tests (319 total),
+   and the cohort diagnostic `results/preprocess/preprocess_diagnostics_10ghz.csv` —
+   which measured the dominant beat at **1.50–1.80 m** and a peak concentration of
+   **0.512** of ROI power (vs 0.333 for a flat 3-bin ROI), confirming Option-B's
+   premise on this data.*
 4. **WST feature extraction** — the kymatio parameterization below, validated by
    path-structure, shift-stability, and numpy/torch cross-backend checks.
 5. **Config-freeze gate — the COMPLETE A–G protocol, before any outer results are
@@ -184,7 +193,12 @@ and nothing MATLAB-derived is reported.)
    (77 GHz QC thresholds, session-eligibility, WST tilings, input domain, fusion).
    Anything genuinely decided after outer results appear is **explicitly labeled
    exploratory**. This makes the "no config tuned on outer-test" chronology real at the
-   cohort level, not just for Exp A.
+   cohort level, not just for Exp A. The freeze also pins the **frozen protocol
+   constants** that are configurable only for run-recording and tests (Option-B
+   `peak_neighbors = 1` and `mask_taper = true` — i.e. the "±1-bin two-sided
+   Hann-tapered mask" itself — and the FFT-gate transition 500 Hz): modeling
+   entrypoints validate them at their frozen values, so a non-whitelisted value can
+   never reach outer-fold evaluation merely because a low-level function supports it.
 6. **LOSO harness + fluid-loss regression (Exp A)** — the headline, session-level.
 7. **Clock-decoupling analysis (Exp B)** — design locked (below) before Exp A results
    are examined.
@@ -239,13 +253,22 @@ diffs against MATLAB.
 - **Robust standardization → a proper robust z-score.** The 10 GHz reference centers
   by the *mean* but scales by the *MAD* — internally inconsistent. We use
   median-centering with MAD scaling, `y = (x − median)/(1.4826·MAD + eps)` (the
-  coherent form the 77 GHz reference already uses). Applied per signal to its own
-  statistics (per-frame normalization → no train/test leakage vector). Configurable;
-  plain mean/std available.
+  coherent form the 77 GHz reference already uses), with **eps = float64 machine
+  epsilon placed outside the scale factor** — `1.4826·MAD + eps`, not the reference's
+  `1.4826·(MAD + eps)`; the difference is numerically irrelevant (it is a division
+  guard, not a tuning constant) but one form is frozen for bit-reproducibility.
+  Applied per signal to its own statistics (per-frame normalization → no train/test
+  leakage vector). Configurable; plain mean/std available as a **pre-declared ablation
+  only** (ddof = 0, frozen) — never an inner-CV candidate, never displacing the robust
+  primary.
 - **Range gate is a parameter.** ROADMAP §3 specifies a 1–2 m gate (≈3.25–6.51 kHz);
-  the reference used 0.9–3.0 m (≈2.93–9.77 kHz). Subject seated ~1 m from the radar →
-  the tighter physically-motivated gate is the default, but it is config-driven and,
-  if treated as a choice, selected inside inner CV (never on test subjects).
+  the reference used 0.9–3.0 m (≈2.93–9.77 kHz). The tighter gate is the default and
+  is config-driven; treated as a choice, it is selected inside inner CV (never on test
+  subjects). *Measured at milestone 3 (`results/preprocess/`): the dominant beat
+  actually sits at **1.50–1.80 m** (bin 5 or 6 in 72 of 73 sessions), not the ~1 m the
+  original rationale assumed. The 1–2 m gate contains it comfortably — near its centre
+  — so the default is well supported, but by measurement rather than by the seating
+  assumption. The gate was **not** changed on seeing this.*
 - **WST log transform** is a configurable modeling choice selected inside inner CV.
 - **EdgeTrim** (32 samples/end) drops filtfilt edge transients; config parameter.
 - **QC on the raw cube, and low in-band energy rejects.** The reference ran its
@@ -270,16 +293,37 @@ reduction, exactly as in `wst_extract.m`** (the reduction operates on the full
    scipy `butter(4, Wn, btype='bandpass', output='sos')` (scipy order `N`=4 →
    `2N`=8 poles, matching MATLAB `butter(4,...,'bandpass')`), applied **zero-phase**
    with `sosfiltfilt` along the **fast-time (534) axis, per chirp per frame**, on the
-   **complex** signal (filter real and imag; `padtype`/`padlen` fixed and recorded).
+   **complex** signal (filter real and imag; `padtype='odd'` and `padlen` fixed by
+   **explicit passing** — `padlen = 27` for this design, computed from the sos and
+   recorded, so the padding is pinned by our code rather than a library default).
    `Wn` from the range gate via `HzPerM = 2·(B/Tchirp)/c`. No window and no FFT in
    this path — beat-frequency banding *is* the range gate. (An FFT-domain tapered-mask
-   gate, per `filter_gpt_fft.m`, is available as a config alternative for ablation.)
+   gate, per `filter_gpt_fft.m`, is available as a config alternative — a
+   **pre-declared ablation only**: never an inner-CV candidate, never able to
+   displace the primary Butterworth path; its results are always labeled ablation.)
 4. **Signal reduction** on the full 534-sample filtered chirps (two branches):
    - **Option A** — mean across the 20 chirps → one complex 534-sample signal/frame.
-   - **Option B** — per chirp: Hann-window + 534-pt FFT to **detect** the dominant
-     beat bin in the range ROI, build a ±1-bin two-sided Hann-tapered mask, apply it
-     to the (unwindowed) chirp FFT, IFFT, then average across chirps → one 534-sample
-     signal/frame.
+   - **Option B** — per chirp: periodic-Hann window + 534-pt FFT to **detect** the
+     dominant beat bin in the range ROI, build a ±1-bin two-sided Hann-tapered mask,
+     apply it to the (unwindowed) chirp FFT, IFFT, then average across chirps → one
+     534-sample signal/frame.
+     **The ROI is the model gate with NO margin** (the QC screen's ±1000 Hz margin is
+     a QC constant, and the reference ROI carries none): half-spectrum bins 0..266,
+     giving **bins 4–6** at the default 1–2 m gate and 4–10 at the 0.9–3.0 m candidate.
+     **Mask weights are the interior of `hann(2·nb+3)`** — at nb=1, **[0.5, 1.0, 0.5]
+     with full weight on the detected peak** — mirrored onto conjugate bins with the
+     same weight (a self-mirroring DC/Nyquist bin takes the max, never the sum); a
+     mask that would keep every bin is an error, not a configuration.
+     *Departure note: the reference (`wst_extract.m`) keeps only `peakBin + (0:nb)` —
+     one-sided, contradicting its own "±bins" docstring — and applies MATLAB's
+     endpoint-zero `hann` across the concatenated positive+mirror block, which at nb=1
+     is `[0, .75, .75, 0]` and **zeroes the detected peak itself**. The form above is
+     the corrected one the docstring and this plan describe.*
+     *Zero-ROI-power behaviour (frozen): the argmax returns the first ROI bin, and the
+     mask is applied to the unwindowed FFT whatever that yields — **no claim that the
+     output is then zero**, since detection is windowed and the frequency-domain Hann
+     kernel [−¼, ½, −¼] can annihilate the windowed ROI while unwindowed bins under
+     the mask stay nonzero. Such a frame reports `peak_share = NaN`.*
 5. **EdgeTrim** the reduced signal by 32 samples each end → effective length 470.
 6. **Channel**: `mag` = |s|, or `iq` = {real(s), imag(s)} standardized separately.
 7. **Robust standardize** (median/MAD, above), per signal.

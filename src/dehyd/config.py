@@ -28,6 +28,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 VALID_DEVICES = ("cpu", "cuda")
 
+# Band-gate implementations and standardization methods. The first of each is the
+# primary; the second is a PRE-DECLARED ABLATION (never an inner-CV candidate).
+GATE_METHODS = ("butterworth", "fft")
+STANDARDIZE_METHODS = ("robust", "meanstd")
+
 # Exact by definition (SI), so it is written here rather than pulled from scipy —
 # config validation should not depend on a numerics package being importable.
 SPEED_OF_LIGHT_M_S = 299_792_458.0
@@ -84,7 +89,25 @@ class QCConfig:
 
 @dataclass(frozen=True)
 class PreprocessConfig:
-    """Frozen preprocessing parameters (implementation_plan.md 'Preprocessing')."""
+    """Frozen preprocessing parameters (implementation_plan.md 'Preprocessing').
+
+    The fields fall into three classes, fixed before M6 so no alternative can quietly
+    become an undeclared search axis (MILESTONE_3_PLAN.md §0):
+
+      * inner-CV search axis: `model_gate_m` (1-2 m default vs the 0.9-3.0 m
+        candidate), selected per outer fold on inner folds only;
+      * ablation switches: `gate_method`, `standardize` -- their non-default values
+        are PRE-DECLARED ABLATIONS, never inner-CV candidates and never able to
+        displace the primary path;
+      * frozen protocol constants: `butter_order`, `edge_trim`, `peak_neighbors`,
+        `mask_taper`, `fft_gate_transition_hz` and the radar constants. They are
+        configurable only so a run's YAML is a complete record and so tests can drive
+        boundary behaviour; non-default values are rejected by modelling/artifact
+        entrypoints (at M3 by run_preprocess.py's canonical-spec guard).
+
+    Reduction {A, B} and channel {mag, iq} are the other two inner-CV axes; they are
+    call arguments rather than config, so one config can serve every variant.
+    """
 
     butter_order: int = 4
     model_gate_m: tuple[float, float] = (1.0, 2.0)
@@ -92,6 +115,16 @@ class PreprocessConfig:
     fs_hz: float = 520834.0
     bandwidth_hz: float = 500e6
     chirp_time_s: float = 1024e-6
+    # Band gate: the time-domain zero-phase Butterworth is primary; the FFT tapered
+    # mask (filter_gpt_fft.m) is the pre-declared ablation.
+    gate_method: str = "butterworth"
+    fft_gate_transition_hz: float = 500.0
+    # Option B: "+/-1-bin two-sided Hann-tapered mask" IS peak_neighbors=1 with
+    # mask_taper=True -- the two together are the frozen form.
+    peak_neighbors: int = 1
+    mask_taper: bool = True
+    # Robust median/MAD z is primary; plain mean/std is the pre-declared ablation.
+    standardize: str = "robust"
 
 
 @dataclass(frozen=True)
@@ -227,12 +260,29 @@ def _float_field(section: dict, key: str, default: float, name: str, **bounds) -
     return _number(section.get(key, default), f"{name}.{key}", **bounds)
 
 
-def _int_field(section: dict, key: str, default: int, name: str) -> int:
+def _int_field(section: dict, key: str, default: int, name: str, *, minimum: int = 1) -> int:
     value = section.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError(f"{name}.{key} must be an integer, got {type(value).__name__}")
-    if value <= 0:
-        raise ConfigError(f"{name}.{key} must be > 0, got {value}")
+    if value < minimum:
+        raise ConfigError(f"{name}.{key} must be >= {minimum}, got {value}")
+    return value
+
+
+def _bool_field(section: dict, key: str, default: bool, name: str) -> bool:
+    """A real boolean. 0/1 are rejected: YAML has true/false, so an int here is a typo."""
+    value = section.get(key, default)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{name}.{key} must be true or false, got {type(value).__name__}")
+    return value
+
+
+def _choice_field(section: dict, key: str, default: str, name: str, allowed: tuple[str, ...]) -> str:
+    value = section.get(key, default)
+    if not isinstance(value, str):
+        raise ConfigError(f"{name}.{key} must be a string, got {type(value).__name__}")
+    if value not in allowed:
+        raise ConfigError(f"{name}.{key} must be one of {allowed}, got {value!r}")
     return value
 
 
@@ -306,6 +356,56 @@ def _check_qc_band(qc: QCConfig, preprocess: PreprocessConfig) -> None:
             f"covers the entire spectrum [0, {nyquist:.1f}] Hz — the in-band ratio "
             "would be identically 1 and the screen could never fire"
         )
+
+
+def _check_model_band(qc: QCConfig, preprocess: PreprocessConfig) -> None:
+    """The model gate must be filterable, inside the QC gate, and not a no-op.
+
+    Three separate failures, all config errors rather than valid configurations:
+
+      * **The whole band must sit below Nyquist** (0 < f_lo < f_hi < fs/2). This is
+        deliberately STRICTER than `_check_qc_band`, which only rejects a band
+        *starting* at/above Nyquist -- the QC screen is an FFT mask whose upper edge is
+        legitimately Nyquist-clamped (frozen at M2), whereas `butter` raises on
+        Wn >= 1, so a gate straddling Nyquist would pass config load and blow up deep
+        inside the filter. Clamping the model band instead would make the two gate
+        methods filter different bands under one config.
+      * **model_gate_m must lie inside qc_gate_m.** The QC gate was frozen wider
+        precisely so the QC-passing population is identical for every model-gate
+        candidate (implementation_plan.md, "One fixed QC range gate"). A model gate
+        reaching outside it would use energy QC never guaranteed.
+      * **The FFT gate must not pass everything.** With skirts wide enough to cover the
+        whole represented spectrum the "gate" is a no-op -- the same doctrine as the QC
+        vacuity guards.
+    """
+    f_lo, f_hi = beat_band_hz(
+        preprocess.model_gate_m, preprocess.bandwidth_hz, preprocess.chirp_time_s
+    )
+    nyquist = preprocess.fs_hz / 2.0
+    if not (0.0 < f_lo < f_hi < nyquist):
+        raise ConfigError(
+            f"preprocess.model_gate_m {preprocess.model_gate_m} m maps to "
+            f"{f_lo:.1f}-{f_hi:.1f} Hz, which is not strictly inside "
+            f"(0, {nyquist:.1f}) Hz — the whole band must be below Nyquist "
+            "(scipy.signal.butter raises on a normalized cutoff >= 1)"
+        )
+
+    if preprocess.model_gate_m[0] < qc.qc_gate_m[0] or preprocess.model_gate_m[1] > qc.qc_gate_m[1]:
+        raise ConfigError(
+            f"preprocess.model_gate_m {preprocess.model_gate_m} m is not contained in "
+            f"qc.qc_gate_m {qc.qc_gate_m} m — QC fixed the frame population on the "
+            "wider gate, so a model gate reaching outside it would use energy QC never "
+            "screened for"
+        )
+
+    if preprocess.gate_method == "fft":
+        transition = preprocess.fft_gate_transition_hz
+        if f_lo - transition <= 0.0 and f_hi + transition >= nyquist:
+            raise ConfigError(
+                f"preprocess: the fft gate {preprocess.model_gate_m} m widened by "
+                f"{transition} Hz skirts covers the entire spectrum [0, {nyquist:.1f}] Hz "
+                "— it would pass everything and filter nothing"
+            )
 
 
 def _build_paths(raw: dict) -> PathsConfig:
@@ -436,6 +536,20 @@ def _build_preprocess(raw: dict) -> PreprocessConfig:
         fs_hz=_float_field(section, "fs_hz", d.fs_hz, "preprocess", **positive),
         bandwidth_hz=_float_field(section, "bandwidth_hz", d.bandwidth_hz, "preprocess", **positive),
         chirp_time_s=_float_field(section, "chirp_time_s", d.chirp_time_s, "preprocess", **positive),
+        gate_method=_choice_field(
+            section, "gate_method", d.gate_method, "preprocess", GATE_METHODS
+        ),
+        fft_gate_transition_hz=_float_field(
+            section, "fft_gate_transition_hz", d.fft_gate_transition_hz, "preprocess", **positive
+        ),
+        # minimum=0: keeping only the peak bin is a legitimate (test-only) setting.
+        peak_neighbors=_int_field(
+            section, "peak_neighbors", d.peak_neighbors, "preprocess", minimum=0
+        ),
+        mask_taper=_bool_field(section, "mask_taper", d.mask_taper, "preprocess"),
+        standardize=_choice_field(
+            section, "standardize", d.standardize, "preprocess", STANDARDIZE_METHODS
+        ),
     )
 
 
@@ -469,8 +583,10 @@ def load_config(*yaml_paths: str | Path) -> Config:
 
     qc = _build_qc(merged)
     preprocess = _build_preprocess(merged)
-    # Cross-section: the QC band is only meaningful against this radar's fs/B/Tchirp.
+    # Cross-section: both bands are only meaningful against this radar's fs/B/Tchirp,
+    # and the model gate is additionally constrained by the (wider) frozen QC gate.
     _check_qc_band(qc, preprocess)
+    _check_model_band(qc, preprocess)
 
     return Config(
         paths=_build_paths(merged),

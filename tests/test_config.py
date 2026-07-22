@@ -240,8 +240,8 @@ def test_yaml_list_gates_are_normalised_to_tuples(tmp_path, overlay):
     "section, key, value, match",
     [
         # --- out-of-range numbers ----------------------------------------------
-        ("qc", "histogram_bins", 0, "must be > 0"),
-        ("qc", "histogram_bins", -5, "must be > 0"),
+        ("qc", "histogram_bins", 0, "must be >= 1"),
+        ("qc", "histogram_bins", -5, "must be >= 1"),
         ("qc", "flatline_max_bin_fraction", 0.0, r"must be in \(0.0, 1.0\]"),
         ("qc", "flatline_max_bin_fraction", 1.5, r"must be in \(0.0, 1.0\]"),
         ("qc", "min_in_band_energy_ratio", -0.1, r"must be in \[0.0, 1.0\]"),
@@ -250,7 +250,7 @@ def test_yaml_list_gates_are_normalised_to_tuples(tmp_path, overlay):
         ("qc", "in_band_margin_hz", -1.0, "must be in"),
         ("qc", "min_frame_fraction", 0.0, r"must be in \(0.0, 1.0\]"),
         ("qc", "min_frame_fraction", 1.5, r"must be in \(0.0, 1.0\]"),
-        ("preprocess", "butter_order", 0, "must be > 0"),
+        ("preprocess", "butter_order", 0, "must be >= 1"),
         ("preprocess", "edge_trim", -1, "must be an integer >= 0"),
         ("preprocess", "fs_hz", 0.0, "must be in"),
         ("preprocess", "bandwidth_hz", -1.0, "must be in"),
@@ -312,6 +312,103 @@ def test_margin_covering_whole_spectrum_rejected(tmp_path, overlay):
     bad = write_yaml(tmp_path / "bad.yaml", {"qc": {"in_band_margin_hz": 300_000.0}})
     with pytest.raises(ConfigError, match="entire spectrum"):
         load_config(EXP_A, overlay, bad)
+
+
+# --------------------------------------------------- M3 preprocessing fields (§2.1)
+
+
+def test_m3_preprocess_defaults(overlay):
+    """The frozen M3 values, present without being written in any YAML."""
+    pre = load_config(EXP_A, overlay).preprocess
+    assert pre.gate_method == "butterworth"
+    assert pre.standardize == "robust"
+    assert pre.peak_neighbors == 1
+    assert pre.mask_taper is True
+    assert pre.fft_gate_transition_hz == 500.0
+
+
+def test_m3_preprocess_yaml_overrides_honoured(tmp_path, overlay):
+    override = write_yaml(
+        tmp_path / "pp.yaml",
+        {
+            "preprocess": {
+                "gate_method": "fft",
+                "standardize": "meanstd",
+                "peak_neighbors": 0,
+                "mask_taper": False,
+                "fft_gate_transition_hz": 250.0,
+            }
+        },
+    )
+    pre = load_config(EXP_A, overlay, override).preprocess
+    assert (pre.gate_method, pre.standardize) == ("fft", "meanstd")
+    assert pre.peak_neighbors == 0  # keeping only the peak bin is legitimate
+    assert pre.mask_taper is False
+    assert pre.fft_gate_transition_hz == 250.0
+
+
+@pytest.mark.parametrize(
+    "section, message",
+    [
+        ({"gate_method": "butterwurth"}, "must be one of"),
+        ({"gate_method": 4}, "must be a string"),
+        ({"standardize": "zscore"}, "must be one of"),
+        ({"mask_taper": 1}, "must be true or false"),  # 0/1 is a typo, not a bool
+        ({"peak_neighbors": -1}, "must be >= 0"),
+        ({"peak_neighbors": True}, "must be an integer"),
+        ({"fft_gate_transition_hz": -5.0}, "must be in"),
+    ],
+)
+def test_m3_preprocess_bad_values_rejected(tmp_path, overlay, section, message):
+    bad = write_yaml(tmp_path / "bad.yaml", {"preprocess": section})
+    with pytest.raises(ConfigError, match=message):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_model_gate_straddling_nyquist_rejected(tmp_path, overlay):
+    """The case an "only the lower edge" check would miss.
+
+    At ~3257.5 Hz/m against a 260.4 kHz Nyquist, a 70-90 m gate starts below Nyquist
+    (228 kHz) and ends above it (293 kHz). The QC gate is widened to the same band so
+    the QC check passes first and this test really exercises the MODEL band rule --
+    without it, the failure would surface inside scipy.signal.butter instead.
+    """
+    bad = write_yaml(
+        tmp_path / "bad.yaml",
+        {"qc": {"qc_gate_m": [70.0, 90.0]}, "preprocess": {"model_gate_m": [70.0, 90.0]}},
+    )
+    with pytest.raises(ConfigError, match="whole band must be below Nyquist"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_model_gate_outside_qc_gate_rejected(tmp_path, overlay):
+    """QC fixed the population on the wider gate; the model may not reach outside it."""
+    bad = write_yaml(tmp_path / "bad.yaml", {"preprocess": {"model_gate_m": [0.5, 2.0]}})
+    with pytest.raises(ConfigError, match="not contained in"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_model_gate_equal_to_qc_gate_accepted(tmp_path, overlay):
+    """The 0.9-3.0 m inner-CV candidate is exactly the QC gate — containment is
+    inclusive, so this must load."""
+    ok = write_yaml(tmp_path / "ok.yaml", {"preprocess": {"model_gate_m": [0.9, 3.0]}})
+    assert load_config(EXP_A, overlay, ok).preprocess.model_gate_m == (0.9, 3.0)
+
+
+def test_fft_gate_covering_whole_spectrum_rejected(tmp_path, overlay):
+    """Skirts wide enough to pass everything = a filter that filters nothing."""
+    bad = write_yaml(
+        tmp_path / "bad.yaml",
+        {"preprocess": {"gate_method": "fft", "fft_gate_transition_hz": 300_000.0}},
+    )
+    with pytest.raises(ConfigError, match="entire spectrum"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_wide_fft_transition_allowed_on_the_butterworth_path(tmp_path, overlay):
+    """The vacuity rule is about the FFT mask; it must not fire on the primary path."""
+    ok = write_yaml(tmp_path / "ok.yaml", {"preprocess": {"fft_gate_transition_hz": 300_000.0}})
+    assert load_config(EXP_A, overlay, ok).preprocess.gate_method == "butterworth"
 
 
 # ------------------------------------------------------------------------ provenance
