@@ -1,0 +1,206 @@
+{
+  "audit": "77ghz-minimal",
+  "milestone": 2,
+  "timestamp_utc": "2026-07-21T18:33:19.013277+00:00",
+  "input": {
+    "path": "data/77ghz/subject_1_8am.mat",
+    "bytes": 285502038,
+    "sha256": "0c8e0231db4772151daaf5e412fcb10f3e97e6062d9434ef22a277c6b46583b2"
+  },
+  "git": {
+    "commit": "f7293ce486a94251dd801833c98a329ed4b08b1c",
+    "dirty": true,
+    "branch": "v1_milestone_2"
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "2.4.6",
+    "scipy": "1.16.3",
+    "h5py": "3.16.0"
+  },
+  "constants": {
+    "fs_hz": 500000.0,
+    "bandwidth_hz": 2000000000.0,
+    "chirp_time_s": 0.000512,
+    "prf_hz": 1953.125,
+    "range_gate_m": [
+      2.0,
+      4.0
+    ],
+    "range_bin_spacing_m": 0.0749481145,
+    "expected_shape": [
+      16,
+      256,
+      256,
+      125
+    ],
+    "qc_histogram_bins": 128,
+    "qc_flatline_max_bin_fraction": 0.25,
+    "qc_min_in_band_ratio": 0.3,
+    "qc_in_band_margin_hz": 1953.125,
+    "range_gate_bins": [
+      27,
+      53
+    ],
+    "qc_mask_bins": [
+      26,
+      54
+    ]
+  },
+  "audit_thresholds": {
+    "A1_min_D_chirp": 0.5,
+    "A2_min_G_fast": 0.05,
+    "A3_dominance_factor": 10.0,
+    "dc_halfwidth_bins": 3,
+    "chain_min_energy_ratio": 1e-09,
+    "qc_smoke_min_median_ratio": 0.01
+  },
+  "conventions": {
+    "qc_and_semantic_window": "periodic Hann (scipy hann sym=False)",
+    "chain_window": "symmetric Hann (MATLAB hann(N) default)",
+    "semantic_spectrum": "full spectrum, shared denominator for both axes",
+    "semantic_G": "unshifted FFT bins over the range gate",
+    "semantic_D": "fftshifted, +-3 bins around zero",
+    "qc_spectrum": "non-negative half-spectrum, DC included, Nyquist excluded",
+    "energy_normalization": "Parseval; spectral energy / cumulative transform length"
+  },
+  "verdicts": {
+    "H1_shape": "ACCEPTED",
+    "H1_storage": "ACCEPTED",
+    "qc_smoke": "NON_DEGENERATE",
+    "H1_axes": "ACCEPTED",
+    "chain": "NON_DEGENERATE"
+  },
+  "storage": {
+    "dtype_str": "<f8",
+    "dtype_name": "float64",
+    "field_names": null,
+    "byteorder": "<",
+    "itemsize": 8,
+    "shape": [
+      16,
+      256,
+      256,
+      125
+    ],
+    "chunks": [
+      16,
+      4,
+      1,
+      125
+    ],
+    "compression": "gzip",
+    "representation": "real_float",
+    "verdict": "ACCEPTED"
+  },
+  "slab": {
+    "requested_frame_count": 10,
+    "min_finite_frames": 5,
+    "selected_frame_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "excluded_frame_indices": [],
+    "effective_frame_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "reversed_shape": [
+      10,
+      256,
+      256,
+      16
+    ],
+    "dtype": "float64",
+    "abs_min": 0.0,
+    "abs_median": 27.0,
+    "abs_max": 2560.0,
+    "n_non_finite_samples": 0
+  },
+  "qc_smoke": {
+    "n_frames": 10,
+    "n_pass": 3,
+    "n_nan_inf": 0,
+    "n_flatline": 7,
+    "n_low_in_band": 0,
+    "in_band_ratio": {
+      "n": 10,
+      "min": 0.3727763648614621,
+      "median": 0.3820949526846622,
+      "max": 0.39180146936055277
+    },
+    "per_rx_flatline_trace_counts": [
+      1097,
+      586,
+      1188,
+      1280,
+      369,
+      953,
+      966,
+      1601,
+      1091,
+      1053,
+      910,
+      516,
+      169,
+      858,
+      1278,
+      1483
+    ],
+    "flatline_multiplicity_vs_10ghz": 204.8
+  },
+  "axis_metrics": {
+    "G_fast": 0.22601929334579896,
+    "D_fast": 0.4939146369879967,
+    "G_chirp": 6.70354689878672e-06,
+    "D_chirp": 0.9999340186106023
+  },
+  "chain_stages": [
+    {
+      "stage": "raw_slab",
+      "energy": 107344620827.65234,
+      "ratio_to_raw": 1.0
+    },
+    {
+      "stage": "mti",
+      "energy": 290289166.0445404,
+      "ratio_to_raw": 0.0027042730581778806
+    },
+    {
+      "stage": "bandpass",
+      "energy": 99613378.22393116,
+      "ratio_to_raw": 0.0009279773635221637
+    },
+    {
+      "stage": "range_fft",
+      "energy": 6506698.7954004435,
+      "ratio_to_raw": 6.06150428892688e-05
+    },
+    {
+      "stage": "range_gate_crop",
+      "energy": 3202095.1924899076,
+      "ratio_to_raw": 2.9830048006141326e-05
+    },
+    {
+      "stage": "range_doppler",
+      "energy": 912102.6960260867,
+      "ratio_to_raw": 8.496957639736019e-06
+    }
+  ]
+}

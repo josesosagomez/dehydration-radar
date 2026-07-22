@@ -14,12 +14,22 @@ import pandas as pd
 import pytest
 import scipy.io as sio
 
+from dehyd.config import PreprocessConfig, QCConfig
 from dehyd.data.ground_truth import GroundTruth
-from dehyd.data.manifest import COLUMN_DTYPES, SORT_KEYS, ManifestError, build_manifest
+from dehyd.data.loader_10ghz import N_CHIRPS, N_FAST_TIME
+from dehyd.data.manifest import (
+    COLUMN_DTYPES,
+    QC_COLUMN_DTYPES,
+    SORT_KEYS,
+    ManifestError,
+    _join_qc,
+    apply_qc,
+    build_manifest,
+    eligible_frames,
+    evaluable_subjects,
+    session_qc_report,
+)
 from dehyd.data.sessions import SESSION_NAMES
-
-N_FAST_TIME = 534
-N_CHIRPS = 20
 
 
 @dataclass(frozen=True)
@@ -244,3 +254,259 @@ def test_real_manifest_builds_and_validates(real_data_paths):
     assert manifest.groupby(["subject", "session_idx"]).size().eq(100).all()
     for column, dtype in COLUMN_DTYPES.items():
         assert manifest[column].dtype == dtype, column
+
+
+# ============================================================== milestone 2: QC
+# apply_qc is bookkeeping only -- the screens are tested in test_qc.py. What is
+# tested here is the join, the eligibility arithmetic, and the reporting views.
+
+
+@dataclass(frozen=True)
+class FakeConfig:
+    qc: QCConfig
+    preprocess: PreprocessConfig
+
+
+CONFIG = FakeConfig(qc=QCConfig(), preprocess=PreprocessConfig())
+
+F_IN_GATE = 3257.5  # ~1 m, comfortably inside the 0.9-3.0 m QC gate
+
+
+def clean_frame(seed: int) -> np.ndarray:
+    """An in-gate beat tone plus a little noise: passes every screen.
+
+    The noise matters -- a noiseless tone has constant magnitude and is legitimately
+    flagged as flatline (see test_qc.py).
+    """
+    rng = np.random.default_rng(seed)
+    t = np.arange(N_FAST_TIME) / CONFIG.preprocess.fs_hz
+    frame = np.repeat(np.exp(2j * np.pi * F_IN_GATE * t)[:, None], N_CHIRPS, axis=1)
+    return frame + 0.01 * (
+        rng.standard_normal(frame.shape) + 1j * rng.standard_normal(frame.shape)
+    )
+
+
+def failing_frame(kind: str = "nan") -> np.ndarray:
+    if kind == "nan":
+        frame = clean_frame(0)
+        frame[0, 0] = np.nan
+        return frame
+    if kind == "both":  # all-zero: flatline AND low in-band, the overlap case
+        return np.zeros((N_FAST_TIME, N_CHIRPS), dtype=np.complex128)
+    raise ValueError(kind)
+
+
+def write_qc_file(data_dir, subject, session_idx, n_pass, n_fail, fail_kind="nan"):
+    frames = [clean_frame(seed) for seed in range(n_pass)]
+    frames += [failing_frame(fail_kind) for _ in range(n_fail)]
+    cube = np.stack(frames, axis=2)
+    path = data_dir / f"subject_{subject}_{SESSION_NAMES[session_idx]}.mat"
+    sio.savemat(str(path), {"framesRadar": cube})
+    return path
+
+
+@pytest.fixture
+def qc_inventory(tmp_path):
+    """One subject, five sessions, 4 frames each: 3 pass / 1 fail -> all eligible."""
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    for session_idx in range(5):
+        write_qc_file(data_dir, 1, session_idx, n_pass=3, n_fail=1)
+    return FakePaths(data_10ghz_dir=data_dir)
+
+
+def build_qc(paths, subjects=(1,)):
+    manifest = build_manifest(paths, make_ground_truth(subjects=subjects))
+    return apply_qc(manifest, paths, CONFIG)
+
+
+def test_qc_columns_and_dtypes_are_fixed(qc_inventory):
+    manifest_qc = build_qc(qc_inventory)
+    assert set(manifest_qc.columns) == set(COLUMN_DTYPES) | set(QC_COLUMN_DTYPES)
+    for column, dtype in {**COLUMN_DTYPES, **QC_COLUMN_DTYPES}.items():
+        assert manifest_qc[column].dtype == dtype, column
+
+
+def test_qc_verdicts_land_on_the_right_frames(qc_inventory):
+    manifest_qc = build_qc(qc_inventory)
+    for (_, _), group in manifest_qc.groupby(["subject", "session_idx"]):
+        group = group.sort_values("frame_idx")
+        assert group["qc_pass"].tolist() == [True, True, True, False]
+        assert group["qc_nan_inf"].tolist() == [False, False, False, True]
+
+
+def test_join_is_by_key_not_row_order(tmp_path):
+    """`subject_1_10am` sorts BEFORE `subject_1_8am`: positional joins misattribute.
+
+    Session 1 (10am) is given a failing frame and session 0 (8am) none, so a join that
+    followed rel_path string order would put the failure on the wrong session.
+    """
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    write_qc_file(data_dir, 1, 0, n_pass=4, n_fail=0)  # 8am: all clean
+    write_qc_file(data_dir, 1, 1, n_pass=3, n_fail=1)  # 10am: one NaN frame
+    for session_idx in (2, 3, 4):
+        write_qc_file(data_dir, 1, session_idx, n_pass=4, n_fail=0)
+
+    report = session_qc_report(build_qc(FakePaths(data_10ghz_dir=data_dir)))
+    by_session = report.set_index("session_idx")
+    assert by_session.loc[0, "n_fail_any"] == 0
+    assert by_session.loc[1, "n_fail_any"] == 1
+
+
+# ------------------------------------------------------------ eligibility arithmetic
+
+
+@pytest.mark.parametrize(
+    "n_frames, n_pass, expect_min_pass, expect_eligible",
+    [
+        (3, 2, 2, True),   # ceil(0.5*3) = 2
+        (3, 1, 2, False),
+        (4, 2, 2, True),   # ceil(0.5*4) = 2 -- exactly half is enough
+        (4, 1, 2, False),
+        (5, 3, 3, True),   # ceil(0.5*5) = 3
+        (5, 2, 3, False),
+    ],
+)
+def test_eligibility_uses_ceil_of_the_actual_frame_count(
+    tmp_path, n_frames, n_pass, expect_min_pass, expect_eligible
+):
+    """Never a hard-coded 100: the threshold comes from the file's real frame count."""
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    for session_idx in range(5):
+        write_qc_file(data_dir, 1, session_idx, n_pass=n_pass, n_fail=n_frames - n_pass)
+
+    manifest_qc = build_qc(FakePaths(data_10ghz_dir=data_dir))
+    assert (manifest_qc["n_frames_in_file"] == n_frames).all()
+    assert (manifest_qc["session_min_pass"] == expect_min_pass).all()
+    assert (manifest_qc["session_eligible"] == expect_eligible).all()
+
+
+# ------------------------------------------------- reconciliation via n_fail_any
+
+
+def test_reason_codes_overlap_and_reconcile_through_fail_any(tmp_path):
+    """An all-zero frame fails flatline AND low-in-band: counted twice, rejected once.
+
+    Per-reason counts are non-additive incidence markers; the only identity that holds
+    is n_pass + n_fail_any == n_frames.
+    """
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    for session_idx in range(5):
+        write_qc_file(data_dir, 1, session_idx, n_pass=3, n_fail=1, fail_kind="both")
+
+    manifest_qc = build_qc(FakePaths(data_10ghz_dir=data_dir))
+    report = session_qc_report(manifest_qc)
+
+    row = report.iloc[0]
+    assert row["n_flatline"] == 1 and row["n_low_in_band"] == 1  # same frame, both
+    assert row["n_fail_any"] == 1  # counted once
+    assert row["n_flatline"] + row["n_low_in_band"] > row["n_fail_any"]
+    for _, row in report.iterrows():
+        assert row["n_pass"] + row["n_fail_any"] == row["n_frames"]
+
+
+def test_report_covers_every_session_including_dropped_ones(tmp_path):
+    """Missingness must stay visible: a dropped session is reported, not erased."""
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    write_qc_file(data_dir, 1, 0, n_pass=0, n_fail=4)  # 8am dies entirely
+    for session_idx in (1, 2, 3, 4):
+        write_qc_file(data_dir, 1, session_idx, n_pass=4, n_fail=0)
+
+    manifest_qc = build_qc(FakePaths(data_10ghz_dir=data_dir))
+    report = session_qc_report(manifest_qc)
+
+    assert len(report) == 5
+    dropped = report.set_index("session_idx").loc[0]
+    assert not dropped["eligible"]
+    assert dropped["n_pass"] == 0 and dropped["n_nan_inf"] == 4
+
+    # ...but its frames are absent from the analysis population, never imputed.
+    frames = eligible_frames(manifest_qc)
+    assert 0 not in set(frames["session_idx"])
+    assert len(frames) == 16
+
+
+def test_eligible_frames_drops_failing_frames_and_ineligible_sessions(tmp_path):
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    write_qc_file(data_dir, 1, 0, n_pass=1, n_fail=3)  # ineligible (1 < ceil(2))
+    for session_idx in (1, 2, 3, 4):
+        write_qc_file(data_dir, 1, session_idx, n_pass=3, n_fail=1)  # eligible
+
+    manifest_qc = build_qc(FakePaths(data_10ghz_dir=data_dir))
+    frames = eligible_frames(manifest_qc)
+
+    assert frames["qc_pass"].all() and frames["session_eligible"].all()
+    assert set(frames["session_idx"]) == {1, 2, 3, 4}
+    assert len(frames) == 4 * 3  # the passing frame of session 0 is excluded too
+
+
+# -------------------------------------------------------------- evaluable subjects
+
+
+def test_subject_is_evaluable_with_one_eligible_session(tmp_path):
+    """Exp A rule: >= 1 eligible session. A subject is dropped only when ALL five die."""
+    data_dir = tmp_path / "10ghz"
+    data_dir.mkdir()
+    for session_idx in range(5):
+        # subject 1 keeps only its 4pm session; subject 2 loses everything.
+        write_qc_file(data_dir, 1, session_idx, n_pass=(4 if session_idx == 4 else 0),
+                      n_fail=(0 if session_idx == 4 else 4))
+        write_qc_file(data_dir, 2, session_idx, n_pass=0, n_fail=4)
+        write_qc_file(data_dir, 3, session_idx, n_pass=4, n_fail=0)
+
+    manifest_qc = build_qc(FakePaths(data_10ghz_dir=data_dir), subjects=(1, 2, 3))
+    assert evaluable_subjects(manifest_qc) == (1, 3)
+
+
+# ------------------------------------------------------------- fail-closed join
+
+
+def _qc_rows_for(manifest):
+    return pd.DataFrame(
+        {
+            "rel_path": manifest["rel_path"],
+            "frame_idx": manifest["frame_idx"],
+            "qc_pass": True,
+        }
+    )
+
+
+def test_join_rejects_duplicate_qc_keys(inventory):
+    manifest = build_manifest(inventory, make_ground_truth())
+    rows = _qc_rows_for(manifest)
+    doubled = pd.concat([rows, rows.iloc[[0]]], ignore_index=True)
+    with pytest.raises(ManifestError, match="duplicate"):
+        _join_qc(manifest, doubled)
+
+
+def test_join_rejects_missing_qc_keys(inventory):
+    manifest = build_manifest(inventory, make_ground_truth())
+    with pytest.raises(ManifestError, match="one-to-one"):
+        _join_qc(manifest, _qc_rows_for(manifest).iloc[1:])
+
+
+def test_join_rejects_extra_qc_keys(inventory):
+    manifest = build_manifest(inventory, make_ground_truth())
+    rows = _qc_rows_for(manifest)
+    stray = rows.iloc[[0]].copy()
+    stray["rel_path"] = "subject_99_8am.mat"
+    with pytest.raises(ManifestError, match="one-to-one"):
+        _join_qc(manifest, pd.concat([rows, stray], ignore_index=True))
+
+
+def test_join_rejects_duplicate_manifest_keys(inventory):
+    manifest = build_manifest(inventory, make_ground_truth())
+    doubled = pd.concat([manifest, manifest.iloc[[0]]], ignore_index=True)
+    with pytest.raises(ManifestError, match="duplicate"):
+        _join_qc(doubled, _qc_rows_for(doubled))
+
+
+def test_qc_output_is_in_deterministic_sort_order(qc_inventory):
+    manifest_qc = build_qc(qc_inventory)
+    expected = manifest_qc.sort_values(SORT_KEYS).reset_index(drop=True)
+    pd.testing.assert_frame_equal(manifest_qc, expected)

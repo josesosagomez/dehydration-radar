@@ -6,9 +6,9 @@ unexplained: why each parameter value, why one processing choice over an alterna
 what a result means, and how it ties back to the paper's method and physics. MATLAB is
 **not** mentioned here — all results are from Python.
 
-> Status: **milestone 1 complete** (§0.1 below). Later sections fill in as their
-> milestones close. The methodological framing (§0) is locked and is the spine of the
-> Methods section.
+> Status: **milestones 1–2 complete** (§0.1 and §1 below). Later sections fill in as
+> their milestones close. The methodological framing (§0) is locked and is the spine of
+> the Methods section.
 
 ## 0. Framing (locked at planning)
 
@@ -141,8 +141,7 @@ data root, so a record is identical whether produced on a workstation or the clu
 *Provenance of the numbers in this section: HISTORY.md entries for milestone 1 steps
 1–9 (2026-07-21), and `plans/MILESTONE_1_PLAN.md` §§2–5 for the specifications.*
 
-## 1. Data & ground truth  *(acquisition/target text below is final; QC survival
-## statistics fill at milestone 2)*
+## 1. Data & ground truth  *(milestone 2 — complete)*
 
 **Cohort and acquisition.** Sixteen fasting subjects were recorded at five times of day
 — 08:00, 10:00, 12:00, 14:00, 16:00, denoted S0–S4 — giving 80 acquisitions. Each
@@ -191,8 +190,124 @@ of these, giving exactly 8000 indexed frames. Frame counts are read per acquisit
 because the session-eligibility rule applied after quality control is defined as a
 fraction of each acquisition's own frame count.
 
-*(Milestone 2 adds: quality-control screen definitions and frozen thresholds,
-per-subject and per-session frame survival, and the resulting evaluable cohort size.)*
+### Quality control  *(milestone 2 — complete)*
+
+**Why quality control is fixed before anything is learned.** The screens described here
+are a fixed, per-frame measurable function of a single frame and a set of constants
+chosen in advance. They are applied once, to the raw data, before any split is
+constructed, and they take no part in cross-validation. This is a deliberate design
+constraint rather than an implementation convenience: were any threshold estimated from
+the data — a percentile of the cohort's energy distribution, say — the set of surviving
+frames would depend on the whole dataset, and the held-out subject would have
+influenced the training population through the back door. Every quantity a screen
+computes is therefore derived from the frame it is judging: histogram limits from the
+chirp being examined, an energy ratio normalised by that frame's own total power, a
+dispersion statistic taken across that frame's own chirps. An automated test asserts
+this directly, requiring a frame's verdict to be identical whether it is screened alone
+or alongside arbitrary companion frames.
+
+**The four screens, and what each is for.** A frame is examined on the **raw** signal,
+before filtering.
+
+1. *Non-finite samples.* Any frame containing a non-finite value is rejected. Because
+   the remaining screens cannot be evaluated meaningfully on such data, they are
+   skipped and their numeric diagnostics reported as unavailable rather than fabricated.
+2. *Flatline / saturation.* A chirp whose magnitudes concentrate into a single narrow
+   band is either saturated or dead. Each chirp's magnitudes are histogrammed into 200
+   bins spanning that chirp's own observed range, and the chirp is flagged if any bin
+   holds at least 25% of its 534 samples. A frame containing any flagged chirp is
+   rejected. A chirp whose magnitude is constant to numerical precision is treated as
+   flagged, which is the same verdict the limiting case of the histogram rule gives.
+3. *In-band energy ratio.* This is the screen that asks whether the acquisition
+   actually contains a return from the subject. The beat-frequency axis of a
+   frequency-modulated continuous-wave radar maps linearly to range, at
+   2·(B/T_chirp)/c ≈ 3257.5 Hz per metre for this instrument. A tapered 534-point
+   spectrum is formed per chirp and averaged over the 20 chirps, and the fraction of
+   non-negative-frequency power falling inside the range gate is compared against a
+   floor of 0.30. Frames below it are rejected.
+4. *Dispersion outliers.* The robust z-score of each chirp's root-mean-square
+   amplitude, taken across the frame's own 20 chirps, is recorded and flagged above
+   4.5. This is **diagnostic only and never rejects a frame** — see the interpretation
+   note below.
+
+A frame is rejected if it fails (1), (2) or (3). These three indicators are independent
+and may fire together, so counts of individual reasons do not sum to the number of
+rejections; the reported reconciliation is between passing frames, frames failing at
+least one screen, and the total.
+
+**The quality-control range gate is deliberately wider than the analysis gate, and
+fixed.** The subject sits roughly one metre from the radar, and the analysis gate is
+selected later, inside cross-validation, from physically motivated candidates. Quality
+control instead uses a **single frozen 0.9–3.0 m gate for every candidate**. The reason
+is structural: if screening used whichever gate a model happened to be using, then
+changing a modelling hyperparameter would change which frames exist, and the population
+being evaluated would move with the model — the evaluation would no longer be a fixed
+target. The wider band is chosen so that a frame is never discarded for energy that a
+wider candidate analysis gate would legitimately have used. The band is additionally
+widened by one frequency bin (1000 Hz) on each side before the ratio is computed, so
+that a target lying exactly at a gate edge is not penalised for the spectral spreading
+the taper necessarily introduces; the 0.30 floor is defined together with this margin.
+For this instrument the resulting band is 2931.7–9772.4 Hz, widened to
+1931.7–10772.4 Hz, which is bins 2 through 11 of the non-negative half-spectrum.
+
+**Session eligibility, and the decision not to impute.** A single acquisition is
+retained only if at least half of its frames survive, the threshold being computed from
+that acquisition's own frame count rather than an assumed constant. An acquisition
+falling below it is dropped in its entirety, and **is then simply absent**: it is never
+reconstructed from the subject's other sessions or from other subjects. Imputing it
+would manufacture a hydration measurement that was never observed, and at this sample
+size a small number of fabricated points could visibly move a result. The cost of this
+choice is an unbalanced design, which the reporting absorbs by stating the effective
+number of subjects and sessions alongside every figure.
+
+**Survival on this cohort.** Of the 8000 indexed frames, **7330 (91.6%) pass**.
+Every rejection came from the in-band energy screen: there were **no non-finite frames
+and no flatlined chirps anywhere in the cohort**. Seven of the eighty acquisitions fell
+below the eligibility threshold and were dropped —
+
+| Subject | Session | Frames surviving |
+|---|---|---|
+| 1 | 08:00 | 35 / 100 |
+| 1 | 16:00 | 1 / 100 |
+| 3 | 10:00 | 37 / 100 |
+| 4 | 14:00 | 35 / 100 |
+| 5 | 14:00 | 39 / 100 |
+| 6 | 08:00 | 0 / 100 |
+| 16 | 10:00 | 15 / 100 |
+
+— leaving **73 eligible acquisitions and 7168 analysable frames**. Because every
+subject retained at least one eligible session, **all sixteen subjects remain
+evaluable**, and the outer cross-validation is the full sixteen folds. The failures are
+therefore not corrupted recordings but acquisitions in which the returned energy simply
+does not lie in the target range interval, consistent with a subject seated outside the
+gate or an acquisition begun before the subject was in position. Their distribution is
+reported rather than absorbed, since quality-control failure could itself correlate
+with hydration state or with acquisition conditions.
+
+**Interpreting the dispersion diagnostic.** The robust dispersion flag fires on 34% of
+frames, concentrated in a few acquisitions. This is a property of the statistic rather
+than evidence of widespread anomaly: with only 20 chirps per frame, all recorded within
+a few tens of milliseconds, the chirp-to-chirp spread is very small, the median absolute
+deviation is correspondingly small, and the normalised score is therefore extremely
+sensitive to mild variation. The quantity is retained because it usefully describes
+where chirp-to-chirp variability is non-uniform, but it is reported as a descriptor and
+never used to discard data — which is precisely why it does not enter the rejection
+rule.
+
+**Cross-band note.** The 77 GHz recordings, used only in the later cross-band section,
+were audited at this stage on a single acquisition to establish their layout before any
+processing choices depending on it were locked. The dimension ordering was confirmed on
+raw data by a signal-domain test rather than by shape alone — the two ambiguous axes are
+both of length 256 — by requiring range structure to appear on the proposed fast-time
+axis and near-stationary content on the proposed slow-time axis. The test was run
+before clutter removal, since subtracting the static component would have suppressed
+exactly the stationary content that identifies the slow-time axis. Both expectations
+were met decisively, and the alternative assignment was contradicted. The audit also
+established that these recordings are stored as **real-valued** samples, so the complex
+representation used by the cross-band feature chain arises at the range transform and
+not in the raw data.
+
+*(Milestone 3 adds: the preprocessing sequence and its self-consistency validation.)*
 
 ## 2. Preprocessing  *(fill at milestone 3)*
 

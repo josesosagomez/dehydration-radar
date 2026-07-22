@@ -1,9 +1,10 @@
 """Experiment A — fluid-loss regression entry point.
 
-MILESTONE 1 SCOPE: this runs the data spine end to end — config -> ground truth ->
-manifest -> nested-LOSO folds -> provenance — and stops there. Modeling (feature
-extraction, selection, fitting, scoring) arrives at milestone 6, on top of exactly
-these folds. Nothing here constructs a split: folds come only from eval/splits.py.
+MILESTONE 2 SCOPE: this runs the data spine end to end — config -> ground truth ->
+manifest -> QC -> nested-LOSO folds over the evaluable subjects -> provenance — and
+stops there. Modeling (feature extraction, selection, fitting, scoring) arrives at
+milestone 6, on top of exactly these folds. Nothing here constructs a split: folds
+come only from eval/splits.py.
 
     uv run python experiments/run_regression.py --config configs/exp_a_regression.yaml
 
@@ -25,7 +26,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from dehyd.config import load_config  # noqa: E402
 from dehyd.data.ground_truth import load_ground_truth  # noqa: E402
-from dehyd.data.manifest import build_manifest  # noqa: E402
+from dehyd.data.manifest import (  # noqa: E402
+    apply_qc,
+    build_manifest,
+    eligible_frames,
+    evaluable_subjects,
+    session_qc_report,
+)
 from dehyd.eval.splits import nested_loso_splits  # noqa: E402
 from dehyd.provenance import record_run  # noqa: E402
 
@@ -59,8 +66,20 @@ def main(argv=None) -> int:
         f"{manifest.subject.nunique()} subjects, {n_sessions} sessions"
     )
 
-    # Every subject is evaluable at M1; QC-driven evaluability arrives at M2.
-    subjects = sorted(manifest.subject.unique().tolist())
+    # QC is frozen and data-independent, so it runs ONCE here, before any split is
+    # constructed — the folds are built over the post-QC evaluable population.
+    manifest_qc = apply_qc(manifest, config.paths, config)
+    report = session_qc_report(manifest_qc)
+    n_pass = int(manifest_qc["qc_pass"].sum())
+    print(
+        f"qc           : {n_pass}/{len(manifest_qc)} frames pass, "
+        f"{int(report['eligible'].sum())}/{len(report)} sessions eligible, "
+        f"{len(eligible_frames(manifest_qc))} frames in the analysis population"
+    )
+
+    # Exp A rule: a subject is evaluable iff it has >= 1 eligible session. Subjects
+    # with none are dropped BEFORE outer splitting so they never form an empty fold.
+    subjects = list(evaluable_subjects(manifest_qc))
     folds = nested_loso_splits(
         subjects,
         n_inner_max=config.split.n_inner_max,
@@ -72,9 +91,11 @@ def main(argv=None) -> int:
         f"{len(selectable[0].inner_folds) if selectable else 0} inner each"
     )
 
-    provenance_path = record_run(config, manifest, folds, extra={"stage": "milestone-1-smoke"})
+    provenance_path = record_run(
+        config, manifest_qc, folds, extra={"stage": "milestone-2-smoke", "n_eval": len(subjects)}
+    )
     print(f"provenance   : {provenance_path}")
-    print("\nmilestone 1: data spine OK. Modeling lands at milestone 6.")
+    print("\nmilestone 2: data spine + QC OK. Modeling lands at milestone 6.")
     return 0
 
 

@@ -18,6 +18,7 @@ concatenated): a later config states the entire intended value.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 
@@ -26,6 +27,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 VALID_DEVICES = ("cpu", "cuda")
+
+# Exact by definition (SI), so it is written here rather than pulled from scipy —
+# config validation should not depend on a numerics package being importable.
+SPEED_OF_LIGHT_M_S = 299_792_458.0
 
 
 class ConfigError(ValueError):
@@ -70,6 +75,10 @@ class QCConfig:
     # QC uses ONE fixed (wider) gate for all candidates so the QC-passing population
     # never varies with the model gate chosen later in inner CV.
     qc_gate_m: tuple[float, float] = (0.9, 3.0)
+    # The reference's BandMarginHz default. At df = fs/534 ~ 975.3 Hz this is ~1 FFT
+    # bin, so a target sitting at a band edge is not rejected for Hann leakage alone;
+    # the 0.30 ratio threshold was defined together with this margin.
+    in_band_margin_hz: float = 1000.0
     min_frame_fraction: float = 0.5
 
 
@@ -193,6 +202,112 @@ def _section(raw: dict, name: str) -> dict:
     return value
 
 
+# --------------------------------------------------------------- field validators
+# These exist because M2 actually *consumes* the QC/preprocess numbers: a bad value
+# would otherwise surface as a confusing numpy error deep inside a screen, or worse,
+# as a screen that silently never fires.
+
+
+def _number(value, name: str, *, low: float, high: float, low_open=False, high_open=False):
+    """A finite number inside the stated interval. bool is rejected (it is an int)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(f"{name} must be a number, got {type(value).__name__}")
+    value = float(value)
+    if not math.isfinite(value):
+        raise ConfigError(f"{name} must be finite, got {value}")
+    if (value <= low if low_open else value < low) or (
+        value >= high if high_open else value > high
+    ):
+        interval = f"{'(' if low_open else '['}{low}, {high}{')' if high_open else ']'}"
+        raise ConfigError(f"{name} must be in {interval}, got {value}")
+    return value
+
+
+def _float_field(section: dict, key: str, default: float, name: str, **bounds) -> float:
+    return _number(section.get(key, default), f"{name}.{key}", **bounds)
+
+
+def _int_field(section: dict, key: str, default: int, name: str) -> int:
+    value = section.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"{name}.{key} must be an integer, got {type(value).__name__}")
+    if value <= 0:
+        raise ConfigError(f"{name}.{key} must be > 0, got {value}")
+    return value
+
+
+def _gate_field(section: dict, key: str, default, name: str) -> tuple[float, float]:
+    """A [min_m, max_m] range gate -> tuple.
+
+    YAML hands us a list; the frozen dataclass must not carry a mutable value (and
+    provenance should record the same type every run).
+    """
+    value = section.get(key, default)
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ConfigError(
+            f"{name}.{key} must be a two-element [min_m, max_m] list, "
+            f"got {type(value).__name__}"
+        )
+    if len(value) != 2:
+        raise ConfigError(f"{name}.{key} must have exactly 2 entries, got {len(value)}")
+    bounds = tuple(
+        _number(v, f"{name}.{key}[{i}]", low=0.0, high=math.inf, low_open=True, high_open=True)
+        for i, v in enumerate(value)
+    )
+    if bounds[0] >= bounds[1]:
+        raise ConfigError(
+            f"{name}.{key} must be strictly increasing, got [{bounds[0]}, {bounds[1]}]"
+        )
+    return bounds
+
+
+def beat_band_hz(gate_m, bandwidth_hz: float, chirp_time_s: float) -> tuple[float, float]:
+    """FMCW range gate (metres) -> beat-frequency band (Hz).
+
+    A target at range r returns a beat tone at f = HzPerM * r, with
+    HzPerM = 2 * slope / c and slope = B / Tchirp. Lives here because both the config
+    cross-validation below and the QC in-band mask need it, and duplicating the
+    physics is how the two drift apart.
+    """
+    hz_per_m = 2.0 * (bandwidth_hz / chirp_time_s) / SPEED_OF_LIGHT_M_S
+    return (hz_per_m * gate_m[0], hz_per_m * gate_m[1])
+
+
+def _check_qc_band(qc: QCConfig, preprocess: PreprocessConfig) -> None:
+    """The frozen QC gate must map to a real, non-vacuous beat-frequency band.
+
+    Positive-and-increasing metres is not enough. Two ways a syntactically valid gate
+    still breaks the screen, both config errors rather than valid configurations,
+    because a silently disabled QC screen is far worse than a loud failure:
+
+      * the band maps entirely at/above Nyquist -> nothing to measure;
+      * the margin widens it to cover the whole represented spectrum -> the ratio is
+        identically 1 and the screen can never fire.
+
+    (An "empty band after clamping" check would be dead code: the margin only widens,
+    so lo <= f_lo < nyquist <= hi holds whenever the Nyquist check passes.) The
+    bin-level guards -- at least one bin of support, and not *every* bin at the actual
+    fast-time length -- live in qc.screens.in_band_mask.
+    """
+    f_lo, f_hi = beat_band_hz(
+        qc.qc_gate_m, preprocess.bandwidth_hz, preprocess.chirp_time_s
+    )
+    nyquist = preprocess.fs_hz / 2.0
+    if f_lo >= nyquist:
+        raise ConfigError(
+            f"qc.qc_gate_m {qc.qc_gate_m} m maps to {f_lo:.1f}-{f_hi:.1f} Hz, which "
+            f"starts at or above Nyquist ({nyquist:.1f} Hz) — no representable band"
+        )
+    lo = max(0.0, f_lo - qc.in_band_margin_hz)
+    hi = min(nyquist, f_hi + qc.in_band_margin_hz)
+    if lo <= 0.0 and hi >= nyquist:
+        raise ConfigError(
+            f"qc gate {qc.qc_gate_m} m widened by margin {qc.in_band_margin_hz} Hz "
+            f"covers the entire spectrum [0, {nyquist:.1f}] Hz — the in-band ratio "
+            "would be identically 1 and the screen could never fire"
+        )
+
+
 def _build_paths(raw: dict) -> PathsConfig:
     section = _section(raw, "paths")
     required = ("data_10ghz_dir", "weight_xlsx", "results_dir")
@@ -272,22 +387,67 @@ def _build_split(raw: dict) -> SplitConfig:
     return SplitConfig(n_inner_max=n_inner_max, min_train_subjects=min_train_subjects)
 
 
-def _build_frozen_section(raw: dict, name: str, cls):
-    """Build a section whose fields all have defaults (QC / preprocess / WST).
-
-    Values may be overridden in YAML, but unknown keys are still rejected.
-    """
+def _known_section(raw: dict, name: str, cls) -> dict:
     section = _section(raw, name)
-    allowed = tuple(f.name for f in fields(cls))
-    _reject_unknown(section, allowed, name)
-    if not section:
-        return cls()
-    if name == "wst" and "tilings" in section:
+    _reject_unknown(section, tuple(f.name for f in fields(cls)), name)
+    return section
+
+
+def _build_qc(raw: dict) -> QCConfig:
+    section = _known_section(raw, "qc", QCConfig)
+    d = QCConfig()
+    return QCConfig(
+        histogram_bins=_int_field(section, "histogram_bins", d.histogram_bins, "qc"),
+        flatline_max_bin_fraction=_float_field(
+            section, "flatline_max_bin_fraction", d.flatline_max_bin_fraction, "qc",
+            low=0.0, high=1.0, low_open=True,
+        ),
+        min_in_band_energy_ratio=_float_field(
+            section, "min_in_band_energy_ratio", d.min_in_band_energy_ratio, "qc",
+            low=0.0, high=1.0,
+        ),
+        rms_robust_z_threshold=_float_field(
+            section, "rms_robust_z_threshold", d.rms_robust_z_threshold, "qc",
+            low=0.0, high=math.inf, low_open=True, high_open=True,
+        ),
+        qc_gate_m=_gate_field(section, "qc_gate_m", d.qc_gate_m, "qc"),
+        in_band_margin_hz=_float_field(
+            section, "in_band_margin_hz", d.in_band_margin_hz, "qc",
+            low=0.0, high=math.inf, high_open=True,
+        ),
+        min_frame_fraction=_float_field(
+            section, "min_frame_fraction", d.min_frame_fraction, "qc",
+            low=0.0, high=1.0, low_open=True,
+        ),
+    )
+
+
+def _build_preprocess(raw: dict) -> PreprocessConfig:
+    section = _known_section(raw, "preprocess", PreprocessConfig)
+    d = PreprocessConfig()
+    positive = dict(low=0.0, high=math.inf, low_open=True, high_open=True)
+    edge_trim = section.get("edge_trim", d.edge_trim)
+    if isinstance(edge_trim, bool) or not isinstance(edge_trim, int) or edge_trim < 0:
+        raise ConfigError(f"preprocess.edge_trim must be an integer >= 0, got {edge_trim!r}")
+    return PreprocessConfig(
+        butter_order=_int_field(section, "butter_order", d.butter_order, "preprocess"),
+        model_gate_m=_gate_field(section, "model_gate_m", d.model_gate_m, "preprocess"),
+        edge_trim=edge_trim,
+        fs_hz=_float_field(section, "fs_hz", d.fs_hz, "preprocess", **positive),
+        bandwidth_hz=_float_field(section, "bandwidth_hz", d.bandwidth_hz, "preprocess", **positive),
+        chirp_time_s=_float_field(section, "chirp_time_s", d.chirp_time_s, "preprocess", **positive),
+    )
+
+
+def _build_wst(raw: dict) -> WSTConfig:
+    """WST has no consumer until M4, so only structural checks run here."""
+    section = _known_section(raw, "wst", WSTConfig)
+    if "tilings" in section:
         raise ConfigError(
-            "wst.tilings cannot be overridden in YAML at milestone 1 — the three "
-            "tilings are frozen constants of the design (see implementation_plan.md)"
+            "wst.tilings cannot be overridden in YAML — the three tilings are frozen "
+            "constants of the design (see implementation_plan.md)"
         )
-    return cls(**section)
+    return WSTConfig(**section) if section else WSTConfig()
 
 
 def load_config(*yaml_paths: str | Path) -> Config:
@@ -307,13 +467,18 @@ def load_config(*yaml_paths: str | Path) -> Config:
     known_sections = ("paths", "run", "split", "qc", "preprocess", "wst")
     _reject_unknown(merged, known_sections, "config")
 
+    qc = _build_qc(merged)
+    preprocess = _build_preprocess(merged)
+    # Cross-section: the QC band is only meaningful against this radar's fs/B/Tchirp.
+    _check_qc_band(qc, preprocess)
+
     return Config(
         paths=_build_paths(merged),
         run=_build_run(merged),
         split=_build_split(merged),
-        qc=_build_frozen_section(merged, "qc", QCConfig),
-        preprocess=_build_frozen_section(merged, "preprocess", PreprocessConfig),
-        wst=_build_frozen_section(merged, "wst", WSTConfig),
+        qc=qc,
+        preprocess=preprocess,
+        wst=_build_wst(merged),
     )
 
 

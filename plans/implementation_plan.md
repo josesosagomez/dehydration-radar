@@ -37,9 +37,18 @@ CLAUDE.md / ROADMAP §1.
   work in complex128, not int16. Also `framesRadarIQ` [20834×2×100] = raw
   pre-arrangement IQ, **unused** by the reference pipeline (we ignore it too).
   → One file = one subject/session = 100 frames. 16×5×100 = 8000 frames pre-QC.
-- **77 GHz**: MAT **v7.3 / HDF5**, ~285 MB each (~23 GB total) → `h5py`, not
+- **77 GHz**: MAT **v7.3 / HDF5**, ~276 MB each (~21.5 GB total) → `h5py`, not
   `loadmat`. Deferred to the fusion milestone. Frame count differs from 10 GHz
-  (≈125/session), which forces session-level fusion (see Exp G).
+  (125/session), which forces session-level fusion (see Exp G).
+  **Confirmed on a real file at milestone 2** (`experiments/audit_77ghz.py`,
+  `results/qc/audit_77ghz.json`, subject 1 8am): shape `(16, 256, 256, 125)` exactly
+  as predicted, gzip-chunked `(16, 4, 1, 125)`. **`framesRadar` is stored as plain
+  real `float64` — NOT a complex/compound array** (unlike the 10 GHz files): values
+  are ADC-like, quantised to 1/16, |x| ≤ 2560. This is a real-sampled capture, and it
+  is consistent with the reference, which never calls `real()`/`imag()` on 77 GHz raw
+  data. **Consequence for Exp G:** the "I/Q" of the primary slow-time chain comes from
+  the **complex range-FFT output** (chain step 4), not from the raw ADC — the chain is
+  unaffected, but no stage before the range FFT may assume complex input.
   **Axis order (decided now, asserted at load).** MAT v7.3 stores dimensions in
   reverse of the MATLAB-logical order, so `h5py` presents the dataset as
   `(16, 256, 256, 125) = (Nrx, Nchirps, Nfast, Nframes)`. The loader applies a full
@@ -234,6 +243,11 @@ diffs against MATLAB.
   if treated as a choice, selected inside inner CV (never on test subjects).
 - **WST log transform** is a configurable modeling choice selected inside inner CV.
 - **EdgeTrim** (32 samples/end) drops filtfilt edge transients; config parameter.
+- **QC on the raw cube, and low in-band energy rejects.** The reference ran its
+  integrity check on already-filtered cubes (where the in-band ratio is trivially
+  high) and only *logged* low in-band without rejecting; we screen the **raw**
+  pre-filter cube — where the ratio is informative — and treat low in-band energy as
+  a rejection criterion alongside NaN/Inf and flatline.
 
 ## Preprocessing — executable sequence (resolves the paper-vs-code ambiguity)
 
@@ -293,11 +307,13 @@ per-subject/session removal counts.
 |---|---|---|
 | NaN/Inf | raw | any non-finite sample |
 | Flatline/saturation | raw | any chirp's magnitude histogram (**200 bins** over that chirp's magnitude range) has a bin containing ≥ 25% of the 534 samples (≥134) |
-| In-band energy ratio | raw, Hann+FFT **pre-filter** | in-band(gate) / total power < 0.30 |
-| Robust RMS outlier | raw | robust-z of per-chirp RMS > 4.5 → **flag/log** (diagnostic; not sole reject) |
+| In-band energy ratio | raw, Hann+FFT **pre-filter** | in-band(gate **± 1000 Hz margin**) / total **non-negative half-spectrum** power < 0.30 (per-chirp **periodic**-Hann-windowed 534-pt spectra averaged across the 20 chirps; bins 0..266 — DC included, Nyquist bin excluded) |
+| Robust RMS outlier | raw | robust-z of per-chirp RMS **across the frame's own 20 chirps** (never across frames — keeps QC per-frame and data-independent) > 4.5 → **flag/log** (diagnostic; not sole reject) |
 
 Rejection rule = NaN/Inf **or** flatline **or** low in-band energy (bin count 200 and
-the 25%/0.30/4.5 thresholds are the reference values, frozen in `configs/`). If we
+the 25%/0.30/4.5 thresholds and the ±1000 Hz in-band margin are the reference values —
+the margin is the reference code's `BandMarginHz` default, ≈ ±1 FFT bin at
+df ≈ 975.3 Hz — frozen in `configs/`). If we
 ever decide a threshold should be data-adaptive, it moves **inside inner CV**; until
 then it is frozen.
 
@@ -769,8 +785,23 @@ correspondence can be demonstrated.
 - **Frozen 77 GHz pipeline** (locked at milestone 5; concrete, no data-dependent
   fitting):
   - **QC:** same rule structure as 10 GHz with **fixed** numbers for 256-sample
-    fast-time — flatline histogram **128 bins**, reject a chirp if any bin ≥ 25% of 256
-    (≥64); in-band energy ratio < 0.30 on the 2–4 m gate; NaN/Inf. Frozen, not tuned.
+    fast-time — flatline histogram **128 bins**, evaluated per **(Rx, chirp)**
+    256-sample trace, a trace flags if any bin ≥ 25% of 256 (≥64) and the **frame
+    fails if any trace flags** (the structural analog of the 10 GHz any-chirp rule;
+    the 4096-vs-20 ≈ **205×** trace multiplicity is a recorded property,
+    characterized per-Rx by the M2 audit — any revision is an owner decision before
+    the M5 freeze, never a silent change); in-band energy ratio < 0.30 on the 2–4 m
+    gate widened by a margin of
+    **one FFT bin = fs/256 = 1953.125 Hz** (frozen a priori by the same
+    leakage-tolerance rationale as the 10 GHz ±1000 Hz ≈ one-bin margin — the
+    rationale generalizes, the raw Hz value does not), with per-(Rx, chirp)
+    **periodic-Hann** (`hann(256,'periodic')` — the QC-reference convention, as at
+    10 GHz) windowed spectra averaged across **all chirps and Rx** → one ratio per
+    frame on the **non-negative half-spectrum** (bins 0..127 — DC included, Nyquist
+    bin excluded; the 10 GHz convention at N=256; mask bins 26..54 after the
+    one-bin margin); NaN/Inf anywhere in the frame's
+    (fast × chirp × Rx) cube. Frozen, not
+    tuned — and never selected from audited subject data.
   - **Session eligibility:** retained iff **≥ `ceil(0.5 × actual_frame_count)`** frames
     survive QC (from the file's real frame count, not an assumed 125).
   - **WST tilings — re-parameterized from fixed milliseconds, not fitted.** Use the

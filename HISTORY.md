@@ -6,6 +6,318 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-21 — **MILESTONE 2 COMPLETE.** Definition of done met in full.
+
+**D1 — mandatory suite, no private data.** `uv run pytest` → **260 passed, 10 skipped**
+(the 10 skips are 9 `realdata` tests plus T18). Was 151/8 at M1 close.
+**D2 — real-cohort acceptance.** `uv run pytest --realdata` → **269 passed, 1 skipped**
+(T18 only).
+**D3 —** `experiments/run_qc.py` writes and re-verifies
+`results/qc/qc_survival_10ghz.csv`; survival recorded in the step 3–4 entry below.
+**D4 —** `run_regression.py` builds its folds from the post-QC evaluable subjects;
+provenance carries the QC config including the new margin.
+**D5 —** the 77 GHz audit ran on one real file; all five verdicts recorded in a
+provenance-complete `results/qc/audit_77ghz.json`.
+**D6 —** HISTORY.md has a per-step entry (steps 1–7); SECOND_CHAPTER.md §1 "Data &
+ground truth" now carries the QC section.
+**D7 —** amendments **A1–A7** are live in `plans/implementation_plan.md`; the two plan
+documents agree.
+
+**The invariant held.** `tests/test_no_leakage.py` is **byte-for-byte unmodified since
+M1** (`git diff HEAD` empty) and green — 24 passed, 1 skipped. QC never enters CV: it
+is a per-frame function of one frame plus frozen constants, applied once before any
+split exists, and T-QC7 asserts a frame's verdict is identical whether screened alone
+or beside arbitrary companions.
+
+**Milestone-2 scoreboard.** 2 new source modules (`qc/screens.py`, QC section of
+`manifest.py`), 2 new experiment entry points, 2 new test modules, **101 new tests**
+(260 vs 159). Three genuine facts discovered empirically rather than assumed — numpy's
+histogram behaviour on a degenerate range, YAML 1.1's signed-exponent rule, and the
+77 GHz real-valued storage — each of which would have surfaced later as a confusing
+failure. Two frozen thresholds met the real data for the first time; **neither was
+touched**, and both surprising results (670 in-band rejections at 10 GHz, 7/10 flatline
+rejections at 77 GHz) are recorded as findings for the milestone-5 freeze.
+
+**Open for M3 / M5:**
+- **Owner decision at M5:** the 77 GHz any-trace flatline rule rejects 7 of 10 audited
+  frames because of ADC quantisation, not a dead receiver. Frozen as-is for now.
+- Preprocessing (M3) consumes `eligible_frames`; the analysis population is 7168 frames
+  across 73 sessions and 16 evaluable subjects.
+- `configs/ibex.yaml`, `scripts/ibex/` still deferred to the first IBEX milestone.
+- Nothing committed yet — awaiting the owner's word, per the ground rules.
+
+---
+
+## 2026-07-21 — M2 steps 5–6: evaluability hookup + **the 77 GHz audit.**
+## **Axis hypothesis CONFIRMED. Two findings that change milestone-5 planning.**
+
+**Step 5** (`run_regression.py`): folds now come from `evaluable_subjects` after QC.
+Smoke on real data → 7330/8000 frames, 73/80 sessions, **16 outer folds, 5 inner
+each** — the clean full-cohort case, unchanged from M1 because no subject lost all
+five sessions.
+
+**Step 6**: `uv add h5py` (3.16.0), `experiments/audit_77ghz.py` (pure parameterised
+helpers + thin `main`), `tests/test_audit_77ghz.py` (23 synthetic tests, no private
+data). Audit ran on `data/77ghz/subject_1_8am.mat` in **8.3 s**.
+
+### Verdicts — all green
+
+```
+H1_shape   ACCEPTED    (16, 256, 256, 125) exactly as predicted; chunks (16,4,1,125), gzip
+H1_storage ACCEPTED    but NOT the representation the plan froze — see finding 1
+H1_axes    ACCEPTED    G_fast=0.2260  G_chirp=6.70e-06  D_chirp=0.9999  D_fast=0.4939
+qc_smoke   NON_DEGEN.  3/10 frames pass; median in-band ratio 0.382 — see finding 2
+chain      NON_DEGEN.  final/raw energy 2.98e-05 (gated) and 8.50e-06 (range-Doppler)
+```
+
+**The axis question is settled, and not marginally.** A1 needed D_chirp ≥ 0.5 → got
+0.9999. A2 needed G_fast ≥ 0.05 → got 0.226. A3 needed G_fast ≥ 10·G_chirp → the
+actual ratio is **≈34 000×**. The mirrored swapped-axis hypothesis fails on its very
+first criterion (D_fast = 0.494 < 0.5), so the result is not a coin-flip resolved by
+threshold placement. The check ran on the **raw** slab, before MTI, exactly as
+required — MTI would have removed the near-zero-Doppler static-subject energy that
+makes D_chirp ≈ 1 the discriminator it is.
+
+### Finding 1 — the 77 GHz raw is REAL float64, not complex
+
+The plan froze the accepted storage as "compound `real`/`imag`". The real files are
+**plain `float64`**, `dtype.names is None`: ADC-like values quantised to 1/16,
+|x| ≤ 2560. Cross-checked against the reference — `wst_extract77.m` and
+`filter_gpt_butterworth77.m` never call `real()`/`imag()` on raw 77 GHz data, which is
+consistent with a real-sampled capture. (The 10 GHz files genuinely are complex, which
+is where the assumption came from.)
+
+Handled as a **correction of a wrong a-priori assumption about the file format, not a
+threshold chosen from data**: it is visible in HDF5 metadata alone, it changes no
+frame's screen verdict, and the observed dtype descriptor is recorded either way.
+`H1-storage` now accepts real-float *or* compound-complex and rejects everything else;
+both plan documents were amended. **Consequence for Exp G, recorded in
+implementation_plan.md:** the primary chain's "I/Q" comes from the **complex range-FFT
+output** (chain step 4), not the raw cube. The chain itself is unaffected — it already
+scatters the post-range-FFT slow-time series — but nothing before step 4 may assume
+complex input.
+
+### Finding 2 — the frozen 77 GHz flatline rule rejects 7 of 10 frames
+
+Per-Rx flagged-trace counts over the 10-frame slab: **169–1601 of 2560 traces per Rx**,
+spread fairly evenly across all 16 receivers — so this is **not** a dead channel. Cause
+is the rule meeting heavily quantised ADC data: with 128 bins across a 256-sample
+trace's own range, quantisation piles ≥64 samples into one bin easily. The ≈205×
+multiplicity the reviewer flagged **does bite**, empirically.
+
+Per the milestone invariant, **nothing was changed**: the rule was frozen a priori
+(owner decision, 2026-07-21), the audit's job was to make the multiplicity visible
+before the M5 freeze, and it has. The in-band screen by contrast looks healthy
+(ratios 0.373–0.392, all above the 0.30 threshold, so 0 low-in-band rejections). **This
+is an owner decision for milestone 5**, not something to be quietly retuned here.
+
+### Other recorded facts
+
+- **Chunk layout `(16, 4, 1, 125)` spans the entire frame axis**, so a 10-frame read
+  still decompresses ~1.05 GB. Memory stays bounded (84 MB retained) and it costs
+  ~8 s, which is why the bounded-slab contract is about *memory*, not I/O volume.
+- **MTI removes 99.7 % of the energy** (ratio 2.70e-03) — exactly the "legitimate
+  physical attenuation" the plan predicted when it rejected a bare `> 0` test. The
+  1e-9 floor sits ~4 orders below the smallest observed stage ratio, so it discriminates
+  true degeneracy without firing on real clutter suppression.
+- Derived constants confirmed against independent computation: dr = 0.0749 m, range
+  gate **bins 27..53**, QC mask **bins 26..54**, PRF 1953.125 Hz.
+
+### Test-fixture bugs the tests caught in themselves
+
+Two of my own fixtures wrote a `(frame, fast, chirp, rx)` cube straight to disk
+instead of the on-disk `(rx, chirp, fast, frame)` layout, so the round-trip test was
+asserting against the wrong shape. Fixed by making `write_fixture` apply the same full
+reversal the audit uses on read (it is its own inverse) — which makes the round-trip
+test genuinely round-trip. The end-to-end fixtures were also shrunk from the real
+`(16,256,256,·)` to `(2,32,32,·)`; 32 fast-time bins still yield a non-empty range
+gate (27..31) and QC mask (4..6), and the audit-test module dropped from ~6 s to 1.7 s.
+
+**Tests:** `uv run pytest` → **260 passed, 10 skipped**.
+
+**Next:** step 7 — journal close-out.
+
+---
+
+## 2026-07-21 — M2 steps 3–4: manifest QC bookkeeping + **first real-cohort QC pass.**
+## **Success. 7330/8000 frames survive; 7 of 80 sessions dropped; N_eval = 16.**
+
+**What was built.** `apply_qc` / `session_qc_report` / `eligible_frames` /
+`evaluable_subjects` in `manifest.py` (§2.2), `experiments/run_qc.py` (§2.4), 20 new
+manifest tests and 2 realdata tests.
+
+### The real numbers (frozen screens, first contact with the cohort)
+
+```
+frames    : 7330 pass / 670 fail of 8000  (91.6% survive)
+reasons   : nan/inf 0, flatline 0, low in-band 670   (rms flagged 2752, diagnostic only)
+sessions  : 73 eligible / 7 dropped of 80
+dropped   : s1 8am 35/100, s1 4pm 1/100, s3 10am 37/100, s4 2pm 35/100,
+            s5 2pm 39/100, s6 8am 0/100, s16 10am 15/100   (all needed 50)
+N_eval    : 16 evaluable subjects — every subject keeps >= 1 eligible session
+analysis  : 7168 frames (the 162 passing frames inside dropped sessions are excluded)
+```
+
+**Independent corroboration.** ROADMAP §2 states "~7500 after QC" for 10 GHz, written
+from the original study and never used to tune anything here. We get **7330** from
+thresholds frozen before looking. The agreement is evidence the ported screens behave
+like the originals; it is *not* a target that was fitted to.
+
+**What the failures actually are.** Every rejection is the in-band energy screen —
+**zero** NaN/Inf and **zero** flatline across all 8000 frames. So the dropped sessions
+are acquisitions where the return simply is not in the 0.9–3.0 m gate (subject 6's 8am
+session: 0/100 frames in-band; subject 1's 4pm: 1/100), not corrupted files. Recorded
+as a finding; **no threshold was touched** in response, per the §0 invariant.
+
+**The RMS diagnostic is trigger-happy on this data — interpret accordingly.** 2752
+frames (34%) carry the flag, concentrated in a few sessions (subject 16: 4pm 99/100,
+2pm 82/100; subject 11 and 13: mostly 0). Cause is structural, the same effect the
+unit tests hit: the robust z is taken across a frame's own **20** chirps, which are
+near-identical, so the MAD is tiny and the z is very sensitive. This is the
+reference's own definition and it rejects nothing — but the count must be read as
+"chirp-to-chirp variability is non-uniform here", not as "2752 anomalous frames".
+Kept diagnostic-only exactly as the plan freezes it.
+
+**Fail-closed join (§2.2), and why it is not paranoia.** `_join_qc` asserts key
+uniqueness on both sides, merges with `validate="one_to_one"` plus an indicator check
+for left/right-only keys, asserts the row count is unchanged, and restores `SORT_KEYS`
+order. Four tests inject duplicate / missing / extra / duplicate-manifest keys and
+require a loud `ManifestError`. The M1 trap this defends against is real:
+`subject_1_10am` sorts *before* `subject_1_8am`, so any positional join silently
+attributes one session's QC verdicts to another — `test_join_is_by_key_not_row_order`
+constructs exactly that scenario (failure on 10am, none on 8am) and would catch it.
+
+**Reconciliation.** Per-reason columns are non-additive incidence counts; the identity
+asserted everywhere is `n_pass + n_fail_any == n_frames`. The all-zero-frame test
+pins the overlap case (flatline **and** low in-band: counted in both reason columns,
+once in `n_fail_any`).
+
+**Artifact.** `results/qc/qc_survival_10ghz.csv` — written under
+`config.paths.results_dir` (the config is the single output-path authority), re-read
+and reconciliation-checked after writing, and verified **not** gitignored. Per the
+ground rules it is written and verified but **not committed** until asked.
+
+**Tests:** `uv run pytest` → **237 passed, 8 skipped**; `--realdata` survival +
+determinism tests green. The survival test asserts structure only (80 cells present,
+ratios in [0,1], reconciliation, `min_pass == ceil(0.5 × actual count)`) and
+deliberately makes **no** expected-rate assertion.
+
+**Next:** step 5 — `run_regression.py` folds over post-QC evaluable subjects.
+
+---
+
+## 2026-07-21 — M2 step 2: `src/dehyd/qc/screens.py` + `tests/test_qc.py`.
+## **Success**, after two wrong assumptions of mine were corrected by the tests.
+
+**What was built.** The four frozen 10 GHz screens as pure per-frame functions:
+`FrameQC`, `run_qc_frame`, `run_qc_cube`, `in_band_mask`. Implements
+MILESTONE_2_PLAN §2.1. 34 tests (T-QC1..15).
+
+**Frozen semantics as implemented.** NaN/Inf → reject; flatline = any chirp whose
+200-bin magnitude histogram (over that chirp's own range) has a bin ≥ 0.25·534 = 133.5
+i.e. ≥134; in-band = periodic-Hann 534-pt FFT, half-spectrum bins 0..266 (DC in,
+Nyquist out), averaged over the 20 chirps, band 2931.7–9772.4 Hz widened by ±1000 Hz
+→ **mask bins 2..11 (10 of 267)** — measured, not assumed; reject below 0.30.
+Robust-RMS z across the frame's own 20 chirps, >4.5 → flag only.
+
+**`passed` is a property, not a stored field** (a small departure from the plan's
+sketch): the rejection rule then cannot be violated by construction, and `rms_flag`
+can never leak into it. T-QC14 stays meaningful by asserting the battery actually
+contains frames that are RMS-flagged *and* passing.
+
+**Wrong assumption #1 — numpy does NOT expand a zero-width histogram range.** The
+plan (and my code comment) claimed a constant chirp yields a single populated bin.
+In fact `np.histogram(x, bins=200)` **raises** `ValueError: Too many bins for data
+range` whenever the span is too narrow for 200 distinct float64 edges — and that
+includes any *near*-constant chirp, not just an exactly constant one: a noiseless CW
+tone `exp(2πift)` has |x| constant to ~1e-16. Ten tests crashed. Fix: build the edges
+with `linspace` and check `edges[:-1] < edges[1:]` (numpy's own criterion) — if the
+span is degenerate, flag flatline directly and skip the histogram. That is also the
+*correct physics*: constant magnitude is exactly what the screen exists to catch, and
+MATLAB's `histcounts` reaches the same verdict by choosing its own bin width. Pinned
+by `test_qc3_degenerate_magnitude_spread_is_flatline_not_a_crash`.
+
+**Wrong assumption #2 — a perfect CW tone is not a valid "clean frame" fixture.**
+Following from the above, the test helper now adds small seeded noise
+(`tone_frame(f, noise=0.01, seed=…)`), with `pure_tone_frame` kept only where the
+degenerate case is the thing under test. This is more realistic anyway — real
+acquisitions always carry receiver noise.
+
+**Two test claims corrected to what is actually true** (rather than forcing the code
+to fit them):
+- *RMS threshold.* Chirps differ only by noise, so the MAD is tiny and the robust z is
+  very sensitive: an unperturbed frame already sits at z ≈ 2.6, and a ×1.5 chirp gives
+  z ≈ 1350. The "not flagged" case therefore needs **no** perturbation at all.
+- *Margin.* Removing the ±1000 Hz margin does **not** flip the verdict for a
+  10 300 Hz tone (ratio 0.972 → 0.454, still above 0.30) because Hann leakage keeps
+  energy inside the bare gate. The test now asserts what is true and load-bearing: the
+  ratio drops by >40% and the mask shrinks 10 → 7 bins. Asserting a flip would have
+  been asserting something false.
+
+**Also verified empirically before writing tests** (rather than trusting arithmetic):
+mask bins 2..11; in-band ratios 1.0 m→0.9995, 2.5 m→1.0000, 10.3 kHz→0.972,
+12 kHz→0.0546, 50 kHz→0.0000. F_BEYOND_MARGIN=12 kHz is one bin past the mask edge and
+correctly fails, which makes T-QC10 a tight test rather than a trivial one.
+
+**Tests:** `uv run pytest tests/test_qc.py` → **34 passed**. T-QC7 (companion-frame
+independence) and T-QC9 (QC gate ≠ model gate) are the two that carry the leakage
+guarantee; T-QC15 covers the `in_band_mask` zero-bin / all-bin guards.
+
+**Next:** step 3 — manifest QC columns, eligibility, fail-closed join.
+
+---
+
+## 2026-07-21 — M2 step 1: QC config margin + field/cross-field validation.
+## **Success — and it immediately caught a latent config bug.**
+
+**What was built.** `QCConfig.in_band_margin_hz = 1000.0` (owner decision: the
+reference `BandMarginHz` code default, ~1 FFT bin at df = 520834/534 ≈ 975.3 Hz);
+`configs/preprocess.yaml` mirror; and real validation for every field M2 consumes,
+replacing M1's generic `_build_frozen_section` for the `qc` and `preprocess` sections
+(`_build_qc`, `_build_preprocess`, `_build_wst`). Implements MILESTONE_2_PLAN §2.3.
+
+**Values and why.** `histogram_bins` positive int; `flatline_max_bin_fraction` and
+`min_frame_fraction` in (0,1]; `min_in_band_energy_ratio` in [0,1];
+`rms_robust_z_threshold` > 0; `in_band_margin_hz` >= 0; gates = exactly two finite,
+positive, strictly increasing metres, **normalised list -> tuple** (a frozen dataclass
+must not carry a mutable value, and provenance should record one type). `bool` is
+rejected everywhere it would otherwise pass as an `int`/number.
+
+**Cross-field check, and one branch deliberately NOT written.** `_check_qc_band`
+rejects (i) a gate mapping at/above Nyquist and (ii) a margin that widens the band
+across the whole represented spectrum (the ratio would be identically 1 — a screen
+that can never fire). The plan also listed an "empty band after clamping" check; while
+implementing it I proved it **unreachable** — the margin only widens, so
+`lo <= f_lo < nyquist <= hi` holds whenever the Nyquist check passes. Dead code is
+worse than absent code, so it was dropped and the reasoning recorded in the docstring.
+The remaining bin-level guards (>=1 bin of support; not *every* bin) need the
+fast-time length and belong in `in_band_mask` (step 2).
+
+**The bug it caught immediately.** With types actually checked, 19 tests failed on
+`preprocess.bandwidth_hz must be a number, got str`. Cause: **YAML 1.1 only parses an
+exponent as a float when the exponent carries a sign.** `bandwidth_hz: 500.0e6` was
+loading as the *string* `"500.0e6"` — and had been since M1. It was invisible because
+nothing consumed the value until now; `chirp_time_s: 1024.0e-6` was fine only by
+luck of its `-`. Fixed to `500.0e+6` with a warning comment, and pinned by
+`test_radar_constants_load_as_floats_not_strings` (asserts parsed *type* and value),
+so the canonical config cannot regress into string arithmetic. Had this survived, the
+first symptom would have been a bizarre failure inside the QC band mapping.
+
+**Also added.** `beat_band_hz(gate_m, B, Tchirp)` — the FMCW range->beat-frequency
+mapping (`HzPerM = 2*(B/Tchirp)/c`) in `config.py`, shared by the cross-validation and
+(step 2) the QC mask, so the physics is not duplicated. `SPEED_OF_LIGHT_M_S` is
+written out rather than imported from scipy: it is exact by SI definition, and config
+validation should not depend on a numerics package importing.
+
+**Tests:** `uv run pytest` → **185 passed, 8 skipped** (was 151/8 at M1 close);
+34 new config tests, mostly a parametrised bad-value table covering out-of-range
+numbers, wrong types (incl. `bool` and `.inf`), malformed gates, and both cross-field
+branches.
+
+**Next:** step 2 — `src/dehyd/qc/screens.py` + `tests/test_qc.py`.
+
+---
+
 ## 2026-07-21 — M1 commit: `.gitignore` was silently excluding `src/dehyd/data/`.
 ## **Bug found and fixed at commit time.**
 
@@ -531,3 +843,4 @@ implementation-ready."
 **Outcome:** success (planning). **Next:** milestone 1 — repo scaffold, config system,
 manifest + nested-LOSO splitter + provenance, and `tests/test_no_leakage.py` green
 before any modeling.
+

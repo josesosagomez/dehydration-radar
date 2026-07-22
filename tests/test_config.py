@@ -212,6 +212,108 @@ def test_wst_tilings_cannot_be_overridden(tmp_path, overlay):
         load_config(EXP_A, overlay, bad)
 
 
+# ------------------------------------------------------- QC / preprocess validation
+# M2 actually consumes these numbers, so every field it activates is validated here
+# rather than surfacing later as a confusing numpy error inside a screen.
+
+
+def test_in_band_margin_default_and_override(tmp_path, overlay):
+    assert load_config(EXP_A, overlay).qc.in_band_margin_hz == 1000.0
+    override = write_yaml(tmp_path / "m.yaml", {"qc": {"in_band_margin_hz": 250.0}})
+    assert load_config(EXP_A, overlay, override).qc.in_band_margin_hz == 250.0
+
+
+def test_yaml_list_gates_are_normalised_to_tuples(tmp_path, overlay):
+    """A frozen dataclass must not carry a mutable list (and provenance wants one type)."""
+    override = write_yaml(
+        tmp_path / "g.yaml",
+        {"qc": {"qc_gate_m": [0.8, 2.8]}, "preprocess": {"model_gate_m": [1.1, 1.9]}},
+    )
+    config = load_config(EXP_A, overlay, override)
+    assert config.qc.qc_gate_m == (0.8, 2.8)
+    assert config.preprocess.model_gate_m == (1.1, 1.9)
+    assert isinstance(config.qc.qc_gate_m, tuple)
+    assert isinstance(config.preprocess.model_gate_m, tuple)
+
+
+@pytest.mark.parametrize(
+    "section, key, value, match",
+    [
+        # --- out-of-range numbers ----------------------------------------------
+        ("qc", "histogram_bins", 0, "must be > 0"),
+        ("qc", "histogram_bins", -5, "must be > 0"),
+        ("qc", "flatline_max_bin_fraction", 0.0, r"must be in \(0.0, 1.0\]"),
+        ("qc", "flatline_max_bin_fraction", 1.5, r"must be in \(0.0, 1.0\]"),
+        ("qc", "min_in_band_energy_ratio", -0.1, r"must be in \[0.0, 1.0\]"),
+        ("qc", "min_in_band_energy_ratio", 1.1, r"must be in \[0.0, 1.0\]"),
+        ("qc", "rms_robust_z_threshold", 0.0, "must be in"),
+        ("qc", "in_band_margin_hz", -1.0, "must be in"),
+        ("qc", "min_frame_fraction", 0.0, r"must be in \(0.0, 1.0\]"),
+        ("qc", "min_frame_fraction", 1.5, r"must be in \(0.0, 1.0\]"),
+        ("preprocess", "butter_order", 0, "must be > 0"),
+        ("preprocess", "edge_trim", -1, "must be an integer >= 0"),
+        ("preprocess", "fs_hz", 0.0, "must be in"),
+        ("preprocess", "bandwidth_hz", -1.0, "must be in"),
+        ("preprocess", "chirp_time_s", 0.0, "must be in"),
+        # --- wrong types (bool is an int in Python; it must not slip through) ---
+        ("qc", "histogram_bins", "200", "must be an integer"),
+        ("qc", "histogram_bins", True, "must be an integer"),
+        ("qc", "min_in_band_energy_ratio", "0.3", "must be a number"),
+        ("qc", "min_in_band_energy_ratio", True, "must be a number"),
+        ("preprocess", "edge_trim", 32.5, "must be an integer >= 0"),
+        # --- malformed gates ---------------------------------------------------
+        ("qc", "qc_gate_m", [0.9, 2.0, 3.0], "exactly 2 entries"),
+        ("qc", "qc_gate_m", [3.0, 0.9], "strictly increasing"),
+        ("qc", "qc_gate_m", [2.0, 2.0], "strictly increasing"),
+        ("qc", "qc_gate_m", 0.9, "two-element"),
+        ("qc", "qc_gate_m", "0.9,3.0", "two-element"),
+        ("qc", "qc_gate_m", [0.0, 3.0], "must be in"),
+        ("qc", "qc_gate_m", [-1.0, 3.0], "must be in"),
+        ("preprocess", "model_gate_m", [2.0, 1.0], "strictly increasing"),
+    ],
+)
+def test_field_validation_rejects_bad_values(tmp_path, overlay, section, key, value, match):
+    bad = write_yaml(tmp_path / "bad.yaml", {section: {key: value}})
+    with pytest.raises(ConfigError, match=match):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_non_finite_value_rejected(tmp_path, overlay):
+    """YAML spells these `.nan` / `.inf`; they would poison the band arithmetic."""
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("qc:\n  in_band_margin_hz: .inf\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="must be finite"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_radar_constants_load_as_floats_not_strings(overlay):
+    """YAML 1.1 only reads an exponent as a float when it is SIGNED.
+
+    `bandwidth_hz: 500.0e6` silently loads as the string "500.0e6" — which M1 never
+    noticed because nothing consumed it. Pin the parsed types and values here so the
+    canonical config cannot regress into string arithmetic.
+    """
+    pre = load_config(EXP_A, overlay).preprocess
+    for name in ("fs_hz", "bandwidth_hz", "chirp_time_s"):
+        assert isinstance(getattr(pre, name), float), name
+    assert pre.bandwidth_hz == 500e6
+    assert pre.chirp_time_s == 1024e-6
+
+
+def test_qc_gate_above_nyquist_rejected(tmp_path, overlay):
+    """~3257.5 Hz/m against a 260 kHz Nyquist: a 100 m gate has nothing to measure."""
+    bad = write_yaml(tmp_path / "bad.yaml", {"qc": {"qc_gate_m": [100.0, 200.0]}})
+    with pytest.raises(ConfigError, match="above Nyquist"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_margin_covering_whole_spectrum_rejected(tmp_path, overlay):
+    """A screen that can never fire is a config error, not a valid configuration."""
+    bad = write_yaml(tmp_path / "bad.yaml", {"qc": {"in_band_margin_hz": 300_000.0}})
+    with pytest.raises(ConfigError, match="entire spectrum"):
+        load_config(EXP_A, overlay, bad)
+
+
 # ------------------------------------------------------------------------ provenance
 
 
