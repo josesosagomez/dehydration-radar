@@ -1,16 +1,16 @@
 # HANDOFF — resume point for a new chat (starting milestone 5)
 
-_Written 2026-07-23, after milestone 4 was completed (but NOT yet committed). Purpose: let
+_Written 2026-07-23, after milestone 4 was completed, committed and pushed. Purpose: let
 a fresh Claude Code session start **milestone 5 — the config-freeze gate** without
 re-deriving context._
 
 ## TL;DR
 
-**Milestone 4 (WST features) is DONE and green, but NOT COMMITTED.** The last commit is
-`a27d8ce` (M3); all M4 work sits in the working tree on branch **`v1_milestone_4`**. 396
-tests pass (407 with `--realdata`; only T18 skipped). **First order of business is an owner
-decision: commit M4 (and whether to open `v1_milestone_5`).** Then: **milestone 5 — freeze
-the COMPLETE A–G protocol into versioned `configs/` + git before any modelling.**
+**Milestone 4 (WST features) is DONE, committed and pushed** (`da581dc` on
+`v1_milestone_4`, pushed to origin). You are on branch **`v1_milestone_5`** = that commit
+(this handoff is its bootstrap; nothing else added yet). 396 tests pass (407 with
+`--realdata`; only T18 skipped). **Next: milestone 5 — freeze the COMPLETE A–G protocol
+into versioned `configs/` + git before any modelling.**
 
 ## Read first (in this order)
 
@@ -108,11 +108,10 @@ The freeze must cover **every experiment's design** (so no choice is informed by
 
 ## Owner decisions to surface at M5 start (do NOT decide unilaterally)
 
-1. **Commit M4** (uncommitted now) and whether to open branch `v1_milestone_5`.
-2. **77 GHz any-trace flatline rule** — the frozen rule rejects **7 of 10** audited frames
+1. **77 GHz any-trace flatline rule** — the frozen rule rejects **7 of 10** audited frames
    (ADC quantisation, not a dead channel). Parked since M2 explicitly for an owner decision
    at the M5 freeze; revisable only as an explicit decision, never retuned from data.
-3. **A-M4-7 third log branch** — confirm it enters the frozen search space (with the
+2. **A-M4-7 third log branch** — confirm it enters the frozen search space (with the
    order-2-usefulness gate), or defer/drop it.
 
 ## Do NOT re-litigate (settled; in the plan or owner-decided)
@@ -159,5 +158,5 @@ The freeze must cover **every experiment's design** (so no choice is informed by
 - **IBEX (KAUST Slurm, GPU):** DL baselines / any NN as `sbatch` jobs under `scripts/ibex/`
   (NOT created yet — first IBEX milestone). Same code, config-only differences.
   `configs/ibex.yaml`, `scripts/ibex/` still deferred.
-- Branches `v1_milestone_1..3` pushed; **`v1_milestone_4` current with uncommitted M4 work**;
-  nothing merged to `main`.
+- Branches `v1_milestone_1..4` pushed (M4 = `da581dc`); **`v1_milestone_5` current**
+  (this handoff its only addition so far); nothing merged to `main`.
