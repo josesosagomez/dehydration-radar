@@ -32,6 +32,9 @@ VALID_DEVICES = ("cpu", "cuda")
 # primary; the second is a PRE-DECLARED ABLATION (never an inner-CV candidate).
 GATE_METHODS = ("butterworth", "fft")
 STANDARDIZE_METHODS = ("robust", "meanstd")
+# kymatio frontends. numpy is primary/canonical; torch is validated by the M4
+# cross-backend equivalence test and used only for unreported feature work.
+BACKENDS = ("numpy", "torch")
 
 # Exact by definition (SI), so it is written here rather than pulled from scipy —
 # config validation should not depend on a numerics package being importable.
@@ -135,7 +138,15 @@ class WSTTiling:
 
 @dataclass(frozen=True)
 class WSTConfig:
-    """Frozen WST tilings (implementation_plan.md 'WST parameterization')."""
+    """Frozen WST tilings (implementation_plan.md 'WST parameterization').
+
+    Consumed from M4. `backend` selects the kymatio frontend and is an implementation
+    choice validated by the cross-backend equivalence test — never a search axis or
+    ablation; **numpy is the canonical backend for every reported WST feature** (a torch
+    frontend may back only unreported feature work, and only after the cross-backend
+    check passes). J, T and the output shape are DERIVED and MEASURED from the
+    instantiated filter bank at build time (features/wst.py), never precomputed here.
+    """
 
     tilings: tuple[WSTTiling, ...] = (
         WSTTiling(q=(10, 4), invariance_ms=0.20),
@@ -144,6 +155,7 @@ class WSTConfig:
     )
     max_order: int = 2
     log_epsilon: float = 1e-6
+    backend: str = "numpy"
 
 
 @dataclass(frozen=True)
@@ -554,14 +566,38 @@ def _build_preprocess(raw: dict) -> PreprocessConfig:
 
 
 def _build_wst(raw: dict) -> WSTConfig:
-    """WST has no consumer until M4, so only structural checks run here."""
+    """Validate the WST fields consumed from M4 (the M2 rule: a bad value must fail at
+    config load, not deep inside kymatio's filter-bank construction).
+
+    `tilings` stays un-overridable (frozen design constants). `max_order` and
+    `log_epsilon` are frozen protocol constants but validated so a typo fails loudly;
+    `backend` is a bounded choice like gate_method/standardize.
+    """
     section = _known_section(raw, "wst", WSTConfig)
     if "tilings" in section:
         raise ConfigError(
             "wst.tilings cannot be overridden in YAML — the three tilings are frozen "
             "constants of the design (see implementation_plan.md)"
         )
-    return WSTConfig(**section) if section else WSTConfig()
+    d = WSTConfig()
+
+    max_order = section.get("max_order", d.max_order)
+    if isinstance(max_order, bool) or not isinstance(max_order, int):
+        raise ConfigError(f"wst.max_order must be an integer, got {type(max_order).__name__}")
+    if max_order not in (1, 2):
+        raise ConfigError(
+            f"wst.max_order must be 1 or 2, got {max_order} — order 0 keeps no wavelet "
+            "paths and >2 is unsupported by the design (the plan fixes max_order = 2)"
+        )
+
+    return WSTConfig(
+        max_order=max_order,
+        log_epsilon=_float_field(
+            section, "log_epsilon", d.log_epsilon, "wst",
+            low=0.0, high=math.inf, low_open=True, high_open=True,
+        ),
+        backend=_choice_field(section, "backend", d.backend, "wst", BACKENDS),
+    )
 
 
 def load_config(*yaml_paths: str | Path) -> Config:

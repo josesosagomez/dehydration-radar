@@ -119,8 +119,9 @@ src/dehyd/
     standardize.py              # per-signal robust standardization
     pipeline.py                 # the whole sequence as one linear function (frame -> [C x 470])
   features/
-    wst.py                      # kymatio Scattering1D; ms->samples->(J,T) mapping; 3 tilings; mag & I/Q
-    pooling.py                  # mean/std over global+halves; raw-flatten; session-level aggregation
+    wst.py                      # kymatio Scattering1D; ms->samples->(J,T) mapping; 3 tilings; mag & I/Q; order-aware log; cross-backend gate
+    pooling.py                  # mean/std over global+halves (>=2-sample std rule); raw-flatten; session-level aggregation; feature layouts
+    extraction.py               # reusable manifest->features wiring (session/variant extraction, canonical-spec guard) — imported by run_wst and the M6 harness  (A-M4-3)
   eval/
     splits.py                   # THE single source of folds: nested LOSO API yielding (train/val/test) SUBJECTS
     harness.py                  # fit-on-train-only runner for BOTH sklearn and torch; session-level inference
@@ -131,7 +132,7 @@ src/dehyd/
   provenance.py                 # per-run: raw-file hashes, resolved config, fold manifest, versions, git rev, device, seed, Slurm ID
 experiments/                    # thin CLI entry points, one per ROADMAP experiment A..H
   run_regression.py, run_clock_decoupling.py, run_ordinal.py, run_baselines.py, ...
-  run_qc.py, run_preprocess.py  # one-command cohort passes (curated artifacts + provenance)
+  run_qc.py, run_preprocess.py, run_wst.py  # one-command cohort passes (curated artifacts + provenance); run_wst -> results/wst/  (A-M4-3)
 scripts/ibex/                   # sbatch templates for GPU jobs (DL baselines / NN)
 tests/
   test_no_leakage.py            # subject-disjoint train/val/test + fit-on-train-only (sklearn AND torch)
@@ -178,8 +179,16 @@ and nothing MATLAB-derived is reported.)
    which measured the dominant beat at **1.50–1.80 m** and a peak concentration of
    **0.512** of ROI power (vs 0.333 for a flat 3-bin ROI), confirming Option-B's
    premise on this data.*
-4. **WST feature extraction** — the kymatio parameterization below, validated by
-   path-structure, shift-stability, and numpy/torch cross-backend checks.
+4. ✅ **DONE (2026-07-23) — WST feature extraction** — the kymatio parameterization
+   below, validated by path-structure, shift-stability, and numpy/torch cross-backend
+   checks. *Execution detail: `plans/MILESTONE_4_PLAN.md`; per-step log: HISTORY.md.
+   Outcome: `src/dehyd/features/{wst,pooling,extraction}.py`, 66 new tests (396 total),
+   and the cohort diagnostic `results/wst/wst_diagnostics_10ghz.csv` (73 sessions, all
+   feature variants finite). Measured geometry — 742×7, 466×3, 349×3 paths×time — pins
+   the padding/shape; the ≥2-sample segment-std rule (A-M4-6) drops the T2/T3 1-sample
+   half's std. Key finding: ε = 1e-6 is negligible vs order-1 (~1e-3) but 12–64 % of the
+   tiny order-2 scale (~1e-6) — the "O(1) coefficient" assumption is false; ε stays
+   frozen, log on/off decides at M6.*
 5. **Config-freeze gate — the COMPLETE A–G protocol, before any outer results are
    inspected.** Because B–G reuse the same 16 subjects, any protocol choice made after
    seeing Exp A's outer-fold results is indirectly informed by later "test" subjects.
@@ -231,9 +240,20 @@ of the pipeline is moved to `archive/`, with the move noted in HISTORY.md.
 
 ## Library choices
 
-- **WST**: `kymatio` (Scattering1D). numpy backend for local smoke tests; torch
-  backend (CPU or CUDA) selectable by config. If both backends can produce reported
-  features, a cross-backend equivalence test (below) must pass.
+- **WST**: `kymatio` (Scattering1D). Backend selected by the config field
+  `wst.backend ∈ {numpy, torch}` (default numpy) — an implementation choice, never a
+  search axis or ablation. **Policy, scoped to the WST FRONTEND: the WST features in
+  every reported artifact — feature diagnostics and all reported feature/model
+  results that consume WST — are generated with the numpy kymatio frontend**
+  (tolerance-equivalent is not bit-identical, so exactly one frontend owns reported
+  feature values). The torch kymatio frontend (CPU or CUDA) serves the cross-backend
+  validation and unreported feature work (smoke tests, GPU experimentation),
+  permitted only after the equivalence test (below) passes, backend always recorded
+  in provenance. **This does not constrain PyTorch as a modeling framework** — the
+  reported DL baselines (Exp D) are torch-trained as specified, and the torch fit
+  path is protected by the no-leakage torch mutation leg at milestone 6. Any future
+  reported use of torch-frontend WST features is an explicit owner decision revising
+  this policy. *(A-M4-1, 2026-07-23; scoped to the frontend in review round 3.)*
 - **Classical models**: scikit-learn (Ridge, SVR, RandomForest, GradientBoosting,
   KNN, SVM) — CPU, local. Fit-on-train-only enforced via `Pipeline` inside the fold.
 - **DL baselines / NN**: PyTorch, GPU on IBEX via sbatch. All fitted quantities are
@@ -399,7 +419,10 @@ tiling, at fs=520834 Hz on the trimmed length N=470:
   support → T1 J=7, T2/T3 J=8. Record the (requested ms, realized samples, J) triple
   and the approximation error for each tiling in HISTORY.md.
 - `Q = (Q1, Q2)` from the three tilings: (10,4), (8,2), (6,2). `max_order = 2`
-  (orders 0/1/2 kept).
+  (orders 0/1/2 kept). `max_order`, `log_epsilon` and the new `wst.backend` are
+  **validated at config load** (the M2 "validate once consumed" rule), while J / T /
+  padding / output shape are **measured** from the instantiated bank and recorded,
+  never validated as precomputed constants. *(A-M4-4, 2026-07-23.)*
 - **Padding and output shape are measured, never assumed.** We do **not** hard-code a
   512-sample padded length or estimate `n_time` as `padded_len / 2^J` — kymatio's
   padding depends on the instantiated filter bank and is exposed via `pad_left` /
@@ -414,17 +437,60 @@ tiling, at fs=520834 Hz on the trimmed length N=470:
   **order-0** `S0 = x ⋆ φ` is a signed low-pass of the (median/MAD-standardized) input
   and **can be negative** (for both magnitude and I/Q inputs), while **orders 1–2 are
   modulus-based and ≥ 0**. Frozen rule when log is on: **orders 1 and 2 →
-  `log(S + ε)`** with **ε = 1e-6** (fixed; the coefficients live on an O(1) standardized
-  scale); **order 0 is left linear (never logged)**. (Signed `log1p` on order 0 is the
-  documented alternative but is *not* used unless explicitly switched.) A test asserts
-  **every branch — mag and I/Q, all three orders, log on and off — produces finite
-  values.** log on/off remains an inner-CV-selected choice; this formula is what "on"
-  means.
-- **Feature families**: (a) pooled statistics — mean/std over global + first/second
-  half per path; (b) raw-flattened scattering series. Both preserve a fixed,
+  `log(S + ε)`** with **ε = 1e-6**; **order 0 is left linear (never logged)**. (Signed
+  `log1p` on order 0 is the documented alternative but is *not* used unless explicitly
+  switched.) A test asserts **every branch — mag and I/Q, all three orders, log on and
+  off — produces finite values.** this formula is what "on" means.
+  - **Measured caveat on ε (M4 cohort, 2026-07-23).** The original rationale — "the
+    coefficients live on an O(1) standardized scale, so ε = 1e-6 is a pure numerical
+    guard" — is **false**: the *input* is O(1) but the scattering coefficients are not
+    (cohort medians ≈ order-1 1e-3, order-2 1e-6). ε is negligible vs order 1 but
+    **12–64 % of the order-2 scale**, so with log on it materially floors the small
+    order-2 paths. Per the M2/M3 doctrine this is a **finding, not a retune**: ε stays
+    frozen at 1e-6. A read-only LOSO diagnostic (HISTORY.md, same date) additionally
+    showed the fold-to-fold order-2 scale is stable to **< 1 %** (per-subject spread
+    ~14 %), so a data-derived ε would be near-leakage-free here — motivating the
+    pre-registered third log branch below rather than any change now.
+  - **Log branch — pre-registered inner-CV axis (candidate; confirmed/frozen at M5).**
+    The log axis carries **three** mutually exclusive branches, not two: **(a) log off**;
+    **(b) log on with the frozen ε = 1e-6** (the rule above); **(c) log on with a
+    fold-local, scale-relative *per-order* ε rule** — `ε_o = k · (order-o coefficient
+    scale on the fold's TRAINING frames)` for a small pre-committed `k`, computed
+    train-only and selected on inner-validation like every other axis (never on the
+    outer-test subject), so it is leakage-safe. Rationale: matching ε *to* the order-2
+    scale returns ≈ 1e-6 (today's value); *un-flooring* order-2 needs ε smaller than the
+    scale, which trades flattening for near-zero-noise amplification — a two-sided
+    tradeoff whose sweet spot the inner CV should settle, not a hand-picked constant.
+    **Kept minimal (one extra rule, not an ε grid) and gated** on a cheap
+    order-2-usefulness pre-check (order-{0,1} vs order-{0,1,2} features): if order 2 adds
+    nothing, branch (c) is dropped before M6 so it never widens the N = 16 search space
+    for no reason. Branch (c) is **not** in effect at M4 (ε frozen); it is committed here
+    and decided at M6. *(A-M4-7, 2026-07-23.)*
+- **Feature families**: (a) pooled statistics — per path, mean and std (**ddof = 0**)
+  over the global series, the first half `[0 : n_time//2]`, and the second half
+  `[n_time//2 : n_time]`; a segment contributes its **std only if it has ≥ 2 samples**
+  (a fixed, metadata-only rule depending on `n_time` alone — with the measured output
+  lengths, the short tilings' 1-sample first half would otherwise yield a
+  structurally-zero std column for every frame); element order channel →
+  path (kymatio `meta()` order) → segment (global, first, second) → statistic
+  (mean, then std where defined); (b) raw-flattened scattering series, order
+  channel → path → time. Session aggregation concatenates the per-frame **mean block
+  then the median block** (frozen order). Both families preserve this fixed,
   documented element order derived from the recorded path metadata.
-- **Cross-backend test**: numpy vs torch WST agree to ≤1e-4 relative on a shared
-  sample; only then may either back a reported run.
+  *(A-M4-2, 2026-07-23.)*
+- **Cross-backend test (frozen, policy-named)**: numpy vs torch WST agree on a
+  shared sample under the fixed "float64" policy — elementwise
+  `|a−b| ≤ atol + rtol·max(|a|,|b|)` with rtol = 1e-4, atol = 1e-8, AND relative L2
+  `‖a−b‖₂ / max(‖a‖₂, ‖b‖₂, 1e-12) ≤ 1e-4` — on the raw scattering tensors and on
+  the pooled vectors under both log states, both backends in float64. Tolerances
+  live in a frozen two-entry policy table (no free arguments at call sites), and the
+  check returns its measured error components for the record. Passing is the
+  precondition for ANY use of the torch WST *frontend* — which, per Library choices,
+  backs unreported feature work only; PyTorch as a modeling framework is unaffected.
+  The pre-declared "float32-fallback" policy (rtol 1e-3, atol 1e-5) applies only if
+  the pinned stack cannot run torch in float64, and additionally requires owner
+  approval. *(A-M4-5, 2026-07-23; policy-named in round 2, frontend-scoped in
+  round 3.)*
 
 ## Analysis unit — session-level primary (fixes pseudo-replication)
 
@@ -492,10 +558,15 @@ subjects** (15 when N_eval=16, otherwise N_eval−1)**:**
 - Selection metric: **session-level MAE** (aggregate to session, mean over inner-val
   subjects) — the same unit as the headline.
 - Search space (bounded, enumerated in config): reduction branch {A,B} × channel
-  {mag, I/Q} × tiling {T1,T2,T3} × {log on/off} × range-gate {1–2 m default,
-  0.9–3.0 m} × model family × that model's small hyperparameter grid. The space is
-  kept modest for tractability; if needed it is searched in a fixed staged order,
-  but **every** data-dependent choice is made on inner folds only.
+  {mag, I/Q} × tiling {T1,T2,T3} × **log {off / on+frozen-ε / on+tuned-ε}** ×
+  range-gate {1–2 m default, 0.9–3.0 m} × model family × that model's small
+  hyperparameter grid. The **log** axis's third branch (`on+tuned-ε` = the fold-local,
+  scale-relative per-order ε rule of §"WST parameterization", A-M4-7) is a
+  **pre-registered candidate confirmed/frozen at M5** and **only if** the
+  order-2-usefulness pre-check clears — otherwise the axis reverts to {off / on+frozen-ε}
+  so no dead option widens the N = 16 search. The space is kept modest for tractability;
+  if needed it is searched in a fixed staged order, but **every** data-dependent choice
+  (the tuned ε included) is made on inner folds only.
 - Tie-break: lower session-level MAE, then simpler model (fewer effective
   parameters / smaller feature dim), then lower inner-fold variance.
 - Stochastic models (incl. NN): a fixed seed set (5 seeds); inner metric = mean over

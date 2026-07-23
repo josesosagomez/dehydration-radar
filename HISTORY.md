@@ -6,6 +6,223 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-23 — **MILESTONE 4 COMPLETE.** Definition of done met in full.
+
+**D1 — mandatory suite, no private data.** `uv run pytest` → **396 passed, 12 skipped**
+(was 319/11 at M3 close; +77, of which 66 are in `test_wst.py`).
+**D2 — real-cohort acceptance.** `uv run pytest --realdata` → **407 passed, 1 skipped**
+(T18 only, as designed until M6).
+**D3 —** `experiments/run_wst.py` wrote and re-verified
+`results/wst/wst_diagnostics_10ghz.csv` (73 rows) + provenance; ~12 min cohort pass.
+**D4 —** `tests/test_no_leakage.py` **byte-for-byte unmodified since M1**
+(`git diff f3fbade HEAD -- tests/test_no_leakage.py` empty) and green.
+**D5 —** HISTORY.md carries an entry per resolved step, including the dtype-fork
+resolution (step 1), the measured geometry (steps 3–4), and the cohort finding + pooling
+performance fix (step 7).
+**D6 —** SECOND_CHAPTER.md §3 "WST features" written: the ms→(J,T) mapping, the measured
+padding/border decision, the order-aware log with the corrected ε rationale, the pooling
+degenerate-std departure, the session unit, the single-backend policy, and the cohort
+characterisation.
+**D7 —** amendments **A-M4-1..A-M4-6** are live in `plans/implementation_plan.md`
+(§Library choices, §WST parameterization, §Feature families, the repo tree, Build order §4);
+the two plan documents agree.
+
+**The invariant held.** WST + pooling is a per-frame function of one frame plus frozen
+constants: batched extraction is bit-identical to single-frame (T-W16), the whole extraction
+is deterministic (T-W8), and the only cross-frame step is the declared session
+mean+median. Nothing is fitted, so nothing enters the CV loop — `test_no_leakage.py` is
+untouched.
+
+**Milestone-4 scoreboard.** 3 new source modules
+(`features/{wst,pooling,extraction}.py`) + `features/__init__.py`, 1 new experiment entry
+point, 1 new test module (66 tests), 1 new config field (`wst.backend`) validated at load.
+torch entered the env (float32-only frontend); the strict cross-backend tolerance was kept,
+not loosened. Two facts discovered empirically — the falsified O(1)-coefficient assumption
+and the pooling hotspot — neither of which changed a frozen parameter.
+
+**Open for M5 (config freeze):** the complete A–G protocol freeze, including the WST search
+space (tiling × log on/off) and the 77 GHz decisions; the parked 77 GHz flatline rule; the
+first IBEX configs/scripts. torch's T18 mutation leg still activates at M6. Nothing committed
+yet — awaiting the owner's word.
+
+## 2026-07-23 — M4 follow-up diagnostic: **is the order-2 scale stable enough that a
+## data-derived ε would be leakage-safe? Yes fold-to-fold (<1%), but subjects vary ~14%.**
+
+Read-only diagnostic on the existing cohort CSV (no WST recompute, no frozen parameter
+touched) prompted by an owner question: if ε were computed per LOSO fold from training
+subjects, would the value move much fold to fold? A near-constant ε means adapting it is
+essentially leakage-free (the number barely depends on which subjects you use).
+
+**Method.** For each held-out subject, take the median order-2 pre-log scale over the other
+15 subjects' sessions (the fold's training statistic); look at the spread of those 16 fold
+values. Separately, the spread across the 16 *individual* subjects, to tell "median is
+robust" apart from "subjects genuinely alike".
+
+```
+                 across the 16 FOLDS            across the 16 SUBJECTS
+T1 order2   max/min 1.01  CV 0.45%         max/min 1.73  CV 13.8%
+T2 order2   max/min 1.02  CV 0.80%         max/min 1.78  CV 14.7%
+T3 order2   max/min 1.02  CV 0.69%         max/min 1.83  CV 14.9%
+```
+
+**Reading.** (1) A per-fold ε would be near-identical across folds (<1%), so a fold-local
+vs global choice differs by <1% — the leakage cost of adapting ε here is negligible. (2)
+But individuals differ by up to ~1.8×, so part of the fold-stability is the median being
+robust to dropping ~4 of 68 sessions, *not* subject homogeneity — and extrapolation to a
+genuinely different setup (not this project's continuation, which reuses the same radar/
+distance) stays an assumption. (3) **Tuning ε *to* the order-2 scale returns ~1e-6 — i.e.
+today's value** (ε is already ~64% of the T1 order-2 median); *un-flooring* order-2 needs ε
+much smaller than the scale, which trades flattening for near-zero noise amplification —
+a two-sided tradeoff whose sweet spot is genuinely uncertain. Stability tells us adapting ε
+is safe/cheap; it does **not** tell us it improves prediction. Recorded, ε unchanged —
+this motivates the M5-pre-registered third log branch (implementation_plan.md §WST
+parameterization / §LOSO harness search space), decided at M6, never now.
+
+## 2026-07-23 — M4 step 7: `features/extraction.py` + `run_wst.py` cohort run.
+## **All 73 sessions finite in ~12 min; but ε=1e-6 is NOT negligible vs the tiny order-2
+## coefficient scale — the plan's "O(1) coefficients" assumption is measured false.**
+
+`src/dehyd/features/extraction.py` (the reusable manifest→features wiring, in `src/` so
+the M6 harness never imports a CLI script) + `experiments/run_wst.py` (thin CLI over it) +
+extraction tests (T-W14 guard, T-W18 variants≡single-variant + call-count, pre-log scale).
+
+**Cohort result — `results/wst/wst_diagnostics_10ghz.csv` (73 rows, matches M2/M3):**
+7168 eligible frames, 73 sessions, 16 subjects. **`all_variants_finite = True` for every
+session** across all (reduction × channel × tiling × log × family) branches — the
+finiteness battery holds on real data at cohort scale. Total WST wall-clock **722.7 s
+(~12 min)**, matching the ~14-min projection.
+
+**Feature dimensions (constant across sessions), nominal / effective / raw per the
+≥2-sample segment-std rule:** T1 mag 4452/4452/5194, T1 iq 8904/8904/10388; T2 mag
+2796/**2330**/1398 (effective < nominal — the 1-sample first half drops one std), T2 iq
+5592/4660/2796; T3 mag 2094/**1745**/1047, T3 iq 4188/3490/2094. Effective = nominal only
+for T1 (n_time = 7); T2/T3 (n_time = 3) lose one std/path exactly as A-M4-6 intends.
+
+**THE FINDING — pre-log coefficient scale (cohort medians):**
+```
+tiling   order0        order1     order2      eps/|order2|
+T1     -4.39e-02     7.98e-04    1.56e-06    0.64
+T2     -3.99e-02     1.14e-03    4.79e-06    0.21
+T3     -3.46e-02     1.28e-03    8.23e-06    0.12
+```
+- **order 0 is signed and negative** (median ≈ −0.04) — confirms empirically that order 0
+  is a signed low-pass and MUST stay linear; logging it would be `log(negative)`.
+- **The plan's rationale for ε — "the coefficients live on an O(1) standardized scale" —
+  is FALSE.** The standardized *input* is O(1), but scattering coefficients are far
+  smaller: order 1 ≈ 1e-3, order 2 ≈ 1e-6. ε = 1e-6 is ~3 decades below order 1
+  (negligible there), but **12–64 % of the median order-2 scale** — so when log is on,
+  `log(S + ε)` on order 2 is materially ε-floored: for the (many) below-median order-2
+  paths, ε dominates and compresses them toward log(ε) ≈ −13.8.
+- **Action per the M2/M3 doctrine: none to the parameter.** ε stays frozen at 1e-6 —
+  changing it on seeing this would be the forbidden data-driven retune. The pipeline
+  already carries the mechanism that resolves whether this matters: **log on/off is an
+  inner-CV axis at M6**, so the CV empirically decides per fold whether ε-floored order-2
+  logging helps. The finding *strengthens* the case for keeping log selectable rather than
+  always-on, and is recorded in SECOND_CHAPTER §3 as such. Flagged to the owner, not acted
+  on. (The misleading console line "eps << order1/2" was corrected to print the eps/scale
+  ratio; the CSV always carried the true numbers.)
+
+**Performance failure and fix (kept in the log).** The first cohort attempt ran at
+**~96 s/session → ~2 h projected**, not ~14 min. Profiling one session isolated the cause:
+`pool_stats` was **7.82 s** for T1 iq (100 frames) vs 2.31 s for the scattering itself —
+its per-path Python loop runs C·n_paths·segments = 4452 iterations/frame with tiny
+`.mean()`/`.std()` slices. Vectorizing `pool_stats` over channels and paths (assemble each
+segment×stat as a `[C, n_paths]` column, stack, transpose to channel→path→stat, flatten)
+cut it to **0.053 s (150×)** with bit-identical values and order (the hand-computation
+tests pin both). Full session 96 s → **11.7 s**; cohort ~12 min. build_scattering is *not*
+the bottleneck (≈0.01–0.04 s), so no bank caching was added.
+
+**Cross-backend on real frames** (in the realdata test): numpy-f64 vs torch-f32 max
+elementwise ratio 0.36–0.47 (< 1), rel L2 ≈ 4e-7 — passes the strict "float64" policy on
+actual data, where more near-zero coefficients push the ratio up but well inside bounds.
+
+## 2026-07-23 — M4 steps 3–4: `features/wst.py`. **Measured geometry pins the reviewer
+## values exactly; order-aware log, batched transform, and cross-backend gate all green.**
+
+`src/dehyd/features/{__init__,wst.py}` + `tests/test_wst.py` (41 tests). The kymatio
+parameterization, all shape/fs-agnostic (M9 reuse), constants from `WSTConfig` only.
+
+**Measured filter-bank geometry (numpy frontend, n_in = 470, fs = 520834), pinned as
+T-W2 regression values — matches the reviewer-sampled values exactly:**
+
+```
+tiling   Q       ms    T    J   n_paths  n_time   pad_left  pad_right  padded_len
+T1    (10, 4)  0.20  104   7    742      7        277       277        1024
+T2    ( 8, 2)  0.30  156   8    466      3        277       277        1024
+T3    ( 6, 2)  0.40  208   8    349      3        277       277        1024
+```
+
+- **Padding is MEASURED, never assumed** — `pad_left`/`pad_right` read back from the
+  object; `padded_len = n_in + pad_left + pad_right = 1024` (which *is* 2^10 here, but
+  that is observed, not hard-coded — T3 at J=8 still pads to 1024, not 2^18). The
+  deprecated `.N` attribute is avoided; padded length comes from the pad math.
+- **n_time = 3 for T2/T3** — this is the measured fact that makes A-M4-6's ≥2-sample
+  segment-std rule necessary (a 1-sample first half → identically-zero std). n_time = 7
+  for T1 keeps all 6 stats.
+- **Path order counts:** order 0 → 1 path, order 1 → 55, order 2 → 686 (T1); order-1 `xi`
+  is strictly decreasing (kymatio convention), asserted in T-W2.
+
+**Order-aware log (`apply_order_log`).** Orders 1–2 → `log(S + 1e-6)`; **order 0 stays
+linear** — a crafted negative order-0 coefficient (S0 is a signed low-pass) passes through
+untouched and finite (T-W6), where logging it would give NaN. A path-count mismatch vs
+`meta` raises. The finiteness battery (mag/iq × orders 0/1/2 × log on/off, all 3 tilings)
+is green (T-W5).
+
+**Batched transform (`scatter_frames`).** [N, C, 470] folded into kymatio's leading batch
+dim in one call; **bit-identical to stacked single-frame calls** for all three tilings
+(T-W16). `scatter_channels` is defined as `scatter_frames(x[None])[0]`, so the two paths
+cannot diverge.
+
+**Cross-backend gate (`backend_agreement` + `AgreementResult`).** Two frozen policies in a
+table, no caller tolerances; raises on shape/empty/non-finite/dtype violations; returns the
+measured `max_elementwise_ratio` and `rel_l2`. **numpy-f64 vs torch-f32 passes the strict
+"float64" policy** on raw AND logged tensors, both channels, all three tilings (T-W9) —
+consistent with the step-1 finding. **Suite: test_wst 41 passed.**
+
+## 2026-07-23 — M4 step 1: `uv add torch`. **kymatio's torch frontend is float32-only —
+## the planned float64-vs-float64 cross-backend comparison is impossible; strict
+## tolerances kept anyway (owner-approved), no fallback needed.**
+
+`uv add torch` → **torch 2.13.0+cpu**, pulling filelock, fsspec, jinja2, markupsafe,
+mpmath, networkx, setuptools, sympy, typing-extensions. **The scipy pin held:** the
+resolver kept **scipy 1.16.3** (< 1.17), so `from kymatio.numpy import Scattering1D`
+still imports — the M1 kymatio-breaks-on-scipy-≥1.17 trap did not fire. numpy stayed
+2.4.6. Added `packaging>=21.0` to the dev group (test_env now imports it) and a torch
+import + `test_scipy_pin_survives_torch` (parsed-version comparison, not string —
+`Version(scipy.__version__) < Version("1.17")`). **Env suite: 3 passed.**
+
+**Finding that triggered the pre-declared dtype fork (MILESTONE_4_PLAN §2.2).**
+kymatio's **torch** `Scattering1D` runs its filter bank in **float32**: a float64 input
+raises `TypeError: Input and filter must be of the same dtype`. So the plan's assumed
+"convert to a float64 torch tensor, compare float64-vs-float64" is **not achievable in
+the pinned stack** — an environment fact, exactly the contingency §2.2 pre-declared.
+
+**Measured the only achievable comparison — numpy-float64 vs torch-float32** — on a
+`default_rng(0)` standard-normal 470-sample signal through all three tilings:
+
+```
+tiling      Q       T    J   out shape   rel L2     max elemwise ratio (float64 policy)
+T1      (10, 4)   104   7   (742, 7)   6.57e-08   0.0437   PASS
+T2      ( 8, 2)   156   8   (466, 3)   8.59e-08   0.0090   PASS
+T3      ( 6, 2)   208   8   (349, 3)   6.72e-08   0.0039   PASS
+```
+
+Two things fall out of this and are recorded now:
+1. **The measured output shapes exactly match the reviewer-sampled values** T1 (742, 7),
+   T2 (466, 3), T3 (349, 3) — the T-W2 regression pins (confirmed at build, not assumed),
+   and the n_time = 3 for T2/T3 that motivates the ≥2-sample segment-std rule (A-M4-6).
+2. **numpy-f64 vs torch-f32 passes the STRICT "float64" policy** (rtol 1e-4, atol 1e-8):
+   max elementwise ratio ≤ 0.044 (< 1), rel L2 ≈ 1e-7. float32 accumulation across the
+   scattering depth stays comfortably inside the 1e-4 relative bound.
+
+**Owner decision (2026-07-23): keep the strict tolerances; do NOT adopt the float32
+fallback.** The fork the plan pre-declared required owner approval to loosen; the owner
+chose *not* to loosen, because the data clears the tight bar. The `backend_agreement`
+"float32-fallback" policy (rtol 1e-3, atol 1e-5) stays defined but unused — invoking it
+would need a fresh owner decision. Propagated to MILESTONE_4_PLAN §2.2 (dtype policy),
+the `scatter_frames`/§5 wording, and pyproject's dependency comment; the cross-backend
+formula in implementation_plan.md is unchanged (still the strict "float64" policy).
+
 ## 2026-07-23 — **MILESTONE 3 COMPLETE.** Definition of done met in full.
 
 **D1 — mandatory suite, no private data.** `uv run pytest` → **319 passed, 11 skipped**

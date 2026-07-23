@@ -148,7 +148,7 @@ def test_records_config_folds_and_environment(setup):
     assert payload["manifest"]["n_subjects"] == 3
     assert len(payload["folds"]) == 3
     assert payload["packages"]["numpy"] is not None
-    assert payload["packages"]["torch"] is None  # not in the env until milestone 4
+    assert payload["packages"]["torch"] is not None  # entered the env at milestone 4
     assert "commit" in payload["git"]
     assert payload["platform"]["python"].startswith("3.11")
 

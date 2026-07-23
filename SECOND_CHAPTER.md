@@ -494,7 +494,165 @@ whether it is processed alone or beside arbitrary companions; and repeated runs 
 bit-identical. The last two together are what make the claim of a per-frame,
 population-independent sequence executable rather than asserted.
 
-## 3. WST features  *(fill at milestone 4)*
+## 3. WST features  *(milestone 4 — complete)*
+
+The preprocessed trace — a normalised complex signal of 470 samples, taken either as its
+magnitude or as its two real and imaginary channels — is turned into a feature vector by a
+wavelet scattering transform. Scattering was chosen for the same reason the original work
+chose it: it produces a representation that is stable to small time shifts and to smooth
+deformations while preserving the high-frequency structure that a plain low-pass average
+would discard, and it does so with a fixed filter bank rather than anything learned from
+the data. That last property is what matters most for this study. The transform contains
+no fitted quantity, so like the preprocessing before it, it sits outside the
+cross-validation loop by construction: the same three design questions the published work
+left implicit — how finely to tile frequency, how much time-invariance to impose, and how
+to summarise the result — are made explicit here, frozen before any model is fit, and
+where they are genuinely choices they are resolved inside the inner cross-validation rather
+than on the held-out subjects.
+
+### From an invariance in milliseconds to a filter bank in samples
+
+The reference expresses each tiling as a pair of quality factors and an invariance scale
+in milliseconds; the Python library takes an integer octave count and an averaging support
+in samples. The translation is deterministic and is recorded rather than assumed. An
+invariance scale in milliseconds becomes an averaging support of `round(scale · f_s)`
+samples — 0.20, 0.30 and 0.40 ms at the 520.834 kHz sampling rate give 104, 156 and 208
+samples, each realising the requested scale to better than two parts in a thousand — and
+the octave count is the smallest integer whose largest wavelet scale covers that support,
+`ceil(log2 T)`, giving seven octaves for the first tiling and eight for the other two. The
+three tilings retain the reference quality factors (10 and 4, 8 and 2, 6 and 2) and keep
+scattering orders zero, one and two.
+
+Everything downstream of these two numbers — how much the signal is padded, how many
+scattering paths result, how long the averaged output is — is a property of the
+instantiated filter bank, not a formula to be guessed, and is read back from the bank and
+recorded. This matters because the natural guess is wrong in an instructive way: a
+470-sample signal is not a power of two, and the library pads it symmetrically by 277
+samples each side to a length of 1024, which happens to be a power of two here but is not
+guaranteed to be and is not computed as one. The measured geometry is 742 paths of length
+7 for the first tiling and 466 and 349 paths of length 3 for the other two. These numbers
+are pinned as regression values, so a future change in the library that altered padding or
+path structure would be caught rather than silently changing every feature.
+
+At these signal lengths the library warns that the support is too small to fully avoid
+edge effects, and it does so for all three tilings, not only the shortest. The response is
+deliberate and is fixed before any measurement: the native padding is accepted for all
+three, because the trace length and the tilings are both frozen upstream and no mitigation
+is on the table that would not itself be a data-driven change. The size of the effect is
+measured for the record — zeroing the outermost 32 samples of a test signal moves the
+averaged coefficients by roughly two-thirds of their norm, confirming the warning describes
+something real — but that measurement gates nothing; it is descriptive, and the decision it
+accompanies was made in advance.
+
+### An order-aware logarithm
+
+A logarithm is optionally applied to compress the dynamic range of the coefficients, and
+whether it helps is left to the inner cross-validation. What "applying the logarithm" means
+is fixed here, and it is not uniform across the scattering orders. The first- and
+second-order coefficients are moduli and therefore non-negative, so `log(S + ε)` is
+well-defined; the zeroth-order coefficient is a signed low-pass of an already
+mean-centred signal and is routinely negative, so logging it would be undefined. The
+zeroth order is therefore always left linear and only orders one and two are logged. A test
+constructs a deliberately negative zeroth-order coefficient and confirms it passes through
+finite and unchanged — the exact failure the rule exists to prevent.
+
+The floor ε is fixed at one part in a million, and the cohort measurement turned the stated
+reason for that value into something more honest. The original expectation was that the
+coefficients live on a scale of order one, having come from a normalised signal, so that a
+floor of a millionth would be a pure numerical guard. The standardised *input* is indeed of
+order one, but the scattering coefficients are not: measured across the cohort, the
+first-order coefficients sit near a thousandth and the second-order coefficients near a
+millionth. Against the first order the floor is three decades down and genuinely negligible;
+against the second order it is between a tenth and two-thirds of the coefficient scale, so
+for the many second-order paths below that median the floor dominates and the logarithm
+compresses them toward a constant. This is a real property of the representation, not a
+defect to be tuned away, and it is treated as one: the floor stays frozen at the declared
+value, and because the logarithm is a selectable option rather than a fixed step, the
+cross-validation is free to decline it fold by fold if the second-order compression costs
+more than the range compression buys. The measurement is what makes the earlier assumption
+correctable; the parameter is left exactly where it was declared.
+
+### Summarising a session
+
+Two families of summary are produced from the scattering paths. The first pools each path
+over time into low-order statistics — its mean and, where a segment is long enough to have
+one, its standard deviation, taken over the whole path and over each half. The second keeps
+the raw averaged series and is reserved for the network baselines and diagnostics; it is
+never a classical feature on its own. The pooled family carries a subtlety that only became
+visible once the output lengths were measured. Two of the three tilings produce an averaged
+series of length three, whose first half is a single sample; a standard deviation over one
+sample is identically zero, so pooling those tilings by the literal "mean and standard
+deviation over each half" would ship a column that is zero for every path of every frame of
+every subject — a structurally dead feature that a later fitting step would have to discover
+and handle. The rule adopted instead makes a segment contribute its standard deviation only
+when it has at least two samples, which depends only on the fixed output length and so
+introduces no dependence on the data. This produces five statistics per path for the two
+short tilings and six for the long one, and because it departs from the literal description
+in the reference it is recorded as a deliberate departure rather than a silent
+simplification. The exact column layout, including which standard deviations are present, is
+emitted as machine-readable metadata so that the modelling and interpretation stages consume
+the true layout rather than reconstructing it.
+
+The analysis unit is the session, not the frame. A session's surviving frames are each
+turned into a pooled vector and then combined into one vector per session by concatenating
+their per-frame mean and per-frame median. This is the point at which the many correlated
+frames of a session stop being treated as independent observations: the label is one
+weight measurement per session, and the features are matched to it one-to-one, so a session
+with more surviving frames cannot come to dominate. The combination is a fixed pair of
+statistics, not a further choice to be searched.
+
+### Two implementations, one set of reported numbers
+
+The transform is available through two computational backends, and the study commits to one
+of them for every reported number. The reason is not correctness but reproducibility: the
+two backends agree only to a tolerance, not to the last bit, so allowing either to produce a
+reported artifact would make two runs of the same pipeline disagree in their last digits for
+no scientific reason. The numerical backend is therefore canonical for all reported WST
+features, and the alternative backend's role is to validate it and to serve throughput-only
+work that never reaches a reported table. Establishing that the alternative is a faithful
+stand-in surfaced a concrete constraint: its filter bank runs in single precision and cannot
+be coerced to double, so the two backends can only ever be compared as double against
+single. That comparison passes the strict tolerance regardless — the largest relative
+discrepancy across all three tilings, both channels, and both logarithm states stays a small
+fraction of the allowed bound, on synthetic and on real frames alike — so no loosening of
+the tolerance was needed, and the possibility of one was declined rather than exercised. The
+agreement criterion itself is a single frozen formula with an absolute floor for
+coefficients near zero, applied identically wherever the two backends are compared, so the
+gate cannot drift between one test and another.
+
+### What the transform costs, and that it never fails
+
+Run once over the whole eligible cohort, the transform and its pooling produce a finite
+feature vector for every one of the 73 sessions, in every combination of reduction, channel,
+tiling and logarithm state — the finiteness that each unit test asserts on a single frame
+holds at cohort scale. The full pass takes about twelve minutes on one machine, which fixes
+the cost of recomputing features inside a model search and confirms that no cached
+intermediate is needed. That figure is only real because a first attempt was five times
+slower and the cause was found rather than tolerated: the per-path pooling loop, not the
+transform, was dominating, and rewriting it to work over all paths at once restored the
+transform to its rightful place as the expense. The measured feature dimensions, the pre-log
+coefficient scales, and the cohort-wide finiteness are recorded alongside the run so that the
+representation the models receive is fully characterised before any model is fit.
+
+### How correctness was established
+
+As with the preprocessing, nothing here is checked against the earlier implementation.
+Correctness rests on properties that a correct transform has and plausible mistakes do not:
+the millisecond-to-sample-to-octave arithmetic is verified against independent computation;
+the padding, path count and output length are asserted at their measured values so a library
+change cannot pass unnoticed; the edge-effect warning is required to appear for every tiling,
+so silencing it would fail the test rather than hide the issue; every combination of channel,
+order and logarithm state is shown to be finite, and the one case that could produce a
+non-finite value — logging a negative zeroth-order coefficient — is constructed on purpose
+and shown not to; a small time shift is shown to move the averaged coefficients by less than
+half of the shift it was given, a bound argued before the measurement rather than fitted to
+it; the batched transform is bit-identical to transforming each frame alone; the two backends
+agree to the frozen tolerance; the pooled layout matches a hand computation element by
+element for both the five- and six-statistic cases, and a deliberately reordered reference is
+shown to fail that comparison; and the session vector is the concatenation of mean and median
+it claims to be. The two independence properties — batched equals single-frame, and the whole
+extraction is deterministic under a fixed seed — are again what make the claim of an unfitted,
+per-session, population-independent representation executable rather than merely asserted.
 
 ## 4. Fluid-loss regression — Experiment A  *(fill at milestone 5–6)*
 

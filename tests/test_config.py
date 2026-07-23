@@ -212,6 +212,55 @@ def test_wst_tilings_cannot_be_overridden(tmp_path, overlay):
         load_config(EXP_A, overlay, bad)
 
 
+# --------------------------------------------------------------- WST field validation
+# Consumed from M4 (features/wst.py), so validated at load per the M2 rule.
+
+
+def test_wst_backend_default_and_override(tmp_path, overlay):
+    assert load_config(EXP_A, overlay).wst.backend == "numpy"
+    override = write_yaml(tmp_path / "b.yaml", {"wst": {"backend": "torch"}})
+    assert load_config(EXP_A, overlay, override).wst.backend == "torch"
+
+
+def test_wst_backend_rejects_unknown(tmp_path, overlay):
+    bad = write_yaml(tmp_path / "b.yaml", {"wst": {"backend": "jax"}})
+    with pytest.raises(ConfigError, match="wst.backend"):
+        load_config(EXP_A, overlay, bad)
+
+
+@pytest.mark.parametrize("value", [0, 3, -1])
+def test_wst_max_order_rejects_out_of_range(tmp_path, overlay, value):
+    bad = write_yaml(tmp_path / "mo.yaml", {"wst": {"max_order": value}})
+    with pytest.raises(ConfigError, match="wst.max_order must be 1 or 2"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_wst_max_order_rejects_non_int(tmp_path, overlay):
+    # A float (2.0) and a bool (YAML true) are both "not an integer" here.
+    for value in (2.0, True):
+        bad = write_yaml(tmp_path / "mo.yaml", {"wst": {"max_order": value}})
+        with pytest.raises(ConfigError, match="wst.max_order must be an integer"):
+            load_config(EXP_A, overlay, bad)
+
+
+@pytest.mark.parametrize("value", [0, -1e-6])
+def test_wst_log_epsilon_rejects_non_positive(tmp_path, overlay, value):
+    bad = write_yaml(tmp_path / "eps.yaml", {"wst": {"log_epsilon": value}})
+    with pytest.raises(ConfigError, match="wst.log_epsilon"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_wst_log_epsilon_override(tmp_path, overlay):
+    override = write_yaml(tmp_path / "eps.yaml", {"wst": {"log_epsilon": 1.0e-8}})
+    assert load_config(EXP_A, overlay, override).wst.log_epsilon == 1.0e-8
+
+
+def test_wst_provenance_carries_backend(overlay):
+    d = config_to_dict(load_config(EXP_A, overlay))
+    assert d["wst"]["backend"] == "numpy"
+    assert d["wst"]["max_order"] == 2
+
+
 # ------------------------------------------------------- QC / preprocess validation
 # M2 actually consumes these numbers, so every field it activates is validated here
 # rather than surfacing later as a confusing numpy error inside a screen.

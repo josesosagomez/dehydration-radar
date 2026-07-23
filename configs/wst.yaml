@@ -6,5 +6,11 @@
 # kymatio filter bank — never hard-coded here.
 
 wst:
-  max_order: 2       # orders 0/1/2 kept
-  log_epsilon: 1.0e-6  # log(S + eps) on orders 1-2 only; order 0 stays linear
+  max_order: 2       # orders 0/1/2 kept (frozen protocol constant)
+  log_epsilon: 1.0e-6  # log(S + eps) on orders 1-2 only; order 0 stays linear (frozen)
+  # kymatio frontend. Implementation choice validated by the cross-backend equivalence
+  # test -- NOT a search axis or ablation. numpy is canonical for every reported WST
+  # feature; a torch frontend backs only unreported work, and only after that test
+  # passes (kymatio's torch bank is float32, so the check compares numpy-f64 vs
+  # torch-f32; it clears the strict tolerance -- see MILESTONE_4_PLAN.md and HISTORY).
+  backend: numpy
