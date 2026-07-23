@@ -12,11 +12,30 @@
 # feature run.
 
 set -euo pipefail
+
+# A batch shell is NON-INTERACTIVE: it never sources ~/.bashrc, so the PATH entry the uv
+# installer appends there is absent -- this is the `uv: command not found` failure.
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+cd "${SLURM_SUBMIT_DIR:-.}"
 mkdir -p logs
 
 export HDF5_USE_FILE_LOCKING=FALSE
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-4}
 
-uv run python experiments/run_preprocess77.py \
+# Prefer the venv built by `uv sync --frozen` on the LOGIN node (compute nodes generally have
+# no outbound network, so nothing here may resolve or download a package).
+if [ -x .venv/bin/python ]; then
+  PYTHON=(.venv/bin/python)
+elif command -v uv >/dev/null 2>&1; then
+  PYTHON=(uv run --no-sync python)
+else
+  echo "ERROR: no .venv/bin/python and no uv on PATH." >&2
+  echo "On the LOGIN node, from the repo root, run:  uv sync --frozen" >&2
+  exit 1
+fi
+echo "interpreter  : ${PYTHON[*]}"
+
+"${PYTHON[@]}" experiments/run_preprocess77.py \
   --config configs/exp_77ghz.yaml \
   --config configs/ibex.yaml

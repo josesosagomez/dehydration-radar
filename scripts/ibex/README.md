@@ -5,22 +5,36 @@ IBEX is CPU-only here: numpy is the canonical backend for every reported feature
 policy), so no GPU is requested. `configs/ibex.yaml` is a **paths-only overlay**; because it
 changes only `paths.*`, an axis certificate written on one machine stays valid after rsync.
 
-## 0. One-time setup on IBEX
+## 0. One-time setup on IBEX — **on the LOGIN node**
+
+Everything in this section must run on the **login** node, not in a batch job: it needs
+outbound network, which compute nodes generally do not have.
 
 ```bash
 # uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"   # this session; the installer only
+                                                        # edits ~/.bashrc, which batch jobs
+                                                        # never source (see the note below)
 
 # clone + the pinned environment (uv.lock pins scipy <1.17; the torch CPU wheel rides along)
 git clone <repo-url> dehyd && cd dehyd
 git checkout v1_milestone_5
-uv sync --frozen
+uv sync --frozen          # creates .venv/ — the batch jobs use it directly
 
 # kymatio import smoke (numpy frontend)
-uv run python -c "from kymatio.numpy import Scattering1D; print('kymatio ok')"
+.venv/bin/python -c "from kymatio.numpy import Scattering1D; print('kymatio ok')"
 ```
 
 Edit `configs/ibex.yaml` and replace every `<user>` with your IBEX username.
+
+> **Why the sbatch scripts do not just call `uv`.** A Slurm batch script runs in a
+> **non-interactive** shell, which never sources `~/.bashrc` — so the PATH entry the uv
+> installer appends there is absent and `uv run ...` fails with `uv: command not found`.
+> The scripts therefore (a) add `~/.local/bin` and `~/.cargo/bin` to PATH explicitly, and
+> (b) prefer `.venv/bin/python` directly, falling back to `uv run --no-sync`. Running
+> `uv sync --frozen` on the login node first is what makes (b) work, and it also guarantees
+> no job ever tries to resolve or download a package from a compute node.
 
 ## 1. Stage the data (once)
 
