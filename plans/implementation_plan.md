@@ -10,8 +10,11 @@ leakage and is not defensible. The rebuild replaces it with an **honest pipeline
 whose headline is **regression of fluid loss (Δm%)** validated against measured
 body-mass change under **leave-one-subject-out (LOSO)** CV, with the 5-class task
 demoted to a secondary *ordinal* problem. Primary modality is the 10 GHz CN0566
-radar; 77 GHz is used only for a cross-band fusion section on the same 16-subject
-cohort.
+radar. **77 GHz — originally used only for a cross-band fusion section — is
+promoted to a full parallel primary arm: Experiments A–F run on 77 GHz too (on the
+same 16-subject cohort, with band-appropriate parameters), while 10 GHz remains the
+sole headline (the modality still available for future work) and the cross-band
+fusion (Experiment G) is retained.** *(A-M5-1, 2026-07-23; owner-approved.)*
 
 **The MATLAB code in `matlab/` is reference material only** — a guide to how the
 original processing was done. **All reported results come from Python alone**;
@@ -38,7 +41,7 @@ CLAUDE.md / ROADMAP §1.
   pre-arrangement IQ, **unused** by the reference pipeline (we ignore it too).
   → One file = one subject/session = 100 frames. 16×5×100 = 8000 frames pre-QC.
 - **77 GHz**: MAT **v7.3 / HDF5**, ~276 MB each (~21.5 GB total) → `h5py`, not
-  `loadmat`. Deferred to the fusion milestone. Frame count differs from 10 GHz
+  `loadmat`. Built at the 77 GHz front-end milestone (milestone 5). Frame count differs from 10 GHz
   (125/session), which forces session-level fusion (see Exp G).
   **Confirmed on a real file at milestone 2** (`experiments/audit_77ghz.py`,
   `results/qc/audit_77ghz.json`, subject 1 8am): shape `(16, 256, 256, 125)` exactly
@@ -109,7 +112,7 @@ src/dehyd/
   config.py                     # load/validate YAML, resolve seeds & device
   data/
     loader_10ghz.py             # loadmat -> complex128 framesRadar cube; parse subject/session
-    loader_77ghz.py             # h5py; full axis reversal -> (Nframes,Nfast,Nchirps,Nrx); asserts on-disk shape (fusion milestone)
+    loader_77ghz.py             # h5py; full axis reversal -> (Nframes,Nfast,Nchirps,Nrx); asserts on-disk shape (milestone 5 — 77 GHz front-end)
     ground_truth.py             # fixed-cell xlsx parse -> signed Δm%, 5-class label, covariates; cross-check
     manifest.py                 # frame index table; FAILS on missing/dup/unmatched; per-frame QC reason codes
   qc/screens.py                 # flatline / robust RMS / in-band energy (pre-filter) screens with frozen thresholds
@@ -162,14 +165,14 @@ and nothing MATLAB-derived is reported.)
    Original scope, for reference: Deterministic
    xlsx parse + cross-check; 10 GHz QC screens with frozen thresholds and per-frame
    reason codes; log per-subject/session removal counts; in-band energy computed
-   **before** bandpass filtering. **The milestone-5 freeze fixes 77 GHz QC/tilings/
+   **before** bandpass filtering. **The milestone-6 freeze fixes 77 GHz QC/tilings/
    input-domain/fusion, so those choices must rest on a real 77 GHz file, not
    assumptions** — therefore a *minimal* 77 GHz audit happens here (full extraction
-   still deferred to milestone 9): install `h5py`, load one real file, confirm
+   built at milestone 5, the 77 GHz front-end): install `h5py`, load one real file, confirm
    dtype / shape / complex representation, run the **raw-data axis semantic check**
    (range structure vs near-zero-Doppler, before clutter subtraction), and verify the
    proposed QC + range-Doppler operations produce **non-degenerate (nonzero-energy)**
-   data. Findings are logged and feed the milestone-5 freeze.
+   data. Findings are logged and feed the milestone-5 front-end build and the milestone-6 freeze.
 3. ✅ **DONE (2026-07-23) — Preprocessing:** the executable sequence below, validated
    by self-consistency checks (filter response, zero-phase, finite-record energy,
    Option-B ROI/mask, determinism) on Python output. *Execution detail:
@@ -189,8 +192,14 @@ and nothing MATLAB-derived is reported.)
    half's std. Key finding: ε = 1e-6 is negligible vs order-1 (~1e-3) but 12–64 % of the
    tiny order-2 scale (~1e-6) — the "O(1) coefficient" assumption is false; ε stays
    frozen, log on/off decides at M6.*
-5. **Config-freeze gate — the COMPLETE A–G protocol, before any outer results are
-   inspected.** Because B–G reuse the same 16 subjects, any protocol choice made after
+5. **77 GHz front-end — loader → QC → preprocessing → slow-time I/Q WST, the
+   parallel-arm build (first IBEX milestone).** Mirrors milestones 2–4 for the second
+   band so the 77 GHz arm's QC/eligibility/tilings rest on the real cohort before the
+   freeze. Stops at features + cohort diagnostics; no modelling. *Execution detail:
+   `plans/MILESTONE_5_PLAN.md`; per-step log: HISTORY.md.* *(A-M5-1/A-M5-2, 2026-07-23;
+   owner-approved.)*
+6. **Config-freeze gate — the COMPLETE A–G protocol (both bands), before any outer
+   results are inspected.** Because B–G reuse the same 16 subjects, any protocol choice made after
    seeing Exp A's outer-fold results is indirectly informed by later "test" subjects.
    So the freeze covers **every experiment's design**, committed to versioned
    `configs/` and git before modeling: the Exp A/WST search space **and its staged-
@@ -208,13 +217,14 @@ and nothing MATLAB-derived is reported.)
    Hann-tapered mask" itself — and the FFT-gate transition 500 Hz): modeling
    entrypoints validate them at their frozen values, so a non-whitelisted value can
    never reach outer-fold evaluation merely because a low-level function supports it.
-6. **LOSO harness + fluid-loss regression (Exp A)** — the headline, session-level.
-7. **Clock-decoupling analysis (Exp B)** — design locked (below) before Exp A results
+7. **LOSO harness + fluid-loss regression (Exp A)** — the headline, session-level;
+   runs on both 10 GHz and 77 GHz.
+8. **Clock-decoupling analysis (Exp B)** — design locked (below) before Exp A results
    are examined.
-8. **Ordinal 5-class (Exp C)** + **baselines (Exp D)** under the same harness (specs
-   already frozen at milestone 5).
-9. **Fusion (G)**, **interpretability (E)**, **confound check (F)**, **stats (H)**.
-10. **Figure/table generation** for the chapter (one command each).
+9. **Ordinal 5-class (Exp C)** + **baselines (Exp D)** under the same harness (specs
+   already frozen at milestone 6).
+10. **Fusion (G)**, **interpretability (E)**, **confound check (F)**, **stats (H)**.
+11. **Figure/table generation** for the chapter (one command each).
 
 ## Project journal & file hygiene (CLAUDE.md §Project journal files, §File hygiene)
 
@@ -251,7 +261,7 @@ of the pipeline is moved to `archive/`, with the move noted in HISTORY.md.
   permitted only after the equivalence test (below) passes, backend always recorded
   in provenance. **This does not constrain PyTorch as a modeling framework** — the
   reported DL baselines (Exp D) are torch-trained as specified, and the torch fit
-  path is protected by the no-leakage torch mutation leg at milestone 6. Any future
+  path is protected by the no-leakage torch mutation leg at milestone 7. Any future
   reported use of torch-frontend WST features is an explicit owner decision revising
   this policy. *(A-M4-1, 2026-07-23; scoped to the frontend in review round 3.)*
 - **Classical models**: scikit-learn (Ridge, SVR, RandomForest, GradientBoosting,
@@ -451,7 +461,7 @@ tiling, at fs=520834 Hz on the trimmed length N=470:
     showed the fold-to-fold order-2 scale is stable to **< 1 %** (per-subject spread
     ~14 %), so a data-derived ε would be near-leakage-free here — motivating the
     pre-registered third log branch below rather than any change now.
-  - **Log branch — pre-registered inner-CV axis (candidate; confirmed/frozen at M5).**
+  - **Log branch — pre-registered inner-CV axis (candidate; confirmed/frozen at M6).**
     The log axis carries **three** mutually exclusive branches, not two: **(a) log off**;
     **(b) log on with the frozen ε = 1e-6** (the rule above); **(c) log on with a
     fold-local, scale-relative *per-order* ε rule** — `ε_o = k · (order-o coefficient
@@ -562,7 +572,7 @@ subjects** (15 when N_eval=16, otherwise N_eval−1)**:**
   range-gate {1–2 m default, 0.9–3.0 m} × model family × that model's small
   hyperparameter grid. The **log** axis's third branch (`on+tuned-ε` = the fold-local,
   scale-relative per-order ε rule of §"WST parameterization", A-M4-7) is a
-  **pre-registered candidate confirmed/frozen at M5** and **only if** the
+  **pre-registered candidate confirmed/frozen at M6** and **only if** the
   order-2-usefulness pre-check clears — otherwise the axis reverts to {off / on+frozen-ε}
   so no dead option widens the N = 16 search. The space is kept modest for tractability;
   if needed it is searched in a fixed staged order, but **every** data-dependent choice
@@ -617,9 +627,9 @@ inner-selection fit is estimated from exactly that fold's inner-train subjects, 
 final refit from exactly the full outer-training set.
 *Staging:* at milestone 1 the test runs against a test-local sklearn reference
 procedure that defines the selection/refit contract `harness.py` must satisfy; at
-milestone 6 it rebinds to the real `harness.py`. torch enters the environment at
+milestone 7 it rebinds to the real `harness.py`. torch enters the environment at
 milestone 4 (WST cross-backend validation), but the torch-path mutation assertions
-stay skip-marked until the torch fit path exists in `harness.py` (milestone 6), and
+stay skip-marked until the torch fit path exists in `harness.py` (milestone 7), and
 must be green before any torch result is reported.
 
 **Reporting the selection, not a single "winning model."** Nested CV may select
@@ -703,7 +713,7 @@ classifier is not.
   configs are non-evaluable the fold contributes no ordinal score. When **QWK is
   undefined** on a validation set (one class present), selection **falls back to the
   primary class-unit MAE** for that fold rather than erroring. These rules are frozen
-  at milestone 5.
+  at milestone 6.
 
 **D — Baselines (fair by construction).** All baselines share **identical** outer
 folds, inner subject-validation, QC-passed population, session weighting/aggregation,
@@ -761,7 +771,7 @@ at the config-freeze gate below, before any results are viewed):
   given the **same inner-CV configuration budget** (≤ K configs each, K fixed in
   config) and the same seed set, so "WST wins" is not an artifact of unequal search.
 
-All baseline specs above are locked at the **config-freeze gate (milestone 5)**,
+All baseline specs above are locked at the **config-freeze gate (milestone 6)**,
 before any Exp A/D results are inspected; nothing here is chosen or adjusted after
 seeing outer-test scores.
 
@@ -782,7 +792,7 @@ Identify which scattering paths drive the prediction.
   training set (contamination). Instead we run a **dedicated interpretability analysis**,
   descriptive-only and fully separate from the reported A/B predictions:
   - A **single pre-registered interpretability configuration** (one tiling + one model
-    family, fixed at milestone 5) is used throughout, so importances are comparable.
+    family, fixed at milestone 6) is used throughout, so importances are comparable.
   - **Grouped subject CV with multiple held-out subjects per fold** (**4-fold
     subject-grouped CV**, ~4 validation subjects each). In each fold the config is fit on
     that fold's training subjects; permutation happens **only among the held-out
@@ -894,15 +904,20 @@ correspondence can be demonstrated.
   256 chirps; **(2)** fast-time Butterworth bandpass (2–4 m gate); **(3)** Hann window on
   the fast-time axis; **(4)** range FFT (256-pt, fast-time); **(5)** crop range to the
   2–4 m bins. Then **slow-time I/Q WST, per Rx**: **(6)** for each retained range bin,
-  WST the 256-point complex slow-time series as **two channels {real, imag}**
+  **robust-standardize (median/MAD) the real and imag channels separately** — the same
+  robust standardization the 10 GHz chain applies via `to_channels('iq')` and the
+  reference `wst_extract77.m` applies before WST *(A-M5-3, 2026-07-23; owner-approved)* —
+  then WST the 256-point complex slow-time series as **two channels {real, imag}**
   (`fs = PRF`, invariance 20/40/60 ms); **(7)** average the scattering matrices across
   range bins → one per-Rx feature; **(8)** **feature-space Rx fusion** = mean over the 16
-  per-Rx features (median secondary); **(9)** pool (mean/std over global + halves) →
+  per-Rx features (median secondary); **the order-aware log branch (§"WST parameterization")
+  applies here, to the fused per-frame scattering tensor, before pooling** *(A-M5-4,
+  2026-07-23; owner-approved)*; **(9)** pool (mean/std over global + halves) →
   per-frame vector; **(10)** session pooling = concatenated per-frame **mean + median**.
   *(A spectral variant — Doppler FFT then WST the magnitude spectrum as a shape
   descriptor — is allowed only as a secondary branch, with scales expressed in
   Doppler-frequency/bin units and no temporal interpretation.)*
-- **Frozen 77 GHz pipeline** (locked at milestone 5; concrete, no data-dependent
+- **Frozen 77 GHz pipeline** (locked at milestone 6; concrete, no data-dependent
   fitting):
   - **QC:** same rule structure as 10 GHz with **fixed** numbers for 256-sample
     fast-time — flatline histogram **128 bins**, evaluated per **(Rx, chirp)**
@@ -1110,7 +1125,8 @@ regenerable by one command from saved intermediate artifacts.
    the on-disk layout (100 frames in one file per session). Loader follows the actual
    files; net 100/session is unchanged.
 4. **77 GHz volume/compute** (~23 GB, 4-D filtering + RD maps + per-Rx WST) is heavy;
-   confined to the late fusion milestone, at session level, no generalization claim.
+   handled at the 77 GHz front-end milestone (milestone 5, on IBEX) and the fusion
+   milestone (milestone 10), at session level, no generalization claim.
 5. **Reference-guided, not reference-matched.** Numbers will differ from MATLAB; that
    is expected. Correctness rests on Python-native self-consistency checks and the
    no-leakage protocol; every deliberate departure is logged.

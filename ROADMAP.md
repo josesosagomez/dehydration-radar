@@ -13,7 +13,10 @@ regression comes out genuinely strong under leave-one-subject-out evaluation.
 
 **Primary modality:** the 10 GHz CN0566 radar (the one still available for future
 work). The 77 GHz Inras data exists only for the original 16-subject fasting
-cohort and is used solely for a cross-band fusion section on that cohort.
+cohort. **Originally used solely for cross-band fusion, it is promoted to a full
+parallel primary arm: Experiments A–F run on 77 GHz too (band-appropriate
+parameters), while 10 GHz remains the sole headline and the cross-band fusion
+(Experiment G) is retained.** *(A-M5-1, 2026-07-23; owner-approved.)*
 
 **The core reframe:** the published paper reports frame-level, subject-dependent
 5-class accuracy (~96–98%). That number is inflated by session-block leakage and
@@ -150,11 +153,15 @@ significance test comparing the best model against the strongest baseline.
 3. Preprocessing, validated by self-consistency checks (filter response, zero-phase,
    energy sanity) — not by diffing MATLAB.
 4. WST feature extraction + path-structure / shift-stability checks.
-5. LOSO harness + fluid-loss regression (Experiment A).
-6. Clock-decoupling analysis (Experiment B).
-7. Ordinal classification (C) + baselines (D).
-8. Fusion (G), interpretability (E), confound check (F), stats (H).
-9. Figure/table generation for the chapter.
+5. **77 GHz front-end: loader → QC → preprocessing → slow-time I/Q WST — the
+   parallel-arm build (first IBEX milestone).** *(A-M5-2, 2026-07-23; owner-approved.
+   Note: `plans/implementation_plan.md` inserts a config-freeze gate before Experiment A
+   that this list does not, so from here its milestone numbers run one ahead.)*
+6. LOSO harness + fluid-loss regression (Experiment A) — on both bands.
+7. Clock-decoupling analysis (Experiment B).
+8. Ordinal classification (C) + baselines (D).
+9. Fusion (G), interpretability (E), confound check (F), stats (H).
+10. Figure/table generation for the chapter.
 
 ## 8. Honesty guardrails (do not violate)
 

@@ -6,6 +6,45 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-23 — **MILESTONE 5 PLAN drafted, Codex-reviewed, and owner-approved (scope + amendments).**
+
+**Scope decision (owner).** 77 GHz is promoted from fusion-only (Exp G) to a **full parallel
+primary arm**: Experiments A–F run on 77 GHz too (16-subject cohort, band-appropriate
+parameters); 10 GHz stays the sole headline; Exp G fusion retained. A new **milestone 5 =
+77 GHz front-end** (loader → QC → preprocessing → slow-time I/Q WST → cohort diagnostics;
+first IBEX milestone) is inserted before the config-freeze gate; downstream milestones
+renumber +1 (config-freeze → 6, harness/Exp A → 7 … figures → 11). Applied to
+`implementation_plan.md` (§Context, §Build order, all milestone cross-refs) and `ROADMAP.md`
+(§0, §7) as amendments **A-M5-1/A-M5-2** — the owner-approved step-0 prerequisite (Codex
+C5-01/C5-02: authorities must be amended before implementation, not by assertion).
+
+**`plans/MILESTONE_5_PLAN.md` written** in the M4 template style (config → loader → manifest
+→ QC/axis-check → preprocessing → WST → 3 CLIs → IBEX; ≈85–90 new tests). **Codex review: 24
+comments over 5 rounds (C5-01…C5-24), all accepted and applied, none disputed/escalated.**
+Notable fixes: batch shape corrected 864→**432** complex series (`[432,2,256]`); axis check
+**fails closed on any non-ACCEPTED** verdict + per-entrypoint cert guard keyed to
+`sha256`+`axis_spec_hash`; the flatline decision reframed as **mechanism-based (M2 audit),
+never cohort-survival** (leakage); executable **tuned-ε handoff** (M7 re-extracts with a
+train-fitted `epsilon_by_order`); outcome-(c) data-adaptive path forks M5 (stops before cohort
+features, emits a non-authoritative `qc_characterization_77ghz.csv`); shard fingerprinting;
+8-byte-float loader check; vectorized batch standardization; non-curated fixed-frame smoke.
+
+**Owner decisions (2026-07-23):**
+- **Flatline rule → outcome (b)** (mechanism-corrected exact replacement of the **77 GHz**
+  screen; the 10 GHz screen is untouched and stays frozen since M2). Exact corrected rule to
+  be specified at M5 step 6 from the ADC-quantisation mechanism, not cohort survival. M5 thus
+  proceeds to the cohort feature runs; (a)/(c) retained as fallbacks. (A-M5-6.)
+- **A-M5-3 (standardization) and A-M5-4 (log placement) confirmed and APPLIED** to the
+  `implementation_plan.md` Exp G chain: step (6) robust-standardizes real/imag separately
+  (10 GHz-consistent); the order-aware log applies to the fused per-frame tensor at step (8),
+  keeping the three-branch log axis (off / on+frozen-ε / on+tuned-ε).
+
+Next: implement M5 per the plan (still awaiting go); step-6 flatline rule and the M6 freeze
+are the open design gates. `test_no_leakage.py` untouched throughout (plan is per-frame,
+unfitted).
+
+---
+
 ## 2026-07-23 — **MILESTONE 4 COMPLETE.** Definition of done met in full.
 
 **D1 — mandatory suite, no private data.** `uv run pytest` → **396 passed, 12 skipped**
