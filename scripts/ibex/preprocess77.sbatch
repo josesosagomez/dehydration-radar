@@ -36,6 +36,19 @@ else
 fi
 echo "interpreter  : ${PYTHON[*]}"
 
+# Fast preflight: fail in SECONDS naming every missing module at once, rather than having a
+# multi-hour job trip over them one at a time (this is how the openpyxl gap surfaced).
+"${PYTHON[@]}" - <<'PYCHECK'
+import importlib.util, sys
+need = ["numpy", "scipy", "pandas", "openpyxl", "yaml", "sklearn", "kymatio", "h5py", "dehyd"]
+missing = [m for m in need if importlib.util.find_spec(m) is None]
+if missing:
+    print("ERROR: missing modules: " + ", ".join(missing), file=sys.stderr)
+    print("On the LOGIN node, from the repo root, run:  uv sync --frozen", file=sys.stderr)
+    sys.exit(1)
+print("preflight    : all runtime modules present")
+PYCHECK
+
 "${PYTHON[@]}" experiments/run_preprocess77.py \
   --config configs/exp_77ghz.yaml \
   --config configs/ibex.yaml

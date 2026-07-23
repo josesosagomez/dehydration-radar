@@ -38,6 +38,19 @@ else
   exit 1
 fi
 
+# Fast preflight: fail in SECONDS naming every missing module at once, rather than having a
+# multi-hour job trip over them one at a time (this is how the openpyxl gap surfaced).
+"${PYTHON[@]}" - <<'PYCHECK'
+import importlib.util, sys
+need = ["numpy", "scipy", "pandas", "openpyxl", "yaml", "sklearn", "kymatio", "h5py", "dehyd"]
+missing = [m for m in need if importlib.util.find_spec(m) is None]
+if missing:
+    print("ERROR: missing modules: " + ", ".join(missing), file=sys.stderr)
+    print("On the LOGIN node, from the repo root, run:  uv sync --frozen", file=sys.stderr)
+    sys.exit(1)
+print("preflight    : all runtime modules present")
+PYCHECK
+
 # Task id -> (subject, session): subject = id/5 + 1, session = SESSION_NAMES[id % 5].
 SESSIONS=(8am 10am 12pm 2pm 4pm)
 SUBJECT=$(( SLURM_ARRAY_TASK_ID / 5 + 1 ))
