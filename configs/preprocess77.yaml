@@ -1,0 +1,27 @@
+# Frozen 77 GHz QC + preprocessing constants (implementation_plan.md Exp G chain).
+# Consumed from M5. Stated explicitly (not left to code defaults) so a run's YAML is a
+# complete record; values match src/dehyd/config.py QC77Config / Preprocess77Config.
+#
+# NOTE the signed exponents: YAML 1.1 only recognises a float when the exponent carries
+# a sign, so `500.0e3` would silently load as the STRING "500.0e3".
+
+qc77:
+  histogram_bins: 128               # flatline magnitude histogram, per (Rx, chirp) trace
+  flatline_max_bin_fraction: 0.25   # any bin >= 25% of the screened samples flags a trace (any-trace rule)
+  # M5 step-6 flatline correction (owner outcome b): exclude range bin 0 — it holds an
+  # embedded per-chirp frame counter (~256*frame, universal), not echo. That single outlier
+  # stretched the [min,max] histogram range into a false flatline (M2's 7/10). Both Hann
+  # windows zero fast[0] and the 2-4 m gate (bins 27..53) excludes it, so it never reaches
+  # the WST features — it corrupted only this raw-magnitude screen. See HISTORY 2026-07-23.
+  flatline_skip_leading_bins: 1
+  min_in_band_energy_ratio: 0.30    # reject below this in-band/total power ratio
+  in_band_margin_hz: 1953.125       # one FFT bin = fs/256, frozen a priori
+  min_frame_fraction: 0.5           # session kept iff >= ceil(0.5 * actual frame count)
+
+preprocess77:
+  butter_order: 4                   # scipy butter(4, ...) -> 8 poles, as in the reference
+  gate_m: [2.0, 4.0]                # ONE gate: chain range crop AND QC in-band mask
+  fs_hz: 500.0e+3                   # slow-time context; PRF = 1/chirp_time_s = 1953.125 Hz
+  bandwidth_hz: 2.0e+9
+  chirp_time_s: 512.0e-6
+  standardize: robust               # per-channel median/MAD z before WST; meanstd = ablation

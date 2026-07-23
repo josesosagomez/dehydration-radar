@@ -13,10 +13,21 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dehyd.config import REPO_ROOT, Config, ConfigError, config_to_dict, load_config
+from dehyd.config import (
+    REPO_ROOT,
+    Config,
+    ConfigError,
+    Preprocess77Config,
+    QC77Config,
+    WST77Config,
+    config_to_dict,
+    load_config,
+    require_77ghz_dir,
+)
 
 CONFIGS = REPO_ROOT / "configs"
 EXP_A = CONFIGS / "exp_a_regression.yaml"
+EXP_77 = CONFIGS / "exp_77ghz.yaml"
 
 
 @pytest.fixture
@@ -460,6 +471,154 @@ def test_wide_fft_transition_allowed_on_the_butterworth_path(tmp_path, overlay):
     assert load_config(EXP_A, overlay, ok).preprocess.gate_method == "butterworth"
 
 
+# ------------------------------------------- M5 77 GHz config fields (T-C77, §2.1)
+# Three parallel top-level sections (qc77 / preprocess77 / wst77) — different physics,
+# their own frozen defaults. Always built (via default_factory), so every 10 GHz base
+# config exercises them at their defaults; overrides ride on EXP_A + overlay.
+
+
+def test_77ghz_sections_default_on_a_10ghz_config(overlay):
+    """The *77 sections appear at their frozen defaults even on a 10 GHz-only config."""
+    cfg = load_config(EXP_A, overlay)
+    assert cfg.qc77 == QC77Config()
+    assert cfg.preprocess77 == Preprocess77Config()
+    assert cfg.wst77 == WST77Config()
+
+
+def test_77ghz_frozen_defaults_pinned():
+    """One literal-pinning test for the frozen 77 GHz defaults group (the M4 exception).
+
+    If step 6 replaces the flatline rule (outcome b), THESE literals change here in
+    lockstep with QC77Config, the YAML, and the canonical guard — the test is the tripwire
+    that a stale value was left behind.
+    """
+    qc, pre, wst = QC77Config(), Preprocess77Config(), WST77Config()
+    assert (qc.histogram_bins, qc.flatline_max_bin_fraction, qc.flatline_skip_leading_bins,
+            qc.min_in_band_energy_ratio, qc.in_band_margin_hz, qc.min_frame_fraction) == (
+        128, 0.25, 1, 0.30, 1953.125, 0.5)
+    assert (pre.butter_order, pre.gate_m, pre.fs_hz, pre.bandwidth_hz, pre.chirp_time_s,
+            pre.standardize) == (4, (2.0, 4.0), 500e3, 2e9, 512e-6, "robust")
+    assert wst.max_order == 2 and wst.log_epsilon == 1e-6 and wst.backend == "numpy"
+    assert wst.tilings == (
+        type(wst.tilings[0])(q=(8, 4), invariance_ms=20.0),
+        type(wst.tilings[0])(q=(6, 4), invariance_ms=40.0),
+        type(wst.tilings[0])(q=(4, 2), invariance_ms=60.0),
+    )
+
+
+def test_qc77_override_honoured(tmp_path, overlay):
+    override = write_yaml(tmp_path / "q.yaml", {"qc77": {"min_in_band_energy_ratio": 0.5}})
+    assert load_config(EXP_A, overlay, override).qc77.min_in_band_energy_ratio == 0.5
+
+
+def test_preprocess77_override_honoured(tmp_path, overlay):
+    override = write_yaml(tmp_path / "p.yaml", {"preprocess77": {"standardize": "meanstd"}})
+    cfg = load_config(EXP_A, overlay, override)
+    assert cfg.preprocess77.standardize == "meanstd"
+
+
+def test_preprocess77_gate_normalised_to_tuple(tmp_path, overlay):
+    override = write_yaml(tmp_path / "g.yaml", {"preprocess77": {"gate_m": [2.5, 3.5]}})
+    gate = load_config(EXP_A, overlay, override).preprocess77.gate_m
+    assert gate == (2.5, 3.5) and isinstance(gate, tuple)
+
+
+def test_wst77_backend_default_and_override(tmp_path, overlay):
+    assert load_config(EXP_A, overlay).wst77.backend == "numpy"
+    override = write_yaml(tmp_path / "b.yaml", {"wst77": {"backend": "torch"}})
+    assert load_config(EXP_A, overlay, override).wst77.backend == "torch"
+
+
+def test_wst77_tilings_cannot_be_overridden(tmp_path, overlay):
+    bad = write_yaml(tmp_path / "t.yaml", {"wst77": {"tilings": [{"q": [2, 2]}]}})
+    with pytest.raises(ConfigError, match="frozen constants"):
+        load_config(EXP_A, overlay, bad)
+
+
+@pytest.mark.parametrize("value", [0, 3, -1])
+def test_wst77_max_order_rejects_out_of_range(tmp_path, overlay, value):
+    bad = write_yaml(tmp_path / "mo.yaml", {"wst77": {"max_order": value}})
+    with pytest.raises(ConfigError, match="wst77.max_order must be 1 or 2"):
+        load_config(EXP_A, overlay, bad)
+
+
+@pytest.mark.parametrize(
+    "section, key, value, match",
+    [
+        ("qc77", "histogram_bins", 128.0, "must be an integer"),
+        ("qc77", "histogram_bins", 0, "must be >= 1"),
+        ("qc77", "flatline_skip_leading_bins", -1, "must be an integer >= 0"),
+        ("qc77", "flatline_skip_leading_bins", 1.0, "must be an integer >= 0"),
+        ("qc77", "flatline_max_bin_fraction", 1.5, r"must be in \(0.0, 1.0\]"),
+        ("qc77", "min_in_band_energy_ratio", 1.1, r"must be in \[0.0, 1.0\]"),
+        ("qc77", "min_frame_fraction", 0.0, r"must be in \(0.0, 1.0\]"),
+        ("preprocess77", "butter_order", 0, "must be >= 1"),
+        ("preprocess77", "fs_hz", 0.0, "must be in"),
+        ("preprocess77", "standardize", "zscore", "preprocess77.standardize"),
+        ("wst77", "backend", "jax", "wst77.backend"),
+        ("wst77", "log_epsilon", 0.0, "wst77.log_epsilon"),
+    ],
+)
+def test_77ghz_bad_values_rejected(tmp_path, overlay, section, key, value, match):
+    bad = write_yaml(tmp_path / "bad.yaml", {section: {key: value}})
+    with pytest.raises(ConfigError, match=match):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_qc77_gate_above_nyquist_rejected(tmp_path, overlay):
+    """A syntactically valid but physically out-of-band 77 GHz gate fails the cross-check."""
+    bad = write_yaml(tmp_path / "bad.yaml", {"preprocess77": {"gate_m": [10.0, 12.0]}})
+    with pytest.raises(ConfigError, match="above Nyquist"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_preprocess77_gate_must_be_increasing(tmp_path, overlay):
+    bad = write_yaml(tmp_path / "bad.yaml", {"preprocess77": {"gate_m": [4.0, 2.0]}})
+    with pytest.raises(ConfigError, match="strictly increasing"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_data_77ghz_dir_optional(overlay):
+    """A 10 GHz-only config loads fine with data_77ghz_dir unset (None)."""
+    assert load_config(EXP_A, overlay).paths.data_77ghz_dir is None
+
+
+def test_data_77ghz_dir_existence_checked_when_present(tmp_path, overlay):
+    bad = write_yaml(
+        tmp_path / "d.yaml", {"paths": {"data_77ghz_dir": str(tmp_path / "nope")}}
+    )
+    with pytest.raises(ConfigError, match="data_77ghz_dir does not exist"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_require_77ghz_dir_raises_when_absent(overlay):
+    cfg = load_config(EXP_A, overlay)
+    with pytest.raises(ConfigError, match="data_77ghz_dir is not set"):
+        require_77ghz_dir(cfg)
+
+
+def test_require_77ghz_dir_returns_when_present(tmp_path, overlay):
+    d77 = tmp_path / "data77"
+    d77.mkdir()
+    override = write_yaml(tmp_path / "d.yaml", {"paths": {"data_77ghz_dir": str(d77)}})
+    cfg = load_config(EXP_A, overlay, override)
+    assert require_77ghz_dir(cfg) == d77.resolve()
+
+
+def test_10ghz_config_dict_unchanged_except_additive_77_defaults(overlay):
+    """Existing 10 GHz sections are byte-identical; the only new keys are the *77 defaults."""
+    d = config_to_dict(load_config(EXP_A, overlay))
+    # The pre-M5 sections are untouched.
+    assert d["qc"]["histogram_bins"] == 200
+    assert d["preprocess"]["butter_order"] == 4
+    assert d["wst"]["backend"] == "numpy"
+    assert d["paths"]["data_77ghz_dir"] is None
+    # The additive sections carry exactly the frozen 77 GHz defaults.
+    assert d["qc77"] == config_to_dict(QC77Config())
+    assert d["preprocess77"] == config_to_dict(Preprocess77Config())
+    assert d["wst77"] == config_to_dict(WST77Config())
+
+
 # ------------------------------------------------------------------------ provenance
 
 
@@ -481,3 +640,10 @@ def test_canonical_config_points_at_the_real_data(real_data_paths):
     cfg = load_config(EXP_A)
     assert cfg.paths.data_10ghz_dir == real_data_paths["data_10ghz_dir"]
     assert cfg.paths.weight_xlsx == real_data_paths["weight_xlsx"]
+
+
+@pytest.mark.realdata
+def test_canonical_77ghz_config_points_at_the_real_data(real_data_77_paths):
+    """The committed 77 GHz entry config resolves to the real 77 GHz cohort."""
+    cfg = load_config(EXP_77)
+    assert require_77ghz_dir(cfg) == real_data_77_paths["data_77ghz_dir"]

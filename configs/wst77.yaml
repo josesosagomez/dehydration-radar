@@ -1,0 +1,16 @@
+# 77 GHz WST parameters (implementation_plan.md Exp G / wst_extract77.m). Consumed
+# from M5.
+#
+# The three Doppler tilings are frozen constants and live in code
+# (src/dehyd/config.py WST77Config); overriding `tilings` here is REJECTED on purpose.
+# J and the output shape are DERIVED and MEASURED at build time from the instantiated
+# kymatio filter bank at fs = PRF = 1953.125 Hz — never hard-coded here.
+
+wst77:
+  max_order: 2         # orders 0/1/2 kept (frozen protocol constant)
+  log_epsilon: 1.0e-6  # log(S + eps) on the fused per-frame tensor, orders 1-2 only (frozen)
+  # kymatio frontend. Implementation choice validated by the 77 GHz cross-backend
+  # agreement test -- NOT a search axis or ablation. numpy is canonical for every
+  # reported 77 GHz feature; a torch frontend backs only unreported work, and only
+  # after that test passes.
+  backend: numpy

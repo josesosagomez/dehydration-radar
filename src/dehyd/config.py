@@ -53,6 +53,9 @@ class PathsConfig:
     data_10ghz_dir: Path
     weight_xlsx: Path
     results_dir: Path
+    # Optional so existing 10 GHz-only configs load unchanged. Required (and existence-
+    # checked) only for the 77 GHz entrypoints, via require_77ghz_dir(config).
+    data_77ghz_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -158,6 +161,84 @@ class WSTConfig:
     backend: str = "numpy"
 
 
+# --------------------------------------------------------------- 77 GHz (band 2)
+# The 77 GHz arm (milestone 5) is DIFFERENT PHYSICS, not overrides of the 10 GHz
+# defaults, so it gets its own three frozen dataclasses and three parallel top-level
+# config sections (qc77 / preprocess77 / wst77) — never a nested band block. Each band
+# then has its own canonical spec, so canonical_spec_guard_77 can compare against
+# Preprocess77Config()/QC77Config()/WST77Config() exactly as the 10 GHz guard does.
+# All values are the audited reference constants (matlab/77ghz_code/*, the M2 audit).
+
+
+@dataclass(frozen=True)
+class Preprocess77Config:
+    """Frozen 77 GHz preprocessing parameters (implementation_plan.md Exp G chain).
+
+    ONE range gate (2-4 m) serves both the chain crop and the QC in-band mask — the
+    Exp G spec freezes a single gate for both, so a separate qc77 gate would only be a
+    drift channel. No model_gate_m/edge_trim/peak_neighbors: the Doppler slow-time chain
+    has no reduction stage and no gate search (that would be a plan amendment, not a
+    config edit). `standardize` selects the per-channel robust z applied to each
+    slow-time series before WST (A-M5-3); robust is primary, meanstd the ablation.
+    """
+
+    butter_order: int = 4
+    gate_m: tuple[float, float] = (2.0, 4.0)
+    fs_hz: float = 500e3
+    bandwidth_hz: float = 2e9
+    chirp_time_s: float = 512e-6  # PRF = 1/chirp_time_s = 1953.125 Hz (derived)
+    standardize: str = "robust"
+
+
+@dataclass(frozen=True)
+class QC77Config:
+    """Frozen 77 GHz QC screen thresholds (implementation_plan.md Exp G QC).
+
+    Exactly three screens (NaN/Inf, flatline, in-band): no RMS robust-z diagnostic
+    (that is a 10 GHz-only diagnostic, not specified for 77 GHz). The gate itself is NOT
+    here — it lives once in Preprocess77Config.gate_m and screens_77 reads it there.
+
+    Milestone-5 step-6 flatline rule (owner outcome (b), mechanism-corrected):
+    `flatline_skip_leading_bins = 1` excludes fast-time index 0 (range bin 0) from the
+    flatline screen. The M5 mechanism analysis (HISTORY 2026-07-23) found range bin 0 of
+    every (Rx, chirp) trace carries an EMBEDDED FRAME COUNTER (value ~256*frame, per-chirp
+    increment, universal across files, ~20-90x the ~27 echo), NOT echo. That single
+    outlier stretched the per-trace [min,max] histogram range so the ~255 genuine samples
+    piled into the first bins and false-tripped the >=25% concentration rule (M2's 7/10
+    'flatline'). Both Hann windows zero fast[0] and the gate crop (bins 27..53) excludes
+    bin 0, so the counter never reaches the WST features — it corrupted only this
+    raw-magnitude screen. Excluding it restores the proven 128-bin/0.25 rule on the echo
+    samples; a genuinely dead/constant channel is still flagged (degenerate spread).
+    """
+
+    histogram_bins: int = 128
+    flatline_max_bin_fraction: float = 0.25  # any bin >= 25% of the screened samples flags a trace
+    flatline_skip_leading_bins: int = 1  # exclude range bin 0 (embedded frame counter); M5 step 6b
+    min_in_band_energy_ratio: float = 0.30
+    in_band_margin_hz: float = 1953.125  # one FFT bin = fs/256, frozen a priori
+    min_frame_fraction: float = 0.5
+
+
+@dataclass(frozen=True)
+class WST77Config:
+    """Frozen 77 GHz WST tilings (implementation_plan.md Exp G / wst_extract77.m).
+
+    Doppler tilings at fs = PRF = 1953.125 Hz. `tilings` is code-frozen (YAML override
+    rejected) exactly like the 10 GHz WSTConfig; J, T and the output shape are DERIVED
+    and MEASURED from the instantiated bank at build time, never precomputed here.
+    numpy is the canonical backend for every reported 77 GHz feature.
+    """
+
+    tilings: tuple[WSTTiling, ...] = (
+        WSTTiling(q=(8, 4), invariance_ms=20.0),
+        WSTTiling(q=(6, 4), invariance_ms=40.0),
+        WSTTiling(q=(4, 2), invariance_ms=60.0),
+    )
+    max_order: int = 2
+    log_epsilon: float = 1e-6
+    backend: str = "numpy"
+
+
 @dataclass(frozen=True)
 class Config:
     paths: PathsConfig
@@ -166,6 +247,11 @@ class Config:
     qc: QCConfig = field(default_factory=QCConfig)
     preprocess: PreprocessConfig = field(default_factory=PreprocessConfig)
     wst: WSTConfig = field(default_factory=WSTConfig)
+    # 77 GHz (band 2), milestone 5. default_factory so every existing 10 GHz config
+    # loads unchanged: the new sections simply take defaults and appear in provenance.
+    qc77: QC77Config = field(default_factory=QC77Config)
+    preprocess77: Preprocess77Config = field(default_factory=Preprocess77Config)
+    wst77: WST77Config = field(default_factory=WST77Config)
 
 
 # ---------------------------------------------------------------------- yaml loading
@@ -420,11 +506,38 @@ def _check_model_band(qc: QCConfig, preprocess: PreprocessConfig) -> None:
             )
 
 
+def _check_qc77_band(qc77: QC77Config, pre77: Preprocess77Config) -> None:
+    """The frozen 77 GHz gate must map to a real, non-vacuous beat-frequency band.
+
+    The exact analog of _check_qc_band for band 2: the single 2-4 m gate (in
+    Preprocess77Config) mapped to beat frequency must start below Nyquist and, once
+    widened by the margin, must not cover the whole represented spectrum (or the in-band
+    ratio would be identically 1 and the screen could never fire). Reuses beat_band_hz so
+    the physics is defined once.
+    """
+    f_lo, f_hi = beat_band_hz(pre77.gate_m, pre77.bandwidth_hz, pre77.chirp_time_s)
+    nyquist = pre77.fs_hz / 2.0
+    if f_lo >= nyquist:
+        raise ConfigError(
+            f"preprocess77.gate_m {pre77.gate_m} m maps to {f_lo:.1f}-{f_hi:.1f} Hz, "
+            f"which starts at or above Nyquist ({nyquist:.1f} Hz) — no representable band"
+        )
+    lo = max(0.0, f_lo - qc77.in_band_margin_hz)
+    hi = min(nyquist, f_hi + qc77.in_band_margin_hz)
+    if lo <= 0.0 and hi >= nyquist:
+        raise ConfigError(
+            f"preprocess77.gate_m {pre77.gate_m} m widened by qc77 margin "
+            f"{qc77.in_band_margin_hz} Hz covers the entire spectrum [0, {nyquist:.1f}] "
+            "Hz — the in-band ratio would be identically 1 and the screen could never fire"
+        )
+
+
 def _build_paths(raw: dict) -> PathsConfig:
     section = _section(raw, "paths")
     required = ("data_10ghz_dir", "weight_xlsx", "results_dir")
+    optional = ("data_77ghz_dir",)
     _require_keys(section, required, "paths")
-    _reject_unknown(section, required, "paths")
+    _reject_unknown(section, required + optional, "paths")
 
     resolved = {key: _resolve_path(section[key], key) for key in required}
 
@@ -434,7 +547,33 @@ def _build_paths(raw: dict) -> PathsConfig:
         if not resolved[key].exists():
             raise ConfigError(f"paths.{key} does not exist: {resolved[key]}")
 
+    # data_77ghz_dir is optional (10 GHz configs omit it). When present it is an INPUT
+    # and must exist; require_77ghz_dir raises later if a 77 GHz entrypoint needs it and
+    # it was never set.
+    if "data_77ghz_dir" in section:
+        resolved["data_77ghz_dir"] = _resolve_path(section["data_77ghz_dir"], "data_77ghz_dir")
+        if not resolved["data_77ghz_dir"].exists():
+            raise ConfigError(
+                f"paths.data_77ghz_dir does not exist: {resolved['data_77ghz_dir']}"
+            )
+
     return PathsConfig(**resolved)
+
+
+def require_77ghz_dir(config: Config) -> Path:
+    """The 77 GHz data root, or a pointed ConfigError if it was never configured.
+
+    Every 77 GHz entrypoint calls this before any I/O, so a config that forgot
+    `paths.data_77ghz_dir` fails with a clear message instead of an AttributeError or a
+    None reaching h5py.
+    """
+    data_dir = config.paths.data_77ghz_dir
+    if data_dir is None:
+        raise ConfigError(
+            "paths.data_77ghz_dir is not set — a 77 GHz run needs it; add it via "
+            "configs/data77.yaml (or an ibex.yaml overlay). See configs/exp_77ghz.yaml."
+        )
+    return data_dir
 
 
 def _build_run(raw: dict) -> RunConfig:
@@ -600,6 +739,83 @@ def _build_wst(raw: dict) -> WSTConfig:
     )
 
 
+def _build_preprocess77(raw: dict) -> Preprocess77Config:
+    """Validate the 77 GHz preprocessing fields (M2 rule: a bad value fails at load)."""
+    section = _known_section(raw, "preprocess77", Preprocess77Config)
+    d = Preprocess77Config()
+    positive = dict(low=0.0, high=math.inf, low_open=True, high_open=True)
+    return Preprocess77Config(
+        butter_order=_int_field(section, "butter_order", d.butter_order, "preprocess77"),
+        gate_m=_gate_field(section, "gate_m", d.gate_m, "preprocess77"),
+        fs_hz=_float_field(section, "fs_hz", d.fs_hz, "preprocess77", **positive),
+        bandwidth_hz=_float_field(section, "bandwidth_hz", d.bandwidth_hz, "preprocess77", **positive),
+        chirp_time_s=_float_field(section, "chirp_time_s", d.chirp_time_s, "preprocess77", **positive),
+        standardize=_choice_field(
+            section, "standardize", d.standardize, "preprocess77", STANDARDIZE_METHODS
+        ),
+    )
+
+
+def _build_qc77(raw: dict) -> QC77Config:
+    """Validate the 77 GHz QC fields. Exactly three screens; no RMS diagnostic."""
+    section = _known_section(raw, "qc77", QC77Config)
+    d = QC77Config()
+    skip_leading = section.get("flatline_skip_leading_bins", d.flatline_skip_leading_bins)
+    if isinstance(skip_leading, bool) or not isinstance(skip_leading, int) or skip_leading < 0:
+        raise ConfigError(
+            f"qc77.flatline_skip_leading_bins must be an integer >= 0, got {skip_leading!r}"
+        )
+    return QC77Config(
+        histogram_bins=_int_field(section, "histogram_bins", d.histogram_bins, "qc77"),
+        flatline_max_bin_fraction=_float_field(
+            section, "flatline_max_bin_fraction", d.flatline_max_bin_fraction, "qc77",
+            low=0.0, high=1.0, low_open=True,
+        ),
+        flatline_skip_leading_bins=skip_leading,
+        min_in_band_energy_ratio=_float_field(
+            section, "min_in_band_energy_ratio", d.min_in_band_energy_ratio, "qc77",
+            low=0.0, high=1.0,
+        ),
+        in_band_margin_hz=_float_field(
+            section, "in_band_margin_hz", d.in_band_margin_hz, "qc77",
+            low=0.0, high=math.inf, high_open=True,
+        ),
+        min_frame_fraction=_float_field(
+            section, "min_frame_fraction", d.min_frame_fraction, "qc77",
+            low=0.0, high=1.0, low_open=True,
+        ),
+    )
+
+
+def _build_wst77(raw: dict) -> WST77Config:
+    """Validate the 77 GHz WST fields. `tilings` stays code-frozen like the 10 GHz WST."""
+    section = _known_section(raw, "wst77", WST77Config)
+    if "tilings" in section:
+        raise ConfigError(
+            "wst77.tilings cannot be overridden in YAML — the three Doppler tilings are "
+            "frozen constants of the design (see implementation_plan.md Exp G)"
+        )
+    d = WST77Config()
+
+    max_order = section.get("max_order", d.max_order)
+    if isinstance(max_order, bool) or not isinstance(max_order, int):
+        raise ConfigError(f"wst77.max_order must be an integer, got {type(max_order).__name__}")
+    if max_order not in (1, 2):
+        raise ConfigError(
+            f"wst77.max_order must be 1 or 2, got {max_order} — order 0 keeps no wavelet "
+            "paths and >2 is unsupported by the design (the plan fixes max_order = 2)"
+        )
+
+    return WST77Config(
+        max_order=max_order,
+        log_epsilon=_float_field(
+            section, "log_epsilon", d.log_epsilon, "wst77",
+            low=0.0, high=math.inf, low_open=True, high_open=True,
+        ),
+        backend=_choice_field(section, "backend", d.backend, "wst77", BACKENDS),
+    )
+
+
 def load_config(*yaml_paths: str | Path) -> Config:
     """Load, merge and validate one or more YAML files (later files win).
 
@@ -614,7 +830,10 @@ def load_config(*yaml_paths: str | Path) -> Config:
     for path in yaml_paths:
         merged = _merge(merged, _load_with_includes(Path(path).resolve()))
 
-    known_sections = ("paths", "run", "split", "qc", "preprocess", "wst")
+    known_sections = (
+        "paths", "run", "split", "qc", "preprocess", "wst",
+        "qc77", "preprocess77", "wst77",
+    )
     _reject_unknown(merged, known_sections, "config")
 
     qc = _build_qc(merged)
@@ -624,6 +843,11 @@ def load_config(*yaml_paths: str | Path) -> Config:
     _check_qc_band(qc, preprocess)
     _check_model_band(qc, preprocess)
 
+    qc77 = _build_qc77(merged)
+    preprocess77 = _build_preprocess77(merged)
+    # Same cross-check for band 2's single gate (always present via defaults).
+    _check_qc77_band(qc77, preprocess77)
+
     return Config(
         paths=_build_paths(merged),
         run=_build_run(merged),
@@ -631,6 +855,9 @@ def load_config(*yaml_paths: str | Path) -> Config:
         qc=qc,
         preprocess=preprocess,
         wst=_build_wst(merged),
+        qc77=qc77,
+        preprocess77=preprocess77,
+        wst77=_build_wst77(merged),
     )
 
 

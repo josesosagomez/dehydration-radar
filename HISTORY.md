@@ -6,6 +6,280 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-23 — **MILESTONE 5 — code complete; definition of done met except D3 (the cohort runs), which is staged for IBEX.**
+
+**D0 — ✅** prerequisite satisfied before implementation (A-M5-1/A-M5-2 in `implementation_plan.md`
+**and** `ROADMAP.md`; committed as `189ad35`).
+**D1 — ✅** `uv run pytest` → **521 passed, 17 skipped** on a checkout with no private data
+(was 396/12 at M4 close; **+125** tests this milestone).
+**D2 — ✅** `uv run pytest --realdata` → **537 passed, 1 skipped** (only T18, the torch mutation
+leg, still deferred — unchanged from M4).
+**D3 — ⏳ STAGED FOR IBEX, not produced locally.** The code and scaffolding are complete and were
+verified end-to-end on real subsets (see the steps 7+10 entry), but the *cohort* artifacts require
+all 80 files: the QC pass is histogram-bound at ~2–3 s/frame × ~10⁴ frames ≈ **9 h locally**, which
+is exactly the job `scripts/ibex/qc77.sbatch` exists for. Order: `sbatch qc77.sbatch` →
+inspect `qc_survival_77ghz.csv` → `sbatch wst77.sbatch` (array) → rsync back →
+`run_wst77.py --merge-shards`. **No cohort feature artifact may predate the frozen QC rule** — that
+ordering is enforced by `run_wst77`'s curated mode failing closed without the survival CSV.
+**D4 — ✅** `tests/test_no_leakage.py` byte-for-byte unmodified since M1 (`git diff --exit-code
+f3fbade -- …` clean, working-tree-aware) and green. **M5 touched no 10 GHz file** (empty diff vs the
+M4 commit for every frozen 10 GHz module/config); the only shared-file edits are the sanctioned
+additive `config.py` (+231) and `provenance.py` (+14).
+**D5 — ✅** `run_wst77.py --smoke --subject 1 --session 8am` → **D=10176 finite features, 7.8 s**;
+the same entrypoint runs the curated array mode on IBEX differing only by `--config configs/ibex.yaml`
+plus shard args.
+**D6 — ✅** the flatline rule was decided on **M2-audit mechanism grounds, independent of cohort
+survival**, recorded (HISTORY + A-M5-6), and applied uniformly; the `QC77Config` /
+`canonical_spec_guard_77` / `screens_77` / YAML / tests were all revised and T-C77/T-Q77 rerun green
+**before** any cohort QC could execute.
+**D7 — ✅** A-M5-3..8 applied to `plans/implementation_plan.md` (Exp G chain, Compute/IBEX,
+the frozen 77 GHz QC block, the repo tree, the experiments list); **SECOND_CHAPTER.md §4 "The
+77 GHz front-end"** written (and the later placeholder sections renumbered §5–§8 to match the
+A-M5-2 milestone renumber).
+
+**Milestone-5 scoreboard.** 7 new source modules (`data/{loader_77ghz,manifest_77}`,
+`qc/{screens_77,axis_check_77}`, `preprocess/pipeline_77`, `features/extraction_77`), 3 new CLIs,
+5 new config files + the IBEX overlay, 4 sbatch/README scaffolding files, 5 new test modules
+(**+125 tests**). Two facts discovered empirically, neither of which was fixed by moving a
+threshold: the **range-bin-0 frame counter** (which explains M2's flatline false positive and is
+harmless downstream because both Hann windows zero it and the gate excludes it), and the measured
+WST geometry (T=39/78/117, J=6/7/7, pad 512) confirming the plan's predictions.
+
+**The invariant held.** The whole 77 GHz front-end is a deterministic per-frame function of one
+frame plus frozen constants — nothing fitted, so nothing enters the CV loop and
+`test_no_leakage.py` is untouched. The tuned-ε log branch ships its *application* path only; the
+fold-local ε remains M7's, computed train-only.
+
+**Open for M6 (config freeze):** confirm the on+tuned-ε branch via the order-2-usefulness pre-check;
+freeze both bands' A–F design and the 77 GHz protocol-constant whitelist. Nothing committed since
+`189ad35` — awaiting the owner's word.
+
+## 2026-07-23 — M5 steps 7 + 10: **three 77 GHz CLIs + the axis-cert guard + provenance `data_dir` + IBEX scaffolding.** Verified on real subsets; cohort runs staged for IBEX.
+
+**Provenance (§2.8):** `record_run(..., data_dir=None)` and `_hash_inputs(..., data_dir)` — defaults
+to the 10 GHz root so every existing call site is unchanged; 77 GHz entrypoints pass
+`require_77ghz_dir(config)`, and an array task passes its **single-session manifest slice** so
+only that one file is hashed (hashing 22 GB in each of 80 tasks would be pure waste).
+
+**Axis-cert guard (`require_accepted_axis`, C5-08):** the hard per-file guard every extraction/
+preprocess entrypoint and the smoke calls. It accepts a matching **ACCEPTED** record in
+`qc_survival_77ghz.csv` keyed to the raw **sha256 + axis_spec_hash**, otherwise runs the semantic
+check **inline**; any non-ACCEPTED verdict, or a record whose sha256/spec-hash disagrees, aborts
+before a feature is written. A sha or spec-hash mismatch falls through to the inline check rather
+than trusting a stale certificate.
+
+**CLIs.** `run_qc77.py` — authoritative cohort QC: loads each file once, certifies the axis on the
+**raw pre-MTI cube** (fails closed on non-ACCEPTED), runs the frozen screens, joins via the imported
+`_join_qc`, finalizes eligibility, and writes `qc_survival_77ghz.csv` (+ axis certificate columns)
+and `qc_frames_77ghz.csv`, re-reading and reconciling both. `run_preprocess77.py` — chain-energy
+diagnostics as a **single** cohort job (no shard/merge race). `run_wst77.py` — three modes over the
+same library code: curated cohort / **array shard** (deterministic shard + fingerprint sidecar),
+`--merge-shards` (rejects a missing shard or any fingerprint disagreement, then writes the curated
+CSV), and **`--smoke`** — non-curated, fixed frame indices, NaN/Inf + axis guards only (never the
+flatline rule), so it is outcome-independent and can never reintroduce eligibility through the CLI.
+`canonical_spec_guard_77` runs first in curated modes.
+
+**Verified locally on real data (subsets; the artifacts were removed afterwards — they are not the
+authoritative cohort run):**
+- `run_qc77 --subject 1 --session 8am` → axis **ACCEPTED**, **125/125 frames pass (100 % survival)**,
+  flatline 0, low-in-band 0 — the corrected rule's end-to-end confirmation on real data (the M2 rule
+  would have failed most of these frames).
+- `run_wst77 --smoke --subject 1 --session 8am` → **D=10176 finite features in 7.8 s** (3 frames,
+  tiling Q=(8,4)) — the D5 deliverable and the sbatch time-limit calibration.
+- `run_preprocess77 --subject 1 --session 8am` → MTI removes ~100 % (static clutter dominates for a
+  seated subject), gate/raw energy ratio 3.4e-6.
+
+**IBEX scaffolding (step 10, A-M5-5):** `configs/ibex.yaml` (**paths-only** overlay — device stays
+cpu, so an axis certificate survives the rsync), `scripts/ibex/{qc77,preprocess77,wst77}.sbatch`
+(single job / single job / **array over the 80 cells**, `HDF5_USE_FILE_LOCKING=FALSE` for GPFS),
+a self-contained `scripts/ibex/README.md` (every command literal — the owner runs them), and
+`.gitattributes` pinning `scripts/ibex/* eol=lf` so CRLF never breaks a shebang.
+
+**Tests: +23** — T-A77 axis-guard (record accepted without loading; non-ACCEPTED record rejected;
+sha/spec-hash mismatch falls to inline; inline accepts/rejects/inconclusive) and provenance
+(`data_dir` selects the hashed root; a sliced manifest hashes one file). **Full suite: 521 passed,
+17 skipped.** `test_no_leakage.py` byte-for-byte unmodified since M1; **M5 touched no 10 GHz file**
+(empty diff vs the M4 commit) — only the sanctioned additive `config.py` / `provenance.py`.
+
+## 2026-07-23 — M5 steps 8 + 9: **`pipeline_77.py` (T-P77)** and **`extraction_77.py` (T-W77 + T-R77)**. Green; geometry measured, matches the plan.
+
+**`pipeline_77.py`** — chain steps 1–5 on one real frame `[n_fast,n_chirp,n_rx]`: MTI
+(subtract this frame's per-fast-bin chirp mean) → fast-time zero-phase Butterworth over the
+2–4 m beat band (reuses `filters.design_bandpass_sos`/`bandpass_filtfilt`, `beat_band_hz`) →
+**symmetric Hann** (its zero endpoints also neutralise the bin-0 counter) → 256-pt range FFT
+(where I/Q first exists) → crop to gate bins **27..53** (`range_gate_bins` from
+`axis_check_77`, single home). Shape-generic; `preprocess_cube_77` a plain per-frame loop;
+`chain_stages_77` for the run_preprocess77 energy diagnostics (Parseval convention).
+
+**`extraction_77.py`** — chain steps 6–10, a linear composition of the fs/shape-agnostic
+`wst.py`/`pooling.py`/`standardize.py`. Per frame: `slow_time_signal_batch` builds the **432**
+complex slow-time series (16 rx × 27 gate, **rx-major/bin-minor** frozen fold), splits real/imag
+and **vectorized-robust-standardizes** all 864 channels at once (bit-equivalent to stacked
+`to_channels`, pinned) — **raises** on an all-zero (constant) channel; `scatter_frames([432,2,256])`
+→ reshape `[16,27,2,P,t]` → mean over gate bins → per-Rx `[16,2,P,t]` → Rx fusion mean(primary)/
+median(secondary) → `apply_order_log_77` on the **fused** tensor (branches off / on+frozen-ε /
+**on+tuned-ε** with a caller-supplied `epsilon_by_order` — M5 applies but never computes ε) →
+pool/flatten → `aggregate_session`. `extract_session_variants_77` scatters once per tiling,
+derives every (log × fusion × family) + `(tiling,fusion)` pre-log scale from the shared raw
+tensor. `canonical_spec_guard_77` checks all three `*77` sections equal their frozen defaults
+(covers the step-6 flatline field). **Measured geometry** at n_in=256, fs=PRF=1953.125:
+**T=39/78/117, J=6/7/7, padded=512** (as predicted), n_paths=424/453/182, n_time=8/4/4, invariance
+error <0.16%; border warning fires and is asserted.
+
+**Tests: +30 (T-W77 +19, T-P77 +11) + T-R77 realdata.** T-P77: MTI kills static / preserves
+Doppler, gate bins 27..53, range peak lands at the expected bin (no shift), fast↔chirp swap
+yields >50× less gate energy, zero-phase, Parseval, determinism. T-W77: geometry regression-pinned,
+border warning present, batch `[432,2,256]` + fold order bit-equivalent to `to_channels`,
+range-bin averaging vs independent scatter, fusion mean≠median, fuse-then-log≠log-then-fuse,
+order-0 stays linear, zero-energy fires, per-channel standardization, pre-log scale keyed by
+fusion + hand-checked, **tuned-ε applied before pooling & role-independent**, variants==single-variant
+across all combos, pooled dims == layout, canonical guard (incl. stale-flatline rejection), and
+the **numpy-vs-torch cross-backend agreement** over both log states (raw + logged) — the
+precondition for `backend: torch`. **T-R77 realdata**: subject_1_8am 3-frame extract → finite,
+zero-energy guard does not false-fire.
+
+## 2026-07-23 — M5 step 6: **flatline-rule GATE resolved — mechanism found (embedded frame-counter, not ADC quantisation); owner chose exclude-bin-0; frozen + T-C77/T-Q77 rerun green.**
+
+**Mechanism investigation (M2 single-file evidence, label-blind — never cohort survival).**
+The M2 audit's 7/10 "flatline" turned out NOT to be ADC quantisation. On `subject_1_8am`:
+`abs_max` grows as **exactly 256×(frame+1)** while `distinct` magnitude levels stay ~230 and
+**no trace is dead** (`n_distinct≤3` = 0). Cause: **fast-time index 0 (range bin 0) of every
+(Rx,chirp) trace holds an embedded FRAME COUNTER** — value ~256×frame, increments per chirp
+(2305→2560 across frame 9's 256 chirps), resets periodically (frame 50→1), universal across
+files (subject_1/5/12: 100% of traces, value ~2561 vs echo ~27 median / ~100 max). That single
+~20–90× outlier stretches the per-trace `[min,max]` histogram range so the ~255 real samples
+pile into the first bins and false-trip the ≥25% rule (flatline count tracks `abs_max`:
+0,0,0,84,442,1609,2419,3191,3672,3981 across frames 0–9).
+**Both Hann windows zero fast[0]** (`hann(256,sym=True)[0]=0`, periodic `[0]=0`) and the gate
+crop keeps bins 27..53 (excludes bin 0), so the counter **never reaches the WST features or the
+in-band/axis screens** — which is exactly why M2's in-band ratios (0.38) and axis verdict
+(ACCEPTED) were healthy while flatline false-fired. It corrupts ONLY the raw-magnitude flatline
+screen.
+
+**Decision (owner gate).** Presented the finding + three mechanism-corrected options; **owner
+chose "exclude range-bin-0"** — the most faithful exact replacement: drop fast[0] (known
+non-echo counter), keep the frozen 128-bin / 0.25 rule on the 255 echo samples. A genuinely
+dead/constant channel is still flagged (degenerate spread). This refines the plan's stated
+"ADC-quantisation" premise (A-M5-6) to the actual counter mechanism; still leakage-safe
+(specified from M2 mechanism + physics, not cohort survival).
+
+**Step-6b revisions (all before the step-7 gate, so no stale rule can run):** new frozen field
+`QC77Config.flatline_skip_leading_bins = 1` (validated ≥0); `screens_77._flatline_per_rx` gains
+`skip_leading` (default 0 preserves the audit's M2 `qc_smoke_frame` semantics; `run_qc_frame_77`
+passes 1) and screens `frame[skip_leading:]` with the threshold over `n_screened`;
+`configs/preprocess77.yaml` documents it; T-C77 literal-pin + validation updated; T-Q77 gains
+the counter-false-positive fix, dead-channel-still-caught, and a **realdata regression**
+(frame 9: old rule flags >3000/4096, corrected rule flags 0 and the frame passes).
+`canonical_spec_guard_77` (step 9) checks `QC77Config()` equality, so the field is auto-covered.
+**Full suite: 482 passed, 16 skipped.**
+
+## 2026-07-23 — M5 steps 5 + 4: **`screens_77.py` + `axis_check_77.py` (T-Q77)**, then **`manifest_77.py` (T-M77)**. Green.
+
+**Reorder (noted):** built step 5 (QC screens + axis check) **before** step 4 (manifest),
+because `manifest_77.apply_qc_77` imports `run_qc_cube_77` from `screens_77` — the module
+dependency runs screens → manifest, so screens must exist first. The plan's step *numbering*
+is unchanged; only the build order within this session swapped.
+
+**`axis_check_77.py`** — promoted `range_gate_bins`, `_mean_power_spectrum`, `axis_metrics`,
+`axis_verdict` (+ `AXIS_*` constants) from the audit; added `certify_axis(cube, pre77)` (the
+per-file entrypoint, fast_axis=1/chirp_axis=2 on the loaded `[frame,fast,chirp,rx]` cube;
+returns `(verdict, metrics)`) and **`axis_spec_hash(config)`** — a sha256 over exactly the
+axis-relevant inputs (algo version, the four thresholds, expected shape+representation,
+gate/bandwidth/fs) and **nothing environment-specific**, so a path-only `ibex.yaml` overlay
+keeps a certificate valid while any axis-relevant change invalidates it (C5-16). Range gate
+bins **27..53** confirmed.
+
+**`screens_77.py`** — `FrameQC77` (nan_inf/flatline/low_in_band + in_band_ratio +
+n_flatline_traces + per_rx_flatline; `passed` is a property so the rule can't be violated by
+construction), `run_qc_frame_77`/`run_qc_cube_77` (shape-generic, plain per-frame loop,
+structurally leak-proof), reusing `screens.in_band_mask` as-is (QC mask **bins 26..54**
+confirmed). Flatline is per-(Rx,chirp) trace with the **any-trace rule** (one bad trace of
+4096 fails the frame). Promoted the audit's `qc_smoke_frame` (dict) + `qc_in_band_mask_77`
+here; both share the flatline core (`_flatline_per_rx`) with `run_qc_frame_77`. **Audit
+re-imports** all promoted names; `test_audit_77ghz.py` still green (23).
+
+**`manifest_77.py`** — mirrors `manifest.py` for band 2, **reusing by import** the subtle
+pieces (`_join_qc` fail-closed one-to-one join, `eligible_frames`, `evaluable_subjects`, base
+`COLUMN_DTYPES`/`SORT_KEYS`/`_describe`). New `QC77_COLUMN_DTYPES` (three screens, no RMS; +
+`qc_rx_max_flatline`), `build_manifest_77`/`resolve_path_77`/`apply_qc_77`/
+`session_qc_report_77`. Eligibility factored into `_finalize_qc_77(merged, min_frame_fraction)`
+so the `ceil(0.5·n_frames)` arithmetic is unit-testable **without** loading 1 GB cubes; same
+ground truth as 10 GHz (the shared 16-subject Δm). Real cohort manifest builds + validates
+over all **80 files in 2.3 s** (metadata-only inspect).
+
+**Tests: +39** — **T-Q77 (+16)** flatline (quantised / degenerate-spread / any-trace /
+per-Rx counts), in-gate vs out-of-gate in-band, NaN/Inf short-circuit, mask bins 26..54 &
+gate bins 27..53 pinned, per-frame independence, axis ACCEPTED/REJECTED/INCONCLUSIVE on real
+tone cubes, `axis_spec_hash` env-independence. **T-M77 (+23)** C1–C6 bijection, actual frame
+counts, determinism, imported `_join_qc` fail-closed, `_finalize_qc_77` ceil-eligibility +
+`n_pass+n_fail_any==n_frames`, one small full-shape `apply_qc_77` integration (real screens),
+realdata cohort build. **Full suite: 478 passed, 15 skipped.**
+
+## 2026-07-23 — M5 step 3: **`loader_77ghz.py`** + promoted `reverse_axes`/`to_numeric`. Green; real file confirms the contract.
+
+Created `src/dehyd/data/loader_77ghz.py` (h5py). `inspect_77ghz_file` reads **HDF5 metadata
+only** (no chunk decompress) and enforces the M2 contract in a fixed order — **compound →
+real-float → 8-byte → little-endian → shape** — so a tiny wrong-dtype fixture is rejected on
+dtype, not shape. Rejections (each a stop-and-report, C5-18): compound `(real,imag)` (cites
+the M2 real-float64 finding — MTI/pre-FFT steps assume real ADC data), non-float kind,
+float32/other widths, **big-endian** (`dtype.byteorder` accept set `('<','=','|')`; empirically
+h5py reports `'<'` for native LE float64 and `'>'` for big-endian — both dev and IBEX are LE),
+and any on-disk shape ≠ `(16,256,256,n_frames)`. Frame count read from the file, never assumed
+125. `load_77ghz_file` does a **whole-file read** (`dset[()]`) → `to_numeric` → `reverse_axes`
+→ `[n_frames,256,256,16]` float64, forced by the chunk layout spanning all frames.
+
+- **Promotion**: `reverse_axes`/`to_numeric` moved from `experiments/audit_77ghz.py` into the
+  loader; the audit now **imports them back** (single copy). `tests/test_audit_77ghz.py` still
+  green (23 passed) via `audit.reverse_axes`/`audit.to_numeric`.
+- **Real-file check**: `inspect` → `(16,256,256,125)`; `load` → `(125,256,256,16)` float64,
+  **1.05 GB, 3.0 s** — matches the plan's memory/geometry expectations exactly.
+
+**Tests (T-L77): +16 in `tests/test_loader77.py`** (filename parse + rejects; `reverse_axes`
+round-trip with distinct-per-coordinate small dims; `to_numeric` real/compound; **one
+full-shape `(16,256,256,2)` fixture** — zeros + distinct markers, gzip-chunked so it stays a
+few KB — inspected and loaded bit-for-bit with markers at the reversed coordinates; missing-var
+/ compound / float32 / big-endian / wrong-shape / non-HDF5 all rejected; a realdata inspect on
+`subject_1_8am.mat`). **Full suite: 439 passed, 14 skipped** (+16 pass, +1 realdata skip).
+
+## 2026-07-23 — M5 step 2: **77 GHz config layer** (`qc77`/`preprocess77`/`wst77` + `data_77ghz_dir`). Green.
+
+Added the three frozen band-2 dataclasses to `src/dehyd/config.py` — **`Preprocess77Config`**
+(`butter_order=4`, single `gate_m=(2.0,4.0)` for both chain crop and QC mask, `fs_hz=500e3`,
+`bandwidth_hz=2e9`, `chirp_time_s=512e-6` → PRF 1953.125 Hz, `standardize="robust"`),
+**`QC77Config`** (`histogram_bins=128`, `flatline_max_bin_fraction=0.25`,
+`min_in_band_energy_ratio=0.30`, `in_band_margin_hz=1953.125` = one FFT bin, `min_frame_fraction=0.5`),
+**`WST77Config`** (code-frozen Doppler tilings `Q=(8,4)/(6,4)/(4,2)` at 20/40/60 ms,
+`max_order=2`, `log_epsilon=1e-6`, `backend="numpy"`). Design choice (not re-litigated):
+**three parallel top-level sections, not a nested `band77` block** — reuses the existing
+`_known_section`/`_reject_unknown` machinery verbatim and gives each band its own canonical spec.
+
+- `PathsConfig.data_77ghz_dir: Path | None = None` (optional so 10 GHz configs load unchanged;
+  existence-checked only when present). New `require_77ghz_dir(config)` raises a pointed
+  `ConfigError` when a 77 GHz entrypoint needs it and it was never set.
+- `Config` gains `qc77`/`preprocess77`/`wst77` via `default_factory` → **every existing 10 GHz
+  config loads byte-identically except the additive `*77` defaults now appear in provenance**
+  (a completeness gain). `known_sections` extended by the three names.
+- Validators `_build_{qc77,preprocess77,wst77}` reuse `_int/_float/_choice/_gate_field`;
+  `wst77.tilings` override rejected like the 10 GHz WST; `_check_qc77_band` mirrors
+  `_check_qc_band` (reuses `beat_band_hz`): the 2–4 m gate → beat band **52.1–104.2 kHz**,
+  below Nyquist 250 kHz, non-vacuous. Confirmed the YAML signed-exponent trap is avoided
+  (`500.0e+3` etc. load as floats, not strings).
+- Four YAML files: `configs/{data77,preprocess77,wst77,exp_77ghz}.yaml` (values stated
+  explicitly, matching code defaults; `exp_77ghz` includes the four + `run`/`split` parity
+  with `exp_a_regression`).
+
+**Tests (T-C77): +27 in `tests/test_config.py`** (defaults/overrides per section; `wst77.tilings`
+override rejected; `max_order` 0/3/-1 rejected; bad values across all three sections;
+`data_77ghz_dir` optional + existence-when-present; `require_77ghz_dir` raises/returns;
+`_check_qc77_band` rejects an out-of-band gate; **one literal-pinning test for the frozen
+defaults group** — the tripwire that flags a stale value if step 6 replaces the flatline rule;
+the additive-only 10 GHz-dict check). New `real_data_77_paths` conftest fixture (separate from
+`real_data_paths` so 10 GHz realdata tests don't couple to the 22 GB 77 GHz tree) + a realdata
+config test. **Full suite: 423 passed, 13 skipped** (was 396/12 at M4 close; +27 pass, +1 realdata
+skip). Realdata config tests pass with the cohort present. `test_no_leakage.py` untouched.
+
+---
+
 ## 2026-07-23 — **MILESTONE 5 PLAN drafted, Codex-reviewed, and owner-approved (scope + amendments).**
 
 **Scope decision (owner).** 77 GHz is promoted from fusion-only (Exp G) to a **full parallel

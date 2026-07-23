@@ -1,0 +1,22 @@
+# 77 GHz front-end (band 2, milestone 5) — the top-level entry config the 77 GHz CLIs
+# load (run_qc77 / run_preprocess77 / run_wst77).
+#
+# Composes the shared configs so no scientific constant is duplicated. Include paths
+# resolve against THIS file's directory; path values inside resolve against the repo
+# root. A per-machine overlay (configs/ibex.yaml) is passed as a later --config.
+include:
+  - data.yaml         # 10 GHz dir + weight_xlsx + results_dir (shared)
+  - data77.yaml       # the 77 GHz data root
+  - preprocess77.yaml # qc77 + preprocess77 blocks
+  - wst77.yaml        # wst77 block
+
+run:
+  seed: 20260721
+  # Five distinct seeds for stochastic models; carried for provenance parity with the
+  # 10 GHz configs. M5 is deterministic (per-frame, unfitted), so no seed is consumed.
+  seed_set: [1, 2, 3, 4, 5]
+  device: cpu
+
+split:
+  n_inner_max: 5        # GroupKFold(min(5, n_train)) over outer-training subjects
+  min_train_subjects: 3 # below this an outer fold is non-selectable, not degenerate

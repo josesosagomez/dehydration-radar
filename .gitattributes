@@ -1,0 +1,3 @@
+# sbatch scripts are developed on Windows but run on Linux; a CRLF line ending breaks the
+# shebang (`/bin/bash^M: bad interpreter`). Force LF on checkout for the IBEX scripts.
+scripts/ibex/* text eol=lf

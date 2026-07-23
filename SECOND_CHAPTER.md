@@ -654,13 +654,90 @@ it claims to be. The two independence properties — batched equals single-frame
 extraction is deterministic under a fixed seed — are again what make the claim of an unfitted,
 per-session, population-independent representation executable rather than merely asserted.
 
-## 4. Fluid-loss regression — Experiment A  *(fill at milestone 5–6)*
+## 4. The 77 GHz front-end  *(milestone 5 — complete)*
 
-## 5. Clock-decoupling — Experiment B  *(fill at milestone 6)*
+The 77 GHz Inras band was promoted from a fusion-only afterthought to a full parallel primary
+arm, so the same honest pipeline built for 10 GHz — loader, QC, preprocessing, WST features —
+had to exist for band 2 before the config-freeze gate could pin its numbers. The front-end
+mirrors milestones 1–4 for the second band and stops at the same boundary (features and cohort
+diagnostics; no modelling). This section records where each 77 GHz number came from and, most
+importantly, a data artifact discovered here that a survival-tuned QC rule would have hidden.
 
-## 6. Ordinal classification & baselines — Experiments C, D  *(fill at milestone 7–8)*
+### Different physics, not overridden defaults
 
-## 7. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 8)*
+The 77 GHz radar is a genuinely different instrument: a 500 kHz slow-time sample rate, a 2 GHz
+sweep over a 512 µs chirp, and a raw cube of 16 receivers × 256 chirps × 256 fast-time samples
+per frame, stored real-valued (I/Q arises only after the range FFT). Because these are different
+physics rather than variations of the 10 GHz constants, the configuration keeps three parallel
+frozen sections (`qc77`, `preprocess77`, `wst77`) rather than nesting band-2 overrides — each
+band then owns a complete canonical specification, so a run's YAML is a full record and the
+artifact guard can compare a config against a single frozen default. The two size-256 axes
+(fast-time and chirps) are indistinguishable by shape, which is not a cosmetic risk: a silent
+fast↔chirp interchange would pass every shape assertion and invert range and Doppler. A semantic
+axis check — range-gate energy must concentrate along the assumed fast axis and near-zero-Doppler
+energy along the assumed chirp axis, on the raw pre-clutter-removal cube — certifies the mapping
+per file, fails closed on anything short of acceptance, and its certificate is keyed to a hash of
+exactly the axis-relevant constants so a paths-only cluster overlay leaves it valid.
+
+### The chain, and why the counter never reaches the features
+
+The executable chain is the paper's Doppler method made concrete: clutter removal by subtracting
+each frame's own per-fast-bin mean over chirps (a within-frame operation, no cross-frame
+statistic), a fast-time Butterworth bandpass over the 2–4 m beat band, a symmetric Hann window,
+a 256-point range FFT, and a crop to range bins 27–53. Then, per frame, the 16 × 27 = 432 complex
+slow-time series are each split into real and imaginary channels, robust-standardised from their
+own median/MAD, scattered as one batch, averaged over the range bins, fused across receivers
+(mean primary, median a labelled secondary), order-aware-logged on the fused tensor, pooled, and
+aggregated to one vector per session (frame mean concatenated with frame median). The scattering
+geometry was measured, not assumed: at the PRF of 1953.125 Hz the three Doppler tilings realise
+averaging supports of 39, 78 and 117 samples (J = 6, 7, 7), pad to 512, and realise the requested
+millisecond invariances to within 0.16 %; the border-effect warning fires and is asserted rather
+than silenced.
+
+### An artifact the mechanism analysis caught — and a survival rule would not have
+
+The single most consequential finding of this milestone concerns the flatline QC screen. Ported
+literally from the 10 GHz screen, it flagged 7 of 10 frames in the milestone-2 single-file audit,
+which — left unexamined — would have collapsed 77 GHz eligibility. The rule was **not** re-tuned
+to restore survival; that would be cohort-level leakage. Instead the mechanism was traced. The
+flag tracked the per-frame maximum magnitude, which grew as exactly 256 × frame-index, while the
+traces themselves stayed richly varied (≈ 230 distinct magnitude levels; no dead channels). The
+cause is an **embedded frame counter in range bin 0**: the first fast-time sample of every trace
+carries a per-chirp counter (≈ 256 × frame, resetting periodically), universal across files and
+20–90× the genuine echo. That one outlier stretched the per-trace histogram range so the real
+samples piled into the first bins and tripped the 25 %-in-one-bin rule. Crucially, both Hann
+windows are zero at index 0 and the 2–4 m gate excludes range bin 0, so the counter never reaches
+the WST features, the in-band ratio, or the axis check — it corrupted only the raw-magnitude
+flatline screen, which is exactly why the audit's in-band ratios and axis verdict were healthy
+while flatline false-fired. The correction, specified from this mechanism (not from survival) and
+frozen before the cohort run, simply excludes range bin 0 from the flatline screen and keeps the
+proven rule on the echo samples; a genuinely dead channel is still caught by the degenerate-spread
+branch. On the audited file the corrected screen flags none of frame 9's 4096 traces (the old
+rule flagged 3981) and the session survives at 100 %. The general lesson for the chapter: a QC
+screen inherited across bands must be validated against the new band's data-generating quirks,
+and a false positive is fixed by understanding it, never by tuning a threshold until the numbers
+look acceptable.
+
+### Leakage safety and reproducibility
+
+The whole front-end is a deterministic per-frame function of one frame and frozen constants:
+nothing is fitted, so nothing enters the cross-validation loop and the no-leakage test is
+untouched. The two data-independent log branches (off, on + frozen ε) are realised end to end;
+the third (on + tuned ε) is a train-only branch whose per-order ε the milestone-7 harness will
+fit and re-extract with — this milestone provides and tests the application path but never
+computes a data-dependent ε. numpy backs every reported feature; the torch frontend is admitted
+only after a cross-backend agreement test passes over both log states. The heavy cohort passes
+run on IBEX as CPU batch jobs (a single QC job; a job array over the 80 cells for features, each
+task re-certifying its own file's axis and fingerprinting its shard), differing from the local
+smoke only by a paths-only overlay — the same code, as the compute policy requires.
+
+## 5. Fluid-loss regression — Experiment A  *(fill at milestone 7)*
+
+## 6. Clock-decoupling — Experiment B  *(fill at milestone 8)*
+
+## 7. Ordinal classification & baselines — Experiments C, D  *(fill at milestone 9)*
+
+## 8. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
 ## Provenance index
 

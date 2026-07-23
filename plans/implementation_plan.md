@@ -107,24 +107,32 @@ SECOND_CHAPTER.md               # thesis chapter material (written at each miles
 HANDOFF.md                      # new-session bootstrap (ONLY when you ask for it)
 archive/code/  archive/results/ # retired/superseded code, stale/invalidated artifacts only
 configs/                        # one YAML per run (seeds, paths, subset, device, tiling, model)
-  data.yaml, preprocess.yaml, wst.yaml, exp_a_regression.yaml, ...
+  data.yaml, preprocess.yaml, wst.yaml, exp_a_regression.yaml,
+  data77.yaml, preprocess77.yaml, wst77.yaml, exp_77ghz.yaml,   # band 2 (A-M5-8)
+  ibex.yaml                     # paths-ONLY cluster overlay (A-M5-5)
+scripts/ibex/                   # qc77/wst77/preprocess77 .sbatch + self-contained README (A-M5-5)
 src/dehyd/
-  config.py                     # load/validate YAML, resolve seeds & device
+  config.py                     # load/validate YAML, resolve seeds & device; qc77/preprocess77/wst77 sections
   data/
     loader_10ghz.py             # loadmat -> complex128 framesRadar cube; parse subject/session
     loader_77ghz.py             # h5py; full axis reversal -> (Nframes,Nfast,Nchirps,Nrx); asserts on-disk shape (milestone 5 — 77 GHz front-end)
+    manifest_77.py              # band-2 frame index table; mirrors manifest.py, REUSES its _join_qc/eligibility by import (A-M5-8)
     ground_truth.py             # fixed-cell xlsx parse -> signed Δm%, 5-class label, covariates; cross-check
     manifest.py                 # frame index table; FAILS on missing/dup/unmatched; per-frame QC reason codes
   qc/screens.py                 # flatline / robust RMS / in-band energy (pre-filter) screens with frozen thresholds
+  qc/screens_77.py              # band-2 frozen screens: NaN/Inf, any-trace flatline (bin-0 excluded, A-M5-6), in-band
+  qc/axis_check_77.py           # semantic fast-vs-chirp axis certification + axis_spec_hash + the per-entrypoint guard (A-M5-8)
   preprocess/
     filters.py                  # SOS Butterworth zero-phase bandpass on complex fast-time; optional FFT-gate
     reduce.py                   # Option A (chirp mean) & Option B (Hann-detected peak isolation + tapered mask)
     standardize.py              # per-signal robust standardization
     pipeline.py                 # the whole sequence as one linear function (frame -> [C x 470])
+    pipeline_77.py              # band-2 chain steps 1-5: MTI -> bandpass -> Hann -> range FFT -> 2-4 m crop (A-M5-8)
   features/
     wst.py                      # kymatio Scattering1D; ms->samples->(J,T) mapping; 3 tilings; mag & I/Q; order-aware log; cross-backend gate
     pooling.py                  # mean/std over global+halves (>=2-sample std rule); raw-flatten; session-level aggregation; feature layouts
     extraction.py               # reusable manifest->features wiring (session/variant extraction, canonical-spec guard) — imported by run_wst and the M6 harness  (A-M4-3)
+    extraction_77.py            # band-2 steps 6-10: 432 slow-time series -> WST -> bin-average -> Rx fusion -> log -> pool -> session (A-M5-8)
   eval/
     splits.py                   # THE single source of folds: nested LOSO API yielding (train/val/test) SUBJECTS
     harness.py                  # fit-on-train-only runner for BOTH sklearn and torch; session-level inference
@@ -136,7 +144,8 @@ src/dehyd/
 experiments/                    # thin CLI entry points, one per ROADMAP experiment A..H
   run_regression.py, run_clock_decoupling.py, run_ordinal.py, run_baselines.py, ...
   run_qc.py, run_preprocess.py, run_wst.py  # one-command cohort passes (curated artifacts + provenance); run_wst -> results/wst/  (A-M4-3)
-scripts/ibex/                   # sbatch templates for GPU jobs (DL baselines / NN)
+  run_qc77.py, run_preprocess77.py, run_wst77.py  # band-2 passes; run_wst77 also has --smoke and array/--merge-shards modes  (A-M5-8)
+scripts/ibex/                   # sbatch: GPU jobs (DL baselines / NN) AND the CPU 77 GHz cohort passes  (A-M5-5)
 tests/
   test_no_leakage.py            # subject-disjoint train/val/test + fit-on-train-only (sklearn AND torch)
   test_preprocess.py            # filter response, zero-phase, energy, Option-B ROI, determinism
@@ -920,12 +929,12 @@ correspondence can be demonstrated.
 - **Frozen 77 GHz pipeline** (locked at milestone 6; concrete, no data-dependent
   fitting):
   - **QC:** same rule structure as 10 GHz with **fixed** numbers for 256-sample
-    fast-time — flatline histogram **128 bins**, evaluated per **(Rx, chirp)**
-    256-sample trace, a trace flags if any bin ≥ 25% of 256 (≥64) and the **frame
-    fails if any trace flags** (the structural analog of the 10 GHz any-chirp rule;
-    the 4096-vs-20 ≈ **205×** trace multiplicity is a recorded property,
-    characterized per-Rx by the M2 audit — any revision is an owner decision before
-    the M5 freeze, never a silent change); in-band energy ratio < 0.30 on the 2–4 m
+    fast-time — flatline histogram **128 bins**, evaluated per **(Rx, chirp)** trace
+    **excluding range bin 0** (see the mechanism correction below), a trace flags if any
+    bin ≥ 25% of the screened samples and the **frame fails if any trace flags** (the
+    structural analog of the 10 GHz any-chirp rule; the 4096-vs-20 ≈ **205×** trace
+    multiplicity is a recorded property, characterized per-Rx by the M2 audit);
+    in-band energy ratio < 0.30 on the 2–4 m
     gate widened by a margin of
     **one FFT bin = fs/256 = 1953.125 Hz** (frozen a priori by the same
     leakage-tolerance rationale as the 10 GHz ±1000 Hz ≈ one-bin margin — the
@@ -937,8 +946,29 @@ correspondence can be demonstrated.
     one-bin margin); NaN/Inf anywhere in the frame's
     (fast × chirp × Rx) cube. Frozen, not
     tuned — and never selected from audited subject data.
+  - **Flatline mechanism correction — RESOLVED at milestone 5** *(A-M5-6, 2026-07-23;
+    owner-approved outcome (b), decided on mechanism grounds, never on cohort survival)*.
+    The literally-ported screen flagged 7/10 frames in the M2 audit. The mechanism, traced
+    from that single-file audit plus the physics, is **an embedded per-chirp frame counter
+    occupying range bin 0** of every (Rx, chirp) trace (value ≈ 256×frame, resetting
+    periodically, universal across files, 20–90× the ~27 echo). It is **not** a degenerate
+    channel: traces carry ≈230 distinct magnitude levels and no trace is dead. The single
+    outlier stretched the per-trace `[min,max]` histogram range so the ~255 genuine samples
+    piled into the first bins and tripped the ≥25% rule. **Both Hann windows are zero at
+    index 0 and the 2–4 m gate (bins 27..53) excludes bin 0**, so the counter never reaches
+    the WST features, the in-band ratio, or the axis check — it corrupted only this
+    raw-magnitude screen (which is why the audit's in-band ratios and axis verdict were
+    healthy). **Correction: exclude range bin 0 from the flatline screen**
+    (`qc77.flatline_skip_leading_bins = 1`) and keep the proven 128-bin / 25% rule on the
+    echo samples; a genuinely dead/constant channel is still caught by the degenerate-spread
+    branch. Fixed a priori and frozen **before** the cohort QC run; the resulting survival is
+    a recorded consequence, never the basis. The 10 GHz screen is untouched.
   - **Session eligibility:** retained iff **≥ `ceil(0.5 × actual_frame_count)`** frames
     survive QC (from the file's real frame count, not an assumed 125).
+  - **Secondary 77 GHz variants deferred past milestone 5** *(A-M5-7, 2026-07-23)*: the
+    Doppler-FFT-spectrum WST branch and the fast-time WST branch (with the nonzero-statistic
+    fix) from `wst_extract77.m` are not built at the front-end milestone; only the **primary
+    slow-time I/Q chain** is. Promoting either later requires a prior authoritative amendment.
   - **WST tilings — re-parameterized from fixed milliseconds, not fitted.** Use the
     reference 77 GHz tilings (`wst_extract77.m`): fast-time `Q=[8 4],[6 4],[4 2]` at
     invariance 0.08/0.16/0.20 ms; Doppler `Q=[8 4],[6 4],[4 2]` at 20/40/60 ms; each
@@ -1111,6 +1141,14 @@ regenerable by one command from saved intermediate artifacts.
   under `scripts/ibex/`. Same Python entry points; only config differs (device,
   subset size, epochs, data root). No separate GPU-only code paths; no GPU training
   in interactive runs.
+- IBEX (Slurm, **CPU**): the **77 GHz cohort passes** also run as batch jobs — a single
+  job for the cohort QC + axis certification (`scripts/ibex/qc77.sbatch`), a **job array
+  over the 80 (subject, session) cells** for WST features (`wst77.sbatch`, one
+  fingerprinted shard per eligible cell, merged locally), and an optional single-job
+  chain-diagnostics pass (`preprocess77.sbatch`). **numpy stays the canonical backend for
+  every reported feature**, so these request no GPU; `configs/ibex.yaml` is a paths-only
+  overlay, so the local smoke and the cluster run differ by config alone.
+  *(A-M5-5, 2026-07-23; built at milestone 5.)*
 
 ## Risks flagged
 

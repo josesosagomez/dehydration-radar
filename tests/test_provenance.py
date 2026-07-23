@@ -267,3 +267,31 @@ def test_no_folds_is_allowed(setup):
     config, manifest, _ = setup
     payload = load(record_run(config, manifest, None))
     assert payload["folds"] == []
+
+
+# --------------------------------------------------- M5: 77 GHz data_dir parameter
+
+
+def test_data_dir_selects_the_hashed_root(setup, tmp_path):
+    """A 77 GHz run hashes rel_paths against the passed data_dir, not the 10 GHz root."""
+    config, manifest, _ = setup
+    default = load(record_run(config, manifest))
+    alt = tmp_path / "77ghz"
+    alt.mkdir()
+    for rel in manifest["rel_path"].unique():
+        (alt / rel).write_bytes(b"different-bytes-" + rel.encode())
+    alt_payload = load(record_run(config, manifest, data_dir=alt))
+
+    default_hashes = {e["rel_path"]: e["sha256"] for e in default["inputs"]["radar_files"]}
+    alt_hashes = {e["rel_path"]: e["sha256"] for e in alt_payload["inputs"]["radar_files"]}
+    assert default_hashes != alt_hashes  # data_dir changed which bytes were hashed
+    assert set(default_hashes) == set(alt_hashes)  # ...but the same logical files
+
+
+def test_sliced_manifest_hashes_only_its_files(setup):
+    """An array task passes its single-session manifest slice, so only that file is hashed."""
+    config, manifest, _ = setup
+    one_rel = manifest["rel_path"].iloc[0]
+    payload = load(record_run(config, manifest[manifest["rel_path"] == one_rel]))
+    assert len(payload["inputs"]["radar_files"]) == 1
+    assert payload["inputs"]["radar_files"][0]["rel_path"] == one_rel

@@ -17,6 +17,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_10GHZ_DIR = REPO_ROOT / "data" / "10ghz"
+DATA_77GHZ_DIR = REPO_ROOT / "data" / "77ghz"
 WEIGHT_XLSX = REPO_ROOT / "data" / "weight" / "metadata_subjects_info.xlsx"
 
 N_SUBJECTS = 16
@@ -71,5 +72,33 @@ def real_data_paths():
     return {
         "data_10ghz_dir": DATA_10GHZ_DIR,
         "weight_xlsx": WEIGHT_XLSX,
+        "mat_files": mat_files,
+    }
+
+
+@pytest.fixture(scope="session")
+def real_data_77_paths():
+    """Resolved paths to the real 77 GHz cohort (band 2, milestone 5).
+
+    Separate from real_data_paths so the 10 GHz realdata tests never depend on the
+    22 GB 77 GHz tree being present. Fails (never skips) if the 77 GHz data are absent
+    or incomplete — it only runs under --realdata, whose contract is that the full
+    cohort is present.
+    """
+    if not DATA_77GHZ_DIR.exists():
+        pytest.fail(
+            "--realdata was requested but the 77 GHz data dir is missing: "
+            f"{DATA_77GHZ_DIR}"
+        )
+
+    mat_files = sorted(DATA_77GHZ_DIR.glob("*.mat"))
+    if len(mat_files) != N_RADAR_FILES:
+        pytest.fail(
+            f"expected {N_RADAR_FILES} 77 GHz files in {DATA_77GHZ_DIR}, "
+            f"found {len(mat_files)}"
+        )
+
+    return {
+        "data_77ghz_dir": DATA_77GHZ_DIR,
         "mat_files": mat_files,
     }

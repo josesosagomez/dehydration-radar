@@ -1,0 +1,6 @@
+# 77 GHz data path (band 2, milestone 5). Relative paths resolve against the repo
+# root (never the CWD). Kept separate from data.yaml so a 10 GHz-only run never needs
+# the 22 GB 77 GHz tree present; the 77 GHz entrypoints require it via
+# require_77ghz_dir(config). Session names/order live in src/dehyd/data/sessions.py.
+paths:
+  data_77ghz_dir: data/77ghz

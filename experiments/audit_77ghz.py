@@ -36,7 +36,18 @@ from scipy.signal.windows import hann
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from dehyd.config import SPEED_OF_LIGHT_M_S, load_config  # noqa: E402
+from dehyd.data.loader_77ghz import reverse_axes, to_numeric  # noqa: E402
 from dehyd.provenance import _git_info, sha256_file  # noqa: E402
+from dehyd.qc.axis_check_77 import (  # noqa: E402
+    AXIS_DC_HALFWIDTH,
+    AXIS_DOMINANCE_FACTOR,
+    AXIS_MIN_DC_FRACTION,
+    AXIS_MIN_GATE_FRACTION,
+    axis_metrics,
+    axis_verdict,
+    range_gate_bins,
+)
+from dehyd.qc.screens_77 import qc_in_band_mask_77, qc_smoke_frame  # noqa: E402
 
 RADAR_VAR = "framesRadar"
 
@@ -56,11 +67,8 @@ QC_FLATLINE_MAX_BIN_FRACTION = 0.25
 QC_MIN_IN_BAND_RATIO = 0.30
 QC_IN_BAND_MARGIN_HZ = FS_HZ / 256  # one FFT bin = 1953.125 Hz
 
-# Audit-only diagnostics (never pipeline constants, never entered into CV).
-AXIS_DC_HALFWIDTH = 3  # +-3 bins around zero Doppler
-AXIS_MIN_DC_FRACTION = 0.5  # A1
-AXIS_MIN_GATE_FRACTION = 0.05  # A2
-AXIS_DOMINANCE_FACTOR = 10.0  # A3
+# The axis-check constants (AXIS_DC_HALFWIDTH, AXIS_MIN_DC_FRACTION, AXIS_MIN_GATE_FRACTION,
+# AXIS_DOMINANCE_FACTOR) are now defined once in dehyd.qc.axis_check_77 and imported above.
 CHAIN_MIN_ENERGY_RATIO = 1e-9
 QC_SMOKE_MIN_MEDIAN_RATIO = 0.01
 
@@ -135,20 +143,9 @@ def read_frames(dset, n_frames: int, block_size: int | None = None) -> np.ndarra
     return np.concatenate(blocks, axis=-1)
 
 
-def to_numeric(raw: np.ndarray) -> np.ndarray:
-    """Compound (real, imag) -> complex128; a real float array is passed through."""
-    if raw.dtype.names is None:
-        return np.asarray(raw, dtype=np.float64)
-    return raw["real"].astype(np.float64) + 1j * raw["imag"].astype(np.float64)
-
-
-def reverse_axes(cube: np.ndarray) -> np.ndarray:
-    """(Nrx, Nchirps, Nfast, Nframes) -> (Nframes, Nfast, Nchirps, Nrx).
-
-    MAT v7.3 stores dimensions in reverse of the MATLAB-logical order, so the full
-    axis reversal recovers the layout the reference expects.
-    """
-    return np.transpose(cube, (3, 2, 1, 0))
+# reverse_axes / to_numeric are now defined once in dehyd.data.loader_77ghz and imported
+# above (the milestone-5 promotion). tests/test_audit_77ghz.py still exercises them via
+# `audit.reverse_axes` / `audit.to_numeric`.
 
 
 def finite_frame_mask(cube: np.ndarray) -> np.ndarray:
@@ -156,141 +153,10 @@ def finite_frame_mask(cube: np.ndarray) -> np.ndarray:
     return np.array([bool(np.all(np.isfinite(frame))) for frame in cube])
 
 
-# -------------------------------------------------------- semantic axis check (H1-axes)
-
-
-def range_gate_bins(n_fast: int, bandwidth_hz: float, gate_m) -> np.ndarray:
-    """Range-FFT bin indices covering the gate. dr = c / (2B) per the reference."""
-    dr = SPEED_OF_LIGHT_M_S / (2.0 * bandwidth_hz)
-    ranges = np.arange(n_fast) * dr
-    return np.flatnonzero((ranges >= gate_m[0]) & (ranges <= gate_m[1]))
-
-
-def _mean_power_spectrum(cube: np.ndarray, axis: int) -> np.ndarray:
-    """Power spectrum along `axis`, averaged over every other axis.
-
-    Periodic Hann on the transformed axis (the QC-reference convention). The FULL
-    spectrum is kept: these signals may be complex, so there is no Hermitian symmetry
-    to exploit, and a shared full-spectrum denominator keeps the two candidate axes
-    comparable.
-    """
-    n = cube.shape[axis]
-    shape = [1] * cube.ndim
-    shape[axis] = n
-    windowed = cube * hann(n, sym=False).reshape(shape)
-    power = np.abs(np.fft.fft(windowed, axis=axis)) ** 2
-    other = tuple(a for a in range(cube.ndim) if a != axis)
-    return power.mean(axis=other)
-
-
-def axis_metrics(cube: np.ndarray, fast_axis: int, chirp_axis: int,
-                 gate_bins: np.ndarray, dc_halfwidth: int) -> dict:
-    """G and D for BOTH candidate axis assignments, computed identically.
-
-    G(X) = fraction of power in the range-gate bins of the unshifted FFT along X.
-    D(X) = fraction of power within +-dc_halfwidth bins of zero in the fftshifted
-           spectrum along X.
-    The proposed assignment expects G(fast) material, D(chirp) dominant, G(chirp) ~ 0.
-    D(fast) is recorded but is NOT a standalone discriminator (close-in TX leakage can
-    legitimately concentrate range power near bin 0); it only participates in the
-    mirrored swapped-axis hypothesis.
-    """
-    out = {}
-    for label, axis in (("fast", fast_axis), ("chirp", chirp_axis)):
-        spectrum = _mean_power_spectrum(cube, axis)
-        total = float(spectrum.sum())
-        n = spectrum.shape[0]
-        centre = n // 2
-        shifted = np.fft.fftshift(spectrum)
-        dc = shifted[max(0, centre - dc_halfwidth) : centre + dc_halfwidth + 1]
-        out[f"G_{label}"] = float(spectrum[gate_bins].sum() / total) if total > 0 else 0.0
-        out[f"D_{label}"] = float(dc.sum() / total) if total > 0 else 0.0
-    return out
-
-
-def axis_verdict(metrics: dict, *, min_dc=AXIS_MIN_DC_FRACTION,
-                 min_gate=AXIS_MIN_GATE_FRACTION, dominance=AXIS_DOMINANCE_FACTOR) -> str:
-    """ACCEPTED / REJECTED / INCONCLUSIVE, evaluating both assignments symmetrically.
-
-    Failing the proposed assignment's criteria does not by itself prove the axes are
-    swapped -- low SNR or an unrepresentative file would look the same -- so REJECTED
-    is reserved for positive evidence favouring the swap.
-    """
-    proposed = (
-        metrics["D_chirp"] >= min_dc
-        and metrics["G_fast"] >= min_gate
-        and metrics["G_fast"] >= dominance * metrics["G_chirp"]
-    )
-    swapped = (
-        metrics["D_fast"] >= min_dc
-        and metrics["G_chirp"] >= min_gate
-        and metrics["G_chirp"] >= dominance * metrics["G_fast"]
-    )
-    if proposed and not swapped:
-        return "ACCEPTED"
-    if swapped and not proposed:
-        return "REJECTED"
-    return "INCONCLUSIVE"
-
-
-# ------------------------------------------------------------------ 77 GHz QC smoke
-
-
-def qc_in_band_mask_77(n_fast: int, fs_hz: float, bandwidth_hz: float,
-                       chirp_time_s: float, gate_m, margin_hz: float) -> np.ndarray:
-    """Half-spectrum mask (bins 0..n_fast//2-1, DC in / Nyquist out) — 10 GHz convention."""
-    hz_per_m = 2.0 * (bandwidth_hz / chirp_time_s) / SPEED_OF_LIGHT_M_S
-    lo = max(0.0, hz_per_m * gate_m[0] - margin_hz)
-    hi = min(fs_hz / 2.0, hz_per_m * gate_m[1] + margin_hz)
-    freqs = np.arange(n_fast // 2) * (fs_hz / n_fast)
-    return (freqs >= lo) & (freqs <= hi)
-
-
-def qc_smoke_frame(frame: np.ndarray, mask: np.ndarray, *, bins: int,
-                   max_bin_fraction: float, min_ratio: float) -> dict:
-    """One 77 GHz frame (fast x chirp x rx) against the frozen rules.
-
-    Flatline is per (Rx, chirp) trace and the frame fails if ANY trace flags — the
-    structural analog of the 10 GHz any-chirp rule, at ~205x the multiplicity
-    (16 Rx x 256 chirps = 4096 traces vs 20). Mirrors the 10 GHz per-frame contract:
-    a non-finite frame short-circuits, so unavailable floats are NaN (JSON null).
-    """
-    if not np.all(np.isfinite(frame)):
-        return {"nan_inf": True, "flatline": False, "low_in_band": False,
-                "in_band_ratio": float("nan"), "n_flatline_traces": 0, "passed": False,
-                "per_rx_flatline": [0] * frame.shape[2]}
-
-    n_fast, n_chirps, n_rx = frame.shape
-    max_count = max_bin_fraction * n_fast
-    per_rx = []
-    for rx in range(n_rx):
-        flagged = 0
-        for chirp in range(n_chirps):
-            magnitude = np.abs(frame[:, chirp, rx])
-            edges = np.linspace(magnitude.min(), magnitude.max(), bins + 1)
-            if np.any(edges[:-1] >= edges[1:]):
-                flagged += 1  # degenerate spread == flatline (see qc/screens.py)
-                continue
-            if np.histogram(magnitude, bins=edges)[0].max() >= max_count:
-                flagged += 1
-        per_rx.append(flagged)
-    n_flatline = int(sum(per_rx))
-
-    # In-band: per-(Rx, chirp) periodic-Hann spectra averaged over ALL chirps and Rx.
-    window = hann(n_fast, sym=False)[:, None, None]
-    spectra = np.fft.fft(frame * window, axis=0)
-    power = (np.abs(spectra[: n_fast // 2]) ** 2).mean(axis=(1, 2))
-    ratio = float(power[mask].sum() / max(power.sum(), np.finfo(np.float64).eps))
-
-    return {
-        "nan_inf": False,
-        "flatline": n_flatline > 0,
-        "low_in_band": ratio < min_ratio,
-        "in_band_ratio": ratio,
-        "n_flatline_traces": n_flatline,
-        "per_rx_flatline": per_rx,
-        "passed": n_flatline == 0 and ratio >= min_ratio,
-    }
+# The semantic axis check (range_gate_bins, axis_metrics, axis_verdict) is now defined once
+# in dehyd.qc.axis_check_77, and the 77 GHz QC smoke (qc_in_band_mask_77, qc_smoke_frame) in
+# dehyd.qc.screens_77 — both imported above (the milestone-5 promotion). This module keeps
+# the chain/energy accounting and the provenance-bearing report, which have no production home.
 
 
 # ------------------------------------------------- proposed chain + energy accounting

@@ -1,0 +1,13 @@
+# IBEX overlay — a PATHS-ONLY overlay, passed as a LATER --config so it wins on paths
+# and nothing else (the load_config multi-YAML use case). device stays cpu (the frozen
+# numpy-backend policy; GPU/torch WST for reported artifacts would need an explicit owner
+# policy revision). Worker/thread counts are sbatch/env concerns (OMP_NUM_THREADS), not
+# config. Because it changes only paths.*, an axis certificate stays valid across the
+# rsync (axis_spec_hash excludes environment fields).
+#
+# The owner fills in the literal <user> paths once on IBEX.
+paths:
+  data_10ghz_dir: /ibex/user/<user>/dehyd/data/10ghz
+  data_77ghz_dir: /ibex/user/<user>/dehyd/data/77ghz
+  weight_xlsx:    /ibex/user/<user>/dehyd/data/weight/metadata_subjects_info.xlsx
+  results_dir:    /ibex/user/<user>/dehyd/results

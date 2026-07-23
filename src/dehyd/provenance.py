@@ -109,8 +109,11 @@ def _fold_manifest(folds) -> list[dict]:
     ]
 
 
-def _hash_inputs(config, manifest) -> dict:
-    data_dir = Path(config.paths.data_10ghz_dir)
+def _hash_inputs(config, manifest, data_dir=None) -> dict:
+    # data_dir defaults to the 10 GHz root (all existing call sites unchanged); 77 GHz
+    # entrypoints pass require_77ghz_dir(config). Array tasks pass a single-session manifest
+    # slice, so only that one file is hashed (hashing 22 GB in each of 80 tasks is pure waste).
+    data_dir = Path(config.paths.data_10ghz_dir if data_dir is None else data_dir)
 
     radar = [
         {"rel_path": rel_path, "sha256": sha256_file(data_dir / rel_path)}
@@ -126,12 +129,15 @@ def _hash_inputs(config, manifest) -> dict:
     }
 
 
-def record_run(config, manifest, folds=None, extra: dict | None = None) -> Path:
+def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir=None) -> Path:
     """Write provenance.json for this run and return its path.
 
     Output goes to results_dir/runs/<stamp>_<git-shortrev>/provenance.json. If that
     file already exists the call raises rather than overwriting: repeated runs must
     never silently clobber the record of an earlier one.
+
+    `data_dir` selects which data root the manifest's rel_paths hash against; it defaults
+    to the 10 GHz root, and 77 GHz entrypoints pass require_77ghz_dir(config).
     """
     now = datetime.now(timezone.utc)
     git = _git_info()
@@ -146,7 +152,7 @@ def record_run(config, manifest, folds=None, extra: dict | None = None) -> Path:
     payload = {
         "timestamp_utc": now.isoformat(),
         "config": config_to_dict(config),
-        "inputs": _hash_inputs(config, manifest),
+        "inputs": _hash_inputs(config, manifest, data_dir=data_dir),
         "manifest": {
             "n_frames": int(len(manifest)),
             "n_subjects": int(manifest["subject"].nunique()),
