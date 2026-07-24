@@ -1,0 +1,3 @@
+config       : configs/exp_77ghz.yaml, configs/ibex.yaml  backend numpy
+  subject_7_4pm.mat: 6 variant rows, finite=True
+shard        : /ibex/user/sosagojm/dehy_radar/results/wst/shards/wst77_s7_4pm.csv

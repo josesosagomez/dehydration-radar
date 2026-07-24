@@ -6,6 +6,75 @@ stay in the log. A new session reads only the most recent entries to orient.
 
 ---
 
+## 2026-07-24 — M5 cohort QC on IBEX: **90.4% frame survival, 72/80 sessions, ZERO flatline** — the bin-0 correction validated at scale.
+
+Job 49383703, all 80 files, `flatline skip_leading 1` confirmed in the log header.
+**Axis: ACCEPTED on all 80 files.** **Flatline: 0 across 10,000 frames × 4096 traces (~41M trace
+evaluations)** — the M2 rule would have destroyed this cohort; the mechanism-corrected rule fires
+on nothing. NaN/Inf: 0. **Every one of the 964 rejections is the in-band screen.**
+Survival 9036/10000 (90.4%); **72/80 sessions eligible; all 16 subjects evaluable**; analysis
+population 8966 frames. (10 GHz for comparison: 73/80 sessions, 91.6% frames — the two bands land
+almost on top of each other. **Exp G matched population = 65 sessions**, spanning all 16 subjects.)
+
+**Dropout structure (label-blind).** 8 dropped cells across only 5 subjects (2, 7, 8, 9, 15); the
+other 11 subjects are 125/125 everywhere. The axis diagnostics corroborate the cause independently:
+dropped sessions have lower `G_fast` (median 0.173 vs 0.220) — genuinely less energy in the 2–4 m
+gate, consistent with subject positioning rather than broken acquisition.
+**Confound check — negative, which is the reassuring answer:** median in-band ratio by session is
+flat (0.365 / 0.358 / 0.365 / 0.363 / 0.374 for S0..S4), so signal quality carries no time-of-day
+trend and QC is not behaving in a hydration-dependent way. Eligibility does skew slightly against
+baseline (S0/S1 lost 6 of 32 session points; S2/S4 lost none), driven by a few bad cells, not a trend.
+
+**Carried to M6 — the in-band threshold is threshold-sensitive.** 0.30 sits at **percentile 9.6**
+of the cohort's in-band distribution (p1 0.254, p10 0.304, median 0.364, max 0.520): it slices the
+lower tail of ONE unimodal distribution, with no bimodal gap between "dead" and "healthy" sessions —
+the 8 dropped cells (medians 0.250–0.298) are simply its weakest end. So 0.28 or 0.32 would give a
+materially different population. **Not touched** — re-tuning after seeing survival is exactly the
+cohort-level leakage the plan forbids. Recorded for the M6 freeze, where the documented remedy for a
+genuinely data-adaptive threshold is to move it inside the inner CV loop.
+
+## 2026-07-24 — M5 cohort WST on IBEX: **BUG FOUND AND FIXED — the curated run extracted all frames of eligible sessions instead of the eligible FRAMES.** Shards archived; re-run required.
+
+Array 49399759 completed 79/80; task 22 (subject 5, 12pm) died on a **uv shared-cache race**
+(`failed to rename .../interpreter-v4/...: Text file busy`) — 80 tasks hitting `~/.cache/uv` at once,
+not a data or code fault. Rerun as `--array=22` (job 49399874) succeeded. Validation of the completed
+set was clean: 72/72 eligible cells populated, the 8 empty shards exactly matching the 8 ineligible
+cells, all finite, 6 rows/cell, **geometry identical cohort-wide and identical to the local run**
+(n_paths 424/453/182, n_time 8/4/4), 80/80 fingerprints consistent, ~168 s median per cell.
+
+**Then the defect.** `n_eligible_frames` read 125 for every cell — but `run_wst77.py`'s curated mode
+filtered only at the SESSION level and then extracted **all 125 frames of each eligible session**,
+rather than that session's QC-**passing** frames. The analysis population is `eligible_frames`
+(passing frames of eligible sessions) — documented as the only view modelling may consume — and the
+10 GHz `run_wst.py` does this correctly (`population = eligible_frames(...)` → `cube[:,:,frame_indices]`).
+Impact: **34 QC-failing frames (0.38%) entered the features, in exactly two sessions** — subject 7
+12pm (used 125, should be 102) and subject 9 12pm (used 125, should be 114). The other 70 eligible
+sessions were 125/125 passing, so unaffected numerically. Small, but a specification violation that
+contaminates those two session vectors (a frame-mean/median over failing frames) and breaks
+cross-band consistency for Exp G.
+
+**Fixes applied:** `run_curated` now reads `qc_frames_77ghz.csv`, subsets each cube to that session's
+passing `frame_idx`, and records the column as `n_eligible_frames` (the 10 GHz name); it fails closed
+if the frames CSV is absent. **A second, worse gap surfaced while testing the fix:** `--merge-shards`
+compared shard fingerprints only against EACH OTHER, so a wholly-stale set is self-consistent and
+merged silently — it accepted the pre-fix shards without complaint. The merge now also compares them
+against the fingerprint THIS config/code produces over the semantic fields
+(`wst77_backend`, `axis_spec_hash`, `frame_selection`), excluding `git` (unreadable on the compute
+nodes) and the per-file `raw_sha256`. `frame_selection=qc_pass_frames_of_eligible_sessions` was added
+to the fingerprint precisely so pre-fix shards can never merge with post-fix ones — verified: the
+merge now rejects them by name. Regression test added to `test_wst77.py`.
+
+**Artifacts retired** to `archive/results/m5_wst77_prefilter_shards/` (80 shards + sidecars + the
+invalid curated CSV) with a README stating why they are invalid and what they still evidence.
+**The array must be re-run**; no valid 77 GHz feature artifact exists yet.
+
+**Provenance gap noted:** every shard fingerprint and the QC provenance dir carry
+`git: {commit: None, branch: None, dirty: None}` (dir named `..._nogit`) — git metadata is
+unreadable from the compute nodes, most likely the `safe.directory` ownership check on
+`/ibex/user/...`. The fingerprints still prove all tasks ran identical code, but they cannot attest
+WHICH revision. Fix before the re-run:
+`git config --global --add safe.directory /ibex/user/sosagojm/dehy_radar`.
+
 ## 2026-07-23 — **MILESTONE 5 — code complete; definition of done met except D3 (the cohort runs), which is staged for IBEX.**
 
 **D0 — ✅** prerequisite satisfied before implementation (A-M5-1/A-M5-2 in `implementation_plan.md`

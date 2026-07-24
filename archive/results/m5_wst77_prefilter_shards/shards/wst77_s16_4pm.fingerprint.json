@@ -1,0 +1,10 @@
+{
+  "axis_spec_hash": "d7c0d39be9f1819d340c3174f8325a61f81b2109f7cd43be1d0c94b9673737d3",
+  "git": {
+    "branch": null,
+    "commit": null,
+    "dirty": null
+  },
+  "raw_sha256": "71a6eb1de42f7637e19c95bd2a0f270ba7cfa680dff040949a504c2545110ba8",
+  "wst77_backend": "numpy"
+}

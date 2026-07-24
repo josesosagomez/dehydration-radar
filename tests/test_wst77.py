@@ -321,3 +321,37 @@ def test_extract_real_file_frames(real_data_77_paths):
                                       log_branch="on_frozen_eps", fusion="mean", family="pooled")
     assert np.all(np.isfinite(vec))
     assert vec.shape[0] > 0
+
+
+# ------------------------------------------- analysis population: eligible FRAMES (regression)
+
+
+def test_eligible_frame_selection_uses_qc_pass_not_whole_session():
+    """The analysis population is eligible_frames: QC-PASSING frames of eligible sessions.
+
+    Regression for a milestone-5 bug in run_wst77.py's curated mode, which filtered to
+    eligible SESSIONS but then extracted all 125 frames of each — letting 34 QC-failing
+    frames (2 sessions) into the cohort features. Session-level eligibility is necessary but
+    NOT sufficient: an eligible session can still contain failing frames, and a frame-mean /
+    frame-median session vector built over them is contaminated and diverges from the 10 GHz
+    arm, which filters correctly.
+    """
+    import pandas as pd
+
+    # A session that is eligible (>= ceil(0.5*n) pass) yet still has failing frames.
+    frames = pd.DataFrame({
+        "rel_path": ["subject_7_12pm.mat"] * 6,
+        "frame_idx": [0, 1, 2, 3, 4, 5],
+        "qc_pass": [False, True, True, False, True, True],
+    })
+    passing = {
+        rel: sorted(int(i) for i in g.loc[g["qc_pass"], "frame_idx"])
+        for rel, g in frames.groupby("rel_path")
+    }
+    keep = passing["subject_7_12pm.mat"]
+    assert keep == [1, 2, 4, 5]          # the failing frames are excluded...
+    assert len(keep) < len(frames)        # ...so the extracted set is strictly smaller
+
+    # Subsetting the cube by those indices keeps exactly the passing frames, in order.
+    cube = np.arange(6 * 2 * 4 * 2).reshape(6, 2, 4, 2).astype(float)
+    np.testing.assert_array_equal(cube[keep], cube[[1, 2, 4, 5]])

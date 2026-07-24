@@ -1,0 +1,2 @@
+config       : configs/exp_77ghz.yaml, configs/ibex.yaml  backend numpy
+shard        : /ibex/user/sosagojm/dehy_radar/results/wst/shards/wst77_s2_8am.csv

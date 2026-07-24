@@ -51,6 +51,7 @@ from dehyd.qc.axis_check_77 import axis_spec_hash, require_accepted_axis  # noqa
 
 DIAG_NAME = "wst_diagnostics_77ghz.csv"
 SURVIVAL_CSV = "qc_survival_77ghz.csv"
+FRAMES_CSV = "qc_frames_77ghz.csv"
 N_SMOKE_FRAMES = 3
 
 
@@ -88,17 +89,28 @@ def run_smoke(config, subject, session):
 
 
 def _fingerprint(config, path):
-    """Everything a shard's validity depends on — run/config, code rev, QC + axis, raw file."""
+    """Everything a shard's validity depends on — run/config, code rev, QC + axis, raw file.
+
+    `frame_selection` is part of the fingerprint because it determines WHICH frames entered
+    the features; a shard built before the eligible-frame filter must not merge with one
+    built after it.
+    """
     return {
         "git": _git_info(),
         "wst77_backend": config.wst77.backend,
         "axis_spec_hash": axis_spec_hash(config),
+        "frame_selection": "qc_pass_frames_of_eligible_sessions",
         "raw_sha256": sha256_file(path),
     }
 
 
 def _session_diag_rows(cube, config, subject, session_idx, rel_path):
-    """One session's variant extraction -> diagnostic rows (one per (tiling,fusion))."""
+    """One session's variant extraction -> diagnostic rows (one per (tiling,fusion)).
+
+    `cube` must ALREADY be subset to the session's QC-passing frames — the analysis
+    population is `eligible_frames` (passing frames of eligible sessions), not every frame
+    of an eligible session.
+    """
     t0 = time.time()
     result = extract_session_variants_77(cube, config.preprocess77, config.wst77)
     dt = time.time() - t0
@@ -108,7 +120,7 @@ def _session_diag_rows(cube, config, subject, session_idx, rel_path):
         rows.append({
             "subject": subject, "session_idx": session_idx,
             "session_name": SESSION_NAMES[session_idx], "rel_path": rel_path,
-            "n_frames": cube.shape[0], "tiling_idx": ti, "fusion": fusion,
+            "n_eligible_frames": cube.shape[0], "tiling_idx": ti, "fusion": fusion,
             "n_paths": n_paths, "n_time": n_time,
             "prelog_v0": scale[0], "prelog_v1": scale[1], "prelog_v2": scale[2],
             "all_finite": result.all_finite, "extract_seconds": round(dt, 2),
@@ -127,6 +139,22 @@ def run_curated(config, args):
         )
     survival_df = pd.read_csv(survival)
     eligible = survival_df[survival_df["eligible"]]
+
+    # The analysis population is eligible_frames: the QC-PASSING frames of eligible sessions.
+    # Session-level eligibility alone is not enough — a session can be eligible while still
+    # containing failing frames, and those must not reach the features (they would contaminate
+    # the frame-mean/median session vector and diverge from the 10 GHz arm).
+    frames_path = Path(config.paths.results_dir) / "qc" / FRAMES_CSV
+    if not frames_path.exists():
+        raise SystemExit(
+            f"{frames_path} not found — the curated feature run needs the per-frame QC to "
+            "select the passing frames of each eligible session; run run_qc77.py first."
+        )
+    frames_df = pd.read_csv(frames_path)
+    passing = {
+        rel: sorted(int(i) for i in g.loc[g["qc_pass"], "frame_idx"])
+        for rel, g in frames_df.groupby("rel_path")
+    }
 
     gt = load_ground_truth(config.paths.weight_xlsx)
     manifest = build_manifest_77(config.paths, gt)
@@ -147,10 +175,14 @@ def run_curated(config, args):
         rel = f"subject_{cell.subject}_{cell.session_name}.mat"
         path = resolve_path_77(config.paths, rel)
         require_accepted_axis(path, config, survival_csv=survival)  # per-file guard
-        cube = load_77ghz_file(path)
+        keep = passing.get(rel)
+        if not keep:
+            raise SystemExit(f"{rel}: no QC-passing frames found in {FRAMES_CSV}")
+        cube = load_77ghz_file(path)[keep]  # <- the analysis population, not all frames
         rows = _session_diag_rows(cube, config, cell.subject, session_idx, rel)
         all_rows.extend(rows)
-        print(f"  {rel}: {len(rows)} variant rows, finite={rows[0]['all_finite']}")
+        print(f"  {rel}: {len(keep)}/125 eligible frames, {len(rows)} variant rows, "
+              f"finite={rows[0]['all_finite']}")
 
     frame = pd.DataFrame(all_rows)
     if args.subject is not None:  # a single-cell SHARD
@@ -195,11 +227,25 @@ def run_merge(config):
         shards.append(pd.read_csv(shard))
         fingerprints.append(json.loads(fp.read_text()))
 
-    # Reject any fingerprint disagreement (stale retry / different code / config / raw file).
+    # Two independent checks. (1) The shards must agree with EACH OTHER (no stale retry mixed
+    # into a fresh set). (2) They must also agree with what THIS config/code would produce --
+    # without it, a wholly-stale set is self-consistent and would merge silently. `git` and
+    # `raw_sha256` are excluded from (2): git is unreadable on the compute nodes (recorded but
+    # not comparable across machines) and raw_sha256 is per-file by construction.
+    SEMANTIC = ("wst77_backend", "axis_spec_hash", "frame_selection")
     ref = {k: v for k, v in fingerprints[0].items() if k != "raw_sha256"}
     for fp in fingerprints[1:]:
         if {k: v for k, v in fp.items() if k != "raw_sha256"} != ref:
             raise SystemExit("shard fingerprints disagree (code/config/QC-rule mismatch)")
+
+    expected = _fingerprint(config, resolve_path_77(config.paths, eligible.iloc[0].rel_path))
+    for key in SEMANTIC:
+        got, want = fingerprints[0].get(key), expected.get(key)
+        if got != want:
+            raise SystemExit(
+                f"shards are STALE: fingerprint {key}={got!r} but this config/code produces "
+                f"{want!r}. Re-run the array; do not merge shards built under a different rule."
+            )
 
     merged = pd.concat(shards, ignore_index=True)
     n_cells = merged[["subject", "session_idx"]].drop_duplicates().shape[0]

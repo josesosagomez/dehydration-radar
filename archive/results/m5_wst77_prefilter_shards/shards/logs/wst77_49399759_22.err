@@ -1,0 +1,2 @@
+error: Failed to query Python interpreter
+  Caused by: failed to rename file from /home/sosagojm/.cache/uv/interpreter-v4/d564cbe73be52515/.tmpUPOR84 to /home/sosagojm/.cache/uv/interpreter-v4/d564cbe73be52515/54d1ca5d34dd552d.msgpack: Text file busy (os error 26)
