@@ -18,3 +18,7 @@ results/runs/
 # Transient WST job-array output: per-cell shards + fingerprint sidecars, merged into
 # the committed curated CSV (results/wst/wst_diagnostics_77ghz.csv). Regenerable.
 results/wst/shards/
+
+# The milestone-7 per-session feature store (npz + fingerprint sidecars). Large and fully
+# regenerable from a clean commit by experiments/extract_features.py; never committed.
+results/features/
