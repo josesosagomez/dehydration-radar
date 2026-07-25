@@ -3,6 +3,7 @@
 
 # Raw data: anchored to the repo root, so it never swallows src/dehyd/data/.
 /data*/
+logs*/
 
 .venv/
 __pycache__/

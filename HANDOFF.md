@@ -1,137 +1,120 @@
-# HANDOFF — resume point for a new chat (implementing milestone 5)
+# HANDOFF — resume point for a new chat (planning milestone 6: the config-freeze gate)
 
-_Written 2026-07-23, after the milestone-5 plan was drafted, Codex-reviewed (24 comments,
-all applied), and owner-approved, and the authoritative-document amendments (A-M5-1..4) were
-applied. Purpose: let a fresh Claude Code session **start implementing milestone 5 — the
-77 GHz front-end** without re-deriving context._
+_Written 2026-07-25, at **milestone 5 close**. M5 (the 77 GHz front-end) is fully implemented,
+its cohort QC + WST runs completed on IBEX, and the results are valid and committed. Purpose:
+let a fresh Claude Code session **plan milestone 6 — the config-freeze gate** without
+re-deriving context. **M6 is not yet planned** — no `plans/MILESTONE_6_PLAN.md` exists._
 
 ## TL;DR
 
-**Milestone 5 is fully planned and approved; no M5 code exists yet.** You are on branch
-**`v1_milestone_5`**. 396 tests pass (407 with `--realdata`; only T18 skipped) — that is the
-M4 baseline; M5 adds to it. **Next: implement M5 per `plans/MILESTONE_5_PLAN.md` §1 build
-sequence** (start at step 2 — step 0/step 1 are done: authoritative docs amended, plan +
-HISTORY written).
+**M5 is DONE.** Branch **`v1_milestone_5`**, head **`4c54e25`** (pushed). Mandatory suite
+**526 passed / 17 skipped**; `--realdata` **537 passed / 1 skipped** (only T18, the torch
+mutation leg, still deferred to M7). `test_no_leakage.py` byte-for-byte unmodified since M1.
+Nothing merged to `main`. **Next: plan M6** (write `plans/MILESTONE_6_PLAN.md` in the M2–M5
+template style), then implement on a new `v1_milestone_6` branch. M6 is a **design/freeze
+milestone** — mostly configs, whitelist validators, and one pre-check — **no modelling, no
+heavy compute.**
 
 ## Read first (in this order)
 
 1. `CLAUDE.md` / `AGENTS.md` — hard invariants, code style, journal + file-hygiene rules.
-2. `plans/MILESTONE_5_PLAN.md` — **THE execution plan for M5; source of truth for this
-   milestone.** §0 scope, §1 build sequence (the 12 steps), §2 per-file specs, §3 tests
-   (T-IDs), §4 definition of done, §5 traps, §6 amendments.
-3. `plans/implementation_plan.md` — the approved main design. For M5: the **Exp G** block
-   (the 77 GHz chain, now amended by A-M5-3/A-M5-4), §"WST parameterization", §"Analysis
-   unit", §"Compute / IBEX".
-4. `HISTORY.md` — **newest entry only** (the M5-plan + decisions entry at the top).
+2. `plans/implementation_plan.md` — the source of truth. For M6: **§Build order step 6**
+   (what the freeze covers), §"LOSO harness"/"Search space" (the Exp A search space + the
+   `on+tuned-ε` branch + the order-2-usefulness pre-check ~lines 480–590), §"Frozen 77 GHz
+   pipeline" (~line 929, now carrying A-M5-6), and the baseline/stats/Exp B/C/E/F specs.
+3. `HISTORY.md` — **the four newest entries** (M5 close, the cohort QC finding, the two WST
+   bug fixes). They carry the specific numbers M6 must weigh.
+4. `plans/MILESTONE_5_PLAN.md` §6/§7 — the "carries to M6" list, authoritative.
 
-## What M5 is
+## What M6 is (from implementation_plan.md §Build order step 6)
 
-77 GHz promoted from fusion-only to a **full parallel primary arm** (Exps A–F run on both
-bands; 10 GHz stays the sole headline; Exp G fusion retained). M5 builds the 77 GHz
-front-end — **loader → QC → preprocessing → slow-time I/Q WST → cohort diagnostics** —
-mirroring M1–M4 for band 2, stopping at features (no modelling). **First IBEX milestone.**
+**The config-freeze gate: commit the COMPLETE A–G protocol design for BOTH bands to versioned
+`configs/` + git BEFORE any outer-fold results are inspected.** Rationale: B–G reuse the same
+16 subjects, so any protocol choice made after seeing Exp A's outer results is indirectly
+informed by later "test" subjects. The freeze makes "no config tuned on outer-test" real at the
+cohort level, not just for Exp A. It covers: the Exp A/WST **search space + staged-search
+order**; baseline specs (raw-beat + matched-preprocessing CNN/spectrogram, physics bands);
+per-family budget K + seed set; the full statistical protocol; **Exp B** (residualization +
+equal-session objective), **Exp C** (ordinal family/objective/sign/fold-viability), **Exp E**
+(importance protocol), **Exp F** (single learner + covariate/collinearity rule), **Exp G**
+(77 GHz QC thresholds, eligibility, WST tilings, input domain, fusion); and the **frozen
+protocol-constant whitelist** that modelling entrypoints validate at their frozen values.
+Anything decided after outer results appear is **explicitly labeled exploratory**.
 
-## Milestone numbering (renumbered — A-M5-2, already applied)
+## Specific decisions M6 must make (surfaced by M1–M5 — the real agenda)
 
-M5 = 77 GHz front-end (this). **M6 = config-freeze gate. M7 = LOSO harness + Exp A.** M8 =
-Exp B. M9 = Exp C/D. M10 = fusion(G)/interp(E)/confound(F)/stats(H). M11 = figures.
-(`implementation_plan.md` §Build order + all cross-refs and `ROADMAP.md` §7 amended; ROADMAP's
-list runs one behind because it has no config-freeze milestone.)
+1. **The `on+tuned-ε` third log branch — confirm or drop, via the order-2-usefulness
+   pre-check.** The log axis is `{off / on+frozen-ε(1e-6) / on+tuned-ε}`; the third is a
+   pre-registered candidate that enters the search space **only if** order 2 adds predictive
+   value (compare order-{0,1} vs order-{0,1,2} features). If not, drop it so no dead option
+   widens the N=16 search. Evidence in hand: **both bands show ~1.8× across-subject order-2
+   pre-log scale spread** (10 GHz at M4; 77 GHz at M5 — medians 1.80e-4/1.97e-4/6.22e-4 by
+   tiling in `results/wst/wst_diagnostics_77ghz.csv`), and fold-to-fold the median is stable
+   to <1%. Stability makes a fold-local ε cheap/safe; it does NOT prove order 2 helps — that
+   is exactly what the pre-check tests. The M5 code **ships the tuned-ε application path**
+   (`epsilon_by_order`) but never computes ε; M7's harness computes it train-only.
+2. **The 77 GHz in-band threshold (0.30) — keep frozen, or declare data-adaptive?** The M5
+   cohort QC showed it sits at **percentile 9.6 of a UNIMODAL in-band distribution** (p1 0.254,
+   p10 0.304, median 0.364), slicing the lower tail with **no bimodal gap** — so 0.28 vs 0.32
+   gives a materially different population (it currently drops 8/80 sessions). Per the plan's
+   "QC screens & thresholds" doctrine, a genuinely data-adaptive threshold **moves inside the
+   inner CV loop** (fit per training fold). M6 decides: keep 0.30 frozen (the current state),
+   or move it inside CV. **Do NOT re-tune it to a fixed new value after seeing survival — that
+   is the cohort-level leakage the plan forbids.** The confound check was negative (in-band
+   ratio is flat across sessions → not hydration-correlated), which supports keeping it simple.
+3. **Confirm the A-M4-7 third-log-branch machinery is consistent across both bands** and the
+   10 GHz search space (reduction {A,B} × channel {mag,iq} × tiling × log × gate × model × grid)
+   is frozen with its staged order and per-family budget K.
+
+## Fixed at M5, NOT reopened at M6 (would need a prior authoritative amendment)
+
+- 77 GHz **Rx fusion = mean primary/frozen; median a labeled secondary variant.**
+- 77 GHz **feature family = pooled classical; flat is diagnostic/DL-only.**
+- The 77 GHz frozen protocol constants incl. **`qc77.flatline_skip_leading_bins = 1`** (the
+  exclude-range-bin-0 flatline correction, A-M5-6), tilings (Q, invariance_ms), max_order=2,
+  log_epsilon=1e-6, the 2–4 m gate, `min_in_band_energy_ratio` structure. M6 *whitelists* these;
+  it does not redesign them.
 
 ## Hard invariants (never violate — a failing check stops the build)
 
 - **LOSO** at subject level; no frame of a held-out subject in training, any session.
-- **Fit-on-train-only**: every fitted transform inside the CV loop on training folds only.
-- **No test-set tuning** (incl. QC thresholds — see the flatline decision below).
+- **Fit-on-train-only**; **no test-set tuning** (incl. QC thresholds — see decision 2).
 - **Primary target continuous** (Δm%); 5-class secondary, ordinal metrics.
-- **`tests/test_no_leakage.py` byte-for-byte unmodified since M1** — M5 is per-frame and
-  unfitted, so it does not touch it. DoD checks `git diff --exit-code f3fbade -- <file>`.
-- **numpy kymatio backs ALL reported features**; torch only after the 77 GHz cross-backend
-  test passes.
+- **`tests/test_no_leakage.py` byte-for-byte unmodified since M1.** M6 is config/whitelist +
+  a pre-check; if it touches the harness at all, this file stays untouched and green.
+- **numpy kymatio backs ALL reported features**; torch only after the cross-backend test.
 
-## Owner decisions locked (do NOT re-litigate)
+## Cohort state (what the freeze rests on)
 
-1. **77 GHz = full parallel primary arm** (A-M5-1, applied to plan + ROADMAP).
-2. **Flatline rule → outcome (b): a mechanism-corrected exact replacement of the *77 GHz*
-   screen** (the 10 GHz screen is untouched, frozen since M2). The exact corrected rule is
-   **specified at M5 step 6 from the ADC-quantisation mechanism (M2 single-file audit +
-   physics), NEVER from full-cohort survival** (that would be cohort-level leakage). M5 thus
-   proceeds to the cohort feature runs; (a) keep-frozen and (c) data-adaptive-in-CV remain
-   documented fallbacks only. (A-M5-6.)
-3. **A-M5-3 + A-M5-4 applied** to the Exp G chain: step (6) robust-standardizes real/imag
-   **separately** (median/MAD, 10 GHz-consistent) before WST; the order-aware log applies to
-   the **fused per-frame tensor** at step (8), before pooling, keeping the three-branch log
-   axis (off / on+frozen-ε / on+tuned-ε).
-4. **IBEX access confirmed working**; created at step 10.
+- **77 GHz**: 72/80 sessions eligible, **8966 analysis frames**, all 16 subjects evaluable.
+  Artifacts: `results/qc/qc_survival_77ghz.csv` (+ axis certs), `qc_frames_77ghz.csv`,
+  **`results/wst/wst_diagnostics_77ghz.csv`** (72 cells × 6, committed). Zero flatline
+  cohort-wide; all 964 QC failures are the in-band screen.
+- **10 GHz**: 73/80 sessions eligible (M2/M4 baseline); `wst_diagnostics_10ghz.csv` committed.
+- **Exp G matched population = 65 sessions**, all 16 subjects (eligible in both bands).
 
-## Build sequence (`plans/MILESTONE_5_PLAN.md` §1) — start at step 2
+## Environment / IBEX (working, established)
 
-0/1 ✅ done (authoritative amendments applied; plan + HISTORY written). Then:
-**2** config (`qc77`/`preprocess77`/`wst77` + `data_77ghz_dir`; T-C77) → **3** `loader_77ghz`
-(T-L77) → **4** `manifest_77` (T-M77) → **5** `screens_77` + `axis_check_77` (T-Q77) →
-**6** specify the corrected flatline rule (owner (b)) + a substep that revises the
-step-2/5 artifacts and reruns T-C77/T-Q77 **before** step 7 → **7** cohort QC run →
-**8** `pipeline_77` (T-P77) → **9** `extraction_77` (T-W77) + non-curated `--realdata` smoke
-(T-R77) → **10** IBEX scaffolding (`configs/ibex.yaml`, `scripts/ibex/`) → **11** cohort
-feature runs (IBEX array; blocked by step 6) → **12** close-out (A-M5-5..8, SECOND_CHAPTER §4,
-DoD). Steps 8–10 run in parallel with 6–7.
+- Env: `uv sync --frozen` (scipy pinned `<1.17`; torch CPU-vs-CUDA differs by platform but
+  numpy backs all reported features). IBEX = **CPU** batch jobs; `configs/ibex.yaml` is a
+  paths-only overlay. The owner runs IBEX (no ssh from Claude); `scripts/ibex/README.md` is
+  self-contained. sbatch scripts prefer `.venv/bin/python`, add uv to PATH, and preflight the
+  environment. **Known gap:** `git.commit` records as `None` in provenance on the compute nodes
+  (`safe.directory` fix didn't take) — resolve before M7 re-extracts, likely in the sbatch env.
 
-## Key design (from the plan — don't re-derive)
+## Lesson from M5 to carry into M7 (harness wraps this same code)
 
-- **Config**: three parallel top-level sections `qc77`/`preprocess77`/`wst77` + optional
-  `paths.data_77ghz_dir`; 10 GHz YAML byte-untouched. Doppler tilings `Q=(8,4)/(6,4)/(4,2)` at
-  20/40/60 ms, **code-frozen** (YAML override rejected). New YAML `configs/{data77,
-  preprocess77,wst77,exp_77ghz}.yaml`; signed exponents (`2.0e+9`).
-- **Loader** (`loader_77ghz`): h5py; asserts `(16,256,256,N)` **8-byte real float64** (rejects
-  float32/compound/endianness); **whole-file read** (chunk layout `(16,4,1,125)` spans all
-  frames) then `reverse_axes` → `[N,256,256,16]`. Promote `reverse_axes`/`to_numeric` from the
-  audit.
-- **Chain** (`pipeline_77` steps 1–5, `extraction_77` steps 6–10): MTI → Butterworth bandpass
-  → Hann → 256-pt range FFT → crop bins 27..53; then per frame a batch of **432 complex
-  series** (16 rx × 27 bins) → `scatter_frames([432,2,256])` → mean over bins → per-Rx →
-  **Rx-fusion mean (primary)/median (secondary)** → order-log on the **fused** tensor →
-  pool_stats → session concat mean+median. Bin/Rx loops **folded into the batch dim, never
-  Python loops**. Geometry (T≈39/78/117, J≈6/7/7, pad) **MEASURED, never assumed**.
-- **Axis check** (`axis_check_77`): runs once per file in the cohort QC run on the raw
-  pre-MTI cube; **fails closed on any non-`ACCEPTED` verdict**. Every extraction/preprocess
-  entrypoint + the smoke re-verify an `ACCEPTED` record keyed to `sha256`+`axis_spec_hash`, or
-  run the check inline.
-- **Reuse as-is**: `sessions.py`, `preprocess/{filters,reduce,standardize}.py`,
-  `features/{wst,pooling}.py`, `provenance.record_run` (+ new `data_dir` param), and the
-  imported `manifest._join_qc`/`eligible_frames`/`evaluable_subjects`.
-- **CLIs**: `run_qc77` (two modes — authoritative under (a)/(b); characterization-only under
-  (c)), `run_preprocess77` (single cohort job), `run_wst77` (sharded array + `--merge-shards`
-  with fingerprint sidecars; `--smoke` non-curated mode).
-
-## Open design gates (later — not M5-implementation blockers except step 6)
-
-- **M5 step 6**: the exact mechanism-corrected 77 GHz flatline rule.
-- **M6 config-freeze**: confirm the A-M4-7 third log branch (on+tuned-ε) enters the search
-  space; freeze both bands' A–F design + the protocol-constant whitelist.
-
-## Data / environment
-
-- `data/77ghz/` — 80 files (`subject_<1..16>_<8am|10am|12pm|2pm|4pm>.mat`), ~285 MB each,
-  22 GB. `data/10ghz/` present. **Env complete** (h5py since M2; scipy **pinned `<1.17`**;
-  torch CPU) — no new deps for M5. `uv sync --frozen` on IBEX.
-- **IBEX**: CPU, numpy backend (frozen policy); array over the 80 (subject,session) cells;
-  `configs/ibex.yaml` is a paths overlay only. The owner runs IBEX commands (no ssh from
-  Claude) — `scripts/ibex/README.md` must be self-contained.
-
-## Traps already paid for (plan §5)
-
-- Chunk layout spans all frames → whole-file reads (per-frame reads cost ~125× I/O).
-- kymatio pad at n_in=256 **measured**, not assumed (M4 off-by-one lesson); border warning
-  asserted present, never silenced.
-- 27-bin loop is the hotspot in disguise — fold into batch dim (M4 `pool_stats` 54× lesson).
-- YAML 1.1 signed-exponent trap; CRLF breaks sbatch (`.gitattributes: scripts/ibex/* eol=lf`).
-- Flatline outcome can swing 77 GHz eligibility hard — the rule is fixed on mechanism grounds
-  before the cohort run, never tuned to survival.
+The library functions were solid, but the **CLI/run-script wiring was under-tested** — M5's
+cohort runs surfaced three bugs in the run scripts (eligible-frames selection; a silently
+self-consistent stale-shard merge; a shadowed cell-count check), none in the library. The
+merge path now has end-to-end tests (`tests/test_run_wst77_merge.py`). When M7's harness wraps
+`extraction_77`/`extraction`, **test the wiring to completion**, not just the primitives.
 
 ## Journal & hygiene
 
-- **HISTORY.md** newest-first, an entry per resolved step (failures kept). **SECOND_CHAPTER.md
-  §4 "77 GHz front-end"** at milestone close. **HANDOFF.md** — update only when asked.
-  Superseded code/results → `archive/{code,results}/`, noted in HISTORY.
-- Branches `v1_milestone_1..4` pushed; **`v1_milestone_5` current** (plan + amendments +
-  HISTORY added; no M5 code yet); nothing merged to `main`. Commit only when the owner asks.
+- **HISTORY.md** newest-first, an entry per resolved step (failures kept). **SECOND_CHAPTER.md**
+  — §1–3 (10 GHz) + §4 (77 GHz front-end) written; M6 adds nothing until it produces the freeze.
+  **HANDOFF.md** — update only when asked. Superseded material → `archive/` (M5 retired the
+  pre-fix WST shards to `archive/results/m5_wst77_prefilter_shards/`).
+- Branches `v1_milestone_1..5` pushed; **`v1_milestone_5` current at `4c54e25`**; nothing on
+  `main`. Commit only when the owner asks. Start M6 on a new `v1_milestone_6` branch.
