@@ -33,6 +33,36 @@ materially different population. **Not touched** — re-tuning after seeing surv
 cohort-level leakage the plan forbids. Recorded for the M6 freeze, where the documented remedy for a
 genuinely data-adaptive threshold is to move it inside the inner CV loop.
 
+## 2026-07-25 — M5 cohort WST re-run on IBEX: **curated `wst_diagnostics_77ghz.csv` produced and validated — D3 satisfied for band 2.**
+
+Array re-run after the eligible-frame fix; 80/80 tasks, no cache race this time. Validation
+before merge: 72/72 eligible cells populated, 8 empty shards == the 8 ineligible cells, all
+finite, 6 rows/cell, geometry uniform (n_paths 424/453/182, n_time 8/4/4), 80/80 fingerprints
+consistent, and — the point of the fix — **every cell used exactly its QC-passing frame count**
+(subject 7 12pm now 102, subject 9 12pm now 114, all others 125), summing to **8966 analysis
+frames = the QC analysis population exactly**.
+
+**A THIRD bug, in the merge itself, caught here.** The first merge attempt aborted with "merged
+72 cells but expected 5 eligible". Cause: the staleness check I added in the previous fix did
+`expected = _fingerprint(...)`, **shadowing** the eligible-cells set (72) with a 5-key fingerprint
+dict, so the final `n_cells != len(expected)` compared 72 against `len(dict)`. Renamed to
+`expected_fp`. Root cause of why BOTH this and the earlier "self-consistent stale set" bug slipped
+through: **no test ran `run_merge` to completion** — every prior check stopped at an early abort.
+Added `tests/test_run_wst77_merge.py` (4 tests) driving the real function: a clean merge writes the
+curated CSV with the right cell count (would have caught the shadowing), a stale fingerprint aborts,
+inter-shard disagreement aborts, a missing shard aborts.
+
+**Curated artifact:** `results/wst/wst_diagnostics_77ghz.csv` — 72 cells × 6 = 432 rows, 16
+subjects, all finite. Pre-log order-2 scale (mean fusion) medians 1.80e-4 / 1.97e-4 / 6.22e-4 by
+tiling, across-subject max/min ≈1.85 — the same ~1.8× subject spread the 10 GHz cohort showed at
+M4, so the tuned-ε stability question carries over to band 2 unchanged (an M6 item, not decided here).
+
+**Provenance gap persists:** `git.commit` is still `None` in the fingerprints — the
+`safe.directory` fix did not take on the compute nodes. The set is internally consistent and
+matches the current code by fingerprint, but does not self-attest the revision; the producing
+commit is recorded here manually as the pushed head at run time. Worth resolving before M7 if the
+harness re-extracts.
+
 ## 2026-07-24 — M5 cohort WST on IBEX: **BUG FOUND AND FIXED — the curated run extracted all frames of eligible sessions instead of the eligible FRAMES.** Shards archived; re-run required.
 
 Array 49399759 completed 79/80; task 22 (subject 5, 12pm) died on a **uv shared-cache race**

@@ -238,9 +238,9 @@ def run_merge(config):
         if {k: v for k, v in fp.items() if k != "raw_sha256"} != ref:
             raise SystemExit("shard fingerprints disagree (code/config/QC-rule mismatch)")
 
-    expected = _fingerprint(config, resolve_path_77(config.paths, eligible.iloc[0].rel_path))
+    expected_fp = _fingerprint(config, resolve_path_77(config.paths, eligible.iloc[0].rel_path))
     for key in SEMANTIC:
-        got, want = fingerprints[0].get(key), expected.get(key)
+        got, want = fingerprints[0].get(key), expected_fp.get(key)
         if got != want:
             raise SystemExit(
                 f"shards are STALE: fingerprint {key}={got!r} but this config/code produces "
