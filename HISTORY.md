@@ -69,8 +69,11 @@ A-M6-5. **Full suite 576 passed / 17 skipped** (same 17 realdata/torch-mutation 
 `git diff f3fbade -- tests/test_no_leakage.py` clean. Skipped `--realdata` deliberately: M6
 touches no data-loading code and has no realdata tests.
 
-**Open (owner-triggered):** the freeze commit + annotated tag (`config-freeze-v1`) — DoD D7,
-not done automatically. Nothing committed yet.
+**Freeze committed + tagged (DoD D7 met).** Owner-triggered on 2026-07-25: commit **`357f734`**
+on `v1_milestone_6` (21 files, +2749/−31), annotated tag **`config-freeze-v1`** ("the complete
+A–G protocol… before any outer-fold result was inspected"). Everything decided after this tag
+that depends on outer-fold results is exploratory by definition. Not pushed; nothing on `main`.
+**All seven DoD items (D0–D7) met. Milestone 6 is closed.**
 
 ## 2026-07-25 — M6 PLAN, Step 0 RESOLVED: all five owner decisions recorded; `statsmodels.OrderedModel` verified and rejected, Frank-Hall approved as an explicit substitution (A-M6-5).
 

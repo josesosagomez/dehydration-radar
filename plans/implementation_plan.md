@@ -201,13 +201,14 @@ and nothing MATLAB-derived is reported.)
    half's std. Key finding: ε = 1e-6 is negligible vs order-1 (~1e-3) but 12–64 % of the
    tiny order-2 scale (~1e-6) — the "O(1) coefficient" assumption is false; ε stays
    frozen, log on/off decides at M6.*
-5. **77 GHz front-end — loader → QC → preprocessing → slow-time I/Q WST, the
-   parallel-arm build (first IBEX milestone).** Mirrors milestones 2–4 for the second
+5. ✅ **DONE (2026-07-25, `4c54e25`) — 77 GHz front-end — loader → QC → preprocessing
+   → slow-time I/Q WST, the parallel-arm build (first IBEX milestone).** Mirrors milestones 2–4 for the second
    band so the 77 GHz arm's QC/eligibility/tilings rest on the real cohort before the
    freeze. Stops at features + cohort diagnostics; no modelling. *Execution detail:
    `plans/MILESTONE_5_PLAN.md`; per-step log: HISTORY.md.* *(A-M5-1/A-M5-2, 2026-07-23;
    owner-approved.)*
-6. **Config-freeze gate — the COMPLETE A–G protocol (both bands), before any outer
+6. ✅ **DONE (2026-07-25, `357f734`, tag `config-freeze-v1`) — Config-freeze gate — the
+   COMPLETE A–G protocol (both bands), before any outer
    results are inspected.** Because B–G reuse the same 16 subjects, any protocol choice made after
    seeing Exp A's outer-fold results is indirectly informed by later "test" subjects.
    So the freeze covers **every experiment's design**, committed to versioned
