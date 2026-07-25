@@ -1,225 +1,84 @@
-"""A deterministic nested select-and-refit procedure — the contract for harness.py.
+"""The nested select-and-refit contract — a THIN ADAPTER over the real harness (M7).
 
-This is TEST CODE, deliberately not in src/. It exists so tests/test_no_leakage.py can
-assert the fit-on-train-only property at milestone 1, before harness.py exists (M6).
-It defines exactly what the real harness must satisfy: at M6 the leakage tests rebind
-to harness.py and this module is deleted.
+At milestones 1–6 this file WAS the procedure under test (a self-contained sklearn
+reference). At milestone 7 the leakage suite rebinds to the real
+`src/dehyd/eval/harness.py` WITHOUT editing the byte-for-byte-frozen
+`tests/test_no_leakage.py`: this module is rewritten to delegate to `harness.py`, so the
+frozen tests now exercise the real engine. (The stale "M6" wording that survives inside
+the frozen test file means "M7" — the pre-A-M5-2 renumber could not be fixed there
+without breaking the freeze.)
 
-It is written to be *auditable*, not fast: every fitted quantity is recorded together
-with the subject set it was estimated from, so the tests can verify roles rather than
-trust the implementation.
+It contains ZERO fitting code of its own — no sklearn import, no model. `Dataset` and
+`subject_balanced_mae` are re-exported from the engine/metrics; `run_nested_loso` builds
+the ridge-over-alpha candidates and returns a thin 9-field VIEW of each engine
+`FoldResult` whose fields ARE the engine's own arrays/lists (passed by reference), so
+every `.tobytes()` bit-identity assertion in the frozen suite checks engine output.
 
-Determinism: Ridge has no n_jobs, and BLAS thread counts set from inside a test arrive
-too late to matter, so the numeric work runs inside threadpool_limits(1) and pins an
-explicitly deterministic solver rather than leaving solver="auto" free to switch.
+The reference's old max-alpha tie-break is gone: ties now route through the single frozen
+`eval/selection.py::select_candidate` like every other search. The frozen tests pin only
+`ALPHA_GRID` membership and cross-run bit-identity, not which alpha wins, so this is sound.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-from threadpoolctl import threadpool_limits
 
-from dehyd.eval.splits import nested_loso_splits
+from dehyd.eval import harness
+from dehyd.eval.harness import Dataset  # re-export: the frozen keyword-ctor shape
+from dehyd.eval.metrics import subject_balanced_mae  # re-export: the 5.5-pinned metric
 
 # A small enumerated grid — the point is the protocol, not the model.
 ALPHA_GRID = (0.1, 1.0, 10.0)
 
-RIDGE_SOLVER = "cholesky"  # deterministic; "auto" may switch algorithm
-
-
-@dataclass
-class FitRecord:
-    """One fitted quantity and the subject set it was estimated from."""
-
-    quantity: str
-    role: str  # "inner_train" or "outer_train"
-    subjects: frozenset[int]
-    params: dict[str, np.ndarray]
-
-
-@dataclass
-class InnerResult:
-    inner_train: frozenset[int]
-    inner_val: frozenset[int]
-    alpha: float
-    score: float
-    val_predictions: dict[int, np.ndarray]  # per validation subject
-    fits: list[FitRecord] = field(default_factory=list)
+__all__ = ["ALPHA_GRID", "Dataset", "subject_balanced_mae", "run_nested_loso", "fit_audit"]
 
 
 @dataclass
 class FoldResult:
+    """The frozen VIEW: exactly the 9 attributes the leakage suite reads. Every field is
+    the engine object itself (arrays/lists by reference), so bit-identity assertions test
+    the real harness."""
+
     test_subject: int
-    train_subjects: frozenset[int]      # the outer-training set the audit is checked against
+    train_subjects: frozenset
     selected_alpha: float | None
-    inner_scores: np.ndarray            # (n_alphas, n_inner_folds)
-    inner_results: list[InnerResult]
-    final_fits: list[FitRecord]
+    inner_scores: np.ndarray
+    inner_results: list
+    final_fits: list
     train_predictions: np.ndarray
     test_predictions: np.ndarray
     test_score: float
 
 
-@dataclass
-class Dataset:
-    """Session-level data: one row per (subject, session)."""
-
-    subjects: np.ndarray   # (n_rows,) subject id per row
-    features: np.ndarray   # (n_rows, n_features)
-    targets: np.ndarray    # (n_rows,)
-
-    def rows_for(self, subject_set) -> np.ndarray:
-        return np.isin(self.subjects, sorted(subject_set))
-
-    def subject_ids(self) -> list[int]:
-        return sorted(set(self.subjects.tolist()))
-
-
-def subject_balanced_mae(
-    subjects: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray
-) -> float:
-    """Mean over subjects of each subject's mean |error| across its sessions.
-
-    Subject-balanced, NOT pooled: a subject with more eligible sessions must not
-    dominate the objective. With equal session counts the two coincide, which is why
-    a deliberately unequal fixture is needed to tell them apart.
-    """
-    per_subject = [
-        np.abs(y_true[subjects == s] - y_pred[subjects == s]).mean()
-        for s in sorted(set(subjects.tolist()))
-    ]
-    return float(np.mean(per_subject))
-
-
-def _fit_pipeline(x: np.ndarray, y: np.ndarray, alpha: float):
-    scaler = StandardScaler().fit(x)
-    model = Ridge(alpha=alpha, solver=RIDGE_SOLVER).fit(scaler.transform(x), y)
-    return scaler, model
-
-
-def _predict(scaler, model, x: np.ndarray) -> np.ndarray:
-    return model.predict(scaler.transform(x))
-
-
-def _fit_records(scaler, model, role: str, subjects: frozenset[int]) -> list[FitRecord]:
-    return [
-        FitRecord(
-            quantity="scaler",
-            role=role,
-            subjects=subjects,
-            params={"mean_": scaler.mean_.copy(), "scale_": scaler.scale_.copy()},
-        ),
-        FitRecord(
-            quantity="ridge",
-            role=role,
-            subjects=subjects,
-            params={
-                "coef_": np.atleast_1d(model.coef_).copy(),
-                "intercept_": np.atleast_1d(model.intercept_).copy(),
-            },
-        ),
-    ]
-
-
-def run_fold(data: Dataset, fold) -> FoldResult:
-    """Select alpha on inner folds, refit on all outer-training subjects, then score."""
-    with threadpool_limits(1):
-        inner_results: list[InnerResult] = []
-        scores = np.full((len(ALPHA_GRID), len(fold.inner_folds)), np.nan)
-
-        for j, inner in enumerate(fold.inner_folds):
-            train_rows = data.rows_for(inner.train_subjects)
-            val_rows = data.rows_for(inner.val_subjects)
-
-            for i, alpha in enumerate(ALPHA_GRID):
-                scaler, model = _fit_pipeline(
-                    data.features[train_rows], data.targets[train_rows], alpha
-                )
-                predictions = _predict(scaler, model, data.features[val_rows])
-                score = subject_balanced_mae(
-                    data.subjects[val_rows], data.targets[val_rows], predictions
-                )
-                scores[i, j] = score
-
-                inner_results.append(
-                    InnerResult(
-                        inner_train=inner.train_subjects,
-                        inner_val=inner.val_subjects,
-                        alpha=alpha,
-                        score=score,
-                        val_predictions={
-                            s: predictions[data.subjects[val_rows] == s]
-                            for s in sorted(inner.val_subjects)
-                        },
-                        fits=_fit_records(scaler, model, "inner_train", inner.train_subjects),
-                    )
-                )
-
-        # Selection: lowest mean inner score; ties broken toward the larger alpha
-        # (the simpler, more regularized model).
-        mean_scores = scores.mean(axis=1)
-        best = int(np.argmin(mean_scores))
-        ties = np.flatnonzero(mean_scores == mean_scores[best])
-        selected_alpha = max(ALPHA_GRID[i] for i in ties)
-
-        # Final refit on ALL outer-training subjects, then score the held-out subject.
-        train_rows = data.rows_for(fold.train_subjects)
-        test_rows = data.rows_for({fold.test_subject})
-        scaler, model = _fit_pipeline(
-            data.features[train_rows], data.targets[train_rows], selected_alpha
-        )
-        train_predictions = _predict(scaler, model, data.features[train_rows])
-        test_predictions = _predict(scaler, model, data.features[test_rows])
-        test_score = subject_balanced_mae(
-            data.subjects[test_rows], data.targets[test_rows], test_predictions
-        )
-
+def _view(result) -> FoldResult:
+    selected_alpha = None if result.selected is None else result.selected.params()["alpha"]
     return FoldResult(
-        test_subject=fold.test_subject,
-        train_subjects=fold.train_subjects,
+        test_subject=result.test_subject,
+        train_subjects=result.train_subjects,
         selected_alpha=selected_alpha,
-        inner_scores=scores,
-        inner_results=inner_results,
-        final_fits=_fit_records(scaler, model, "outer_train", fold.train_subjects),
-        train_predictions=train_predictions,
-        test_predictions=test_predictions,
-        test_score=test_score,
+        inner_scores=result.inner_scores,
+        inner_results=result.inner_results,
+        final_fits=result.final_fits,
+        train_predictions=result.train_predictions,
+        test_predictions=result.test_predictions,
+        test_score=result.test_score,
     )
 
 
 def run_nested_loso(data: Dataset, **split_kwargs) -> list[FoldResult]:
-    """Folds come only from eval/splits.py — never constructed here."""
-    folds = nested_loso_splits(data.subject_ids(), **split_kwargs)
-    return [run_fold(data, fold) for fold in folds if fold.selectable]
+    """Nested LOSO ridge-over-ALPHA_GRID, via the real harness. Folds come only from
+    `eval/splits.py` (through the harness) — never constructed here."""
+    candidates = [
+        harness.Candidate(f"ridge_a{a}", "ridge", (("alpha", a),), feature_key=None, active=None)
+        for a in ALPHA_GRID
+    ]
+    results = harness.run_nested_candidates(data, candidates, seeds=(0,), **split_kwargs)
+    return [_view(r) for r in results]
 
 
-def fit_audit(results: list[FoldResult]) -> list[dict]:
-    """Every fitted quantity -> the subject set it was estimated from."""
-    audit = []
-    for result in results:
-        for inner in result.inner_results:
-            for record in inner.fits:
-                audit.append(
-                    {
-                        "test_subject": result.test_subject,
-                        "quantity": record.quantity,
-                        "role": record.role,
-                        "fitted_on": record.subjects,
-                        "inner_val": inner.inner_val,
-                    }
-                )
-        for record in result.final_fits:
-            audit.append(
-                {
-                    "test_subject": result.test_subject,
-                    "quantity": record.quantity,
-                    "role": record.role,
-                    "fitted_on": record.subjects,
-                    "inner_val": None,
-                }
-            )
-    return audit
+def fit_audit(results) -> list[dict]:
+    """Every fitted quantity -> its subject set. Duck-typed over the views (they expose
+    `.inner_results`/`.final_fits`/`.test_subject`)."""
+    return harness.fit_audit(results)

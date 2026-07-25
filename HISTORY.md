@@ -4,6 +4,130 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-26 — MILESTONE 7 IMPLEMENTED to the owner checkpoint: the LOSO harness + Exp A. Full suite 682 passed / 16 skipped; T18 GREEN; frozen `test_no_leakage.py` changed only in the pre-registered T18 hunk. Real-data store build + smoke await the owner's clean commit (step 10.5).
+
+M7's code is complete and every test is green. Built test-first on `v1_milestone_7` (from the
+config-freeze base). Nothing committed yet (commit only when the owner asks) — which is exactly
+why the real-data store build + smoke are the remaining owner-gated steps (a store must be built
+from a clean revision; `assert_clean_tree` refuses a dirty tree, C7/C16).
+
+**What landed (build order steps 0–10, each green before the next):**
+- **Step 0–1** — pinned `matplotlib` (scipy stays 1.16.3 < 1.17; added to `TRACKED_PACKAGES`);
+  `provenance._git_info` gained a `DEHYD_GIT_COMMIT/_BRANCH/_DIRTY` env fallback (per-field, only
+  where live git returns None) so IBEX compute nodes self-attest their revision; stale
+  "milestone 6" strings fixed. **T-M7-provenance** green.
+- **Step 2 — `eval/metrics.py`**: `subject_balanced_mae` byte-compatible with the M1 definition
+  (T17's 5.5 pin holds through the shim re-export); own **BCa** cluster bootstrap (B=10000,
+  percentile fallback recorded, skip-and-count + >5% unreliable flag), metric-type-aware seed
+  collapse, Wilcoxon. No `scipy.stats.bootstrap` (pin). 13 tests.
+- **Step 3 — `models/regressors.py`**: the five families in a scaler pipeline; grid enumeration
+  (ridge 8 / svr 12 / knn 7 / rf 6 / gbm 8, each ≤ budget_k); per-family auditable fitted state
+  as ndarrays incl. SVR `support_vectors_` (C15) and an rf/gbm sha256 **ensemble digest binding
+  `init_` + combining hyperparameters** (C20). 26 tests.
+- **Step 4 — `eval/harness.py`**: ONE generic nested-LOSO engine — candidate-major execution but
+  fold-major/candidate-minor assembly (the frozen flat order); selection ONLY via
+  `select_candidate` (`inner_fold_variance = np.std(ddof=0)`, owner O1); `before_fit` guard hook
+  with a **fail-closed `active`-completeness check** (C5); **pre-fit fold-viability** predicates
+  with reason codes, unexpected exceptions propagate (C6/C21); per-seed outer outcomes kept
+  separate; fit-audit incl. `tuned_epsilon`; `tuned_epsilons` train-only. 25 tests incl. the
+  per-family held-out mutation property.
+- **Step 5 — the rebind**: `reference_procedure.py` rewritten as a thin adapter over the harness
+  (zero sklearn), returning a 9-field VIEW by reference. Frozen `test_no_leakage.py` **T1–T17,
+  T19 now exercise the real engine**.
+- **Step 6 — `models/torch_fit.py`** (TinyMLP, **true patience/min-delta early stopping**, C19)
+  + **T18 activated** — the one sanctioned frozen-file edit (A-M7-1): outer-test mutation
+  contract green; a separate inner-val test compares the train trajectory over the **common
+  prefix** (C13/C18). Frozen diff = single T18 hunk; T1–T17/T19 byte-identical (D4).
+- **Step 7** — `apply_order_log(epsilon_by_order=…)` (bit-identical to frozen at ε=1e-6) +
+  `pool_stats_batch` (== looped) + `tuned_epsilons` bit-equivalence. 7 tests.
+- **Step 8 — `features/store.py`**: per-session `.npz` + fingerprint (spec_hash, **frame_ids_sha256**
+  binding QC frame membership (C4), qc_config_hash, git); fail-closed `validate_store` with
+  **store/analysis commit match** (C16); `keep_raw` on both extractions; **store-vs-direct
+  frozen-ε reconstruction equivalence** green; `extract_features.py` producer (both bands, refuses
+  a dirty tree) + `extract77.sbatch` + `submit_extract77.sh` (captures the clean commit). 11 tests.
+- **Step 9 — `models/baselines.py`**: session-index-only baseline, **global-train-mean fallback**
+  (owner O2), FitRecord for the audit, config-level guard path (owner O3). 4 tests.
+- **Step 10 — `eval/exp_a.py`** (StoreBackedFeatures, staged Stage-1→Stage-2 run, guard before
+  every fit, baseline, summarize + Agg scatter) + rewritten `experiments/run_regression.py`
+  (`--band`, `--subset 6subjects` XOR `--full-cohort`; **mechanism-only smoke surfaces no
+  performance value**, C9/C14). **D5 end-to-end synthetic-store outer-mutation property GREEN** —
+  the real store-backed staged path leaks nothing under held-out mutation. Entrypoint + plotting
+  tests green.
+
+**Owner decisions folded in:** O1 `ddof=0`, O2 baseline global-mean fallback, O3 config-level
+baseline guard — all as the owner chose (A-M7-2 recorded).
+
+**Remaining (owner-gated, the checkpoint):** step 10.5 = a clean owner-triggered commit of this
+code, then step 11 = build the 10 GHz store locally (`extract_features.py --band 10ghz`, ~8–12 GB)
++ the 77 GHz store on IBEX (`submit_extract77.sh`), then step 12 = the mechanism-only smokes, then
+STOP. The full-cohort run (step 13, spends the freeze) is a separate `--full-cohort` invocation on
+explicit go-ahead. **No outer-fold result has been inspected.**
+
+## 2026-07-25 — MILESTONE 7 PLANNED + Codex-reviewed: `plans/MILESTONE_7_PLAN.md` written and taken through the file-mediated Codex⇄Claude review loop to `REVIEW_COMPLETE`. 21 comments over 3 rounds, all applied; 3 owner decisions (O1–O3) parked for the owner. No code yet.
+
+M7 (the LOSO harness + Exp A) is **planned, not implemented**. This entry logs the planning +
+review; implementation starts later on a new `v1_milestone_7` branch after O1–O3 are decided.
+
+**The plan.** `plans/MILESTONE_7_PLAN.md`, in the M4–M6 template spine (§0 scope → Step 0/0b
+owner decisions → §1 build-sequence table → §2 per-file specs → §3 tests → §4 DoD → §5 traps →
+§6 flagged gaps/amendments → §7 open items). Scope = `eval/harness.py` (one generic nested-LOSO
+engine, sklearn + torch fit paths, fit-audit, tuned-ε fold-local) + `eval/metrics.py` (MAE/RMSE/
+r + subject-cluster BCa bootstrap B=10000 + Wilcoxon) + `models/{regressors,baselines,torch_fit}`
++ `features/store.py` + `experiments/extract_features.py` + extend `run_regression.py`; run Exp A
+session-level LOSO on BOTH bands vs the session-index-only baseline; rebind `reference_procedure.py`
+to the real harness and activate **T18**. Three owner decisions taken up front: T18 activation is
+the one sanctioned edit to frozen `test_no_leakage.py` (A-M7-1, pre-registered at M1); the 77 GHz
+feature store is built on IBEX; an explicit owner checkpoint precedes the first full-cohort run.
+
+**The review setup.** Two reusable prompt files (`plans/review_prompt_codex.md`,
+`plans/review_prompt_claude.md`) drive a turn-based loop mediated entirely through a `## Plan
+review` block appended to the plan file: a `Status:` line is the turn token
+(AWAITING_CODEX/AWAITING_CLAUDE/REVIEW_COMPLETE); Codex writes `C#` comments, Claude applies (edit
++ delete + log) or debates (verbatim thread + rebuttal, ≥3 rounds → Deferred to owner). Claude
+waited on each turn via a file-watch monitor. No debates or escalations arose — every comment was
+judged correct on the merits and applied.
+
+**Round 1 (C1–C13, all applied).** The substantive catches: **C1** the frozen suite only
+exercises the Ridge shim, so the real store-backed staged path was unproven → added an end-to-end
+**synthetic-store outer-mutation** test; **C5** `protocol_freeze_guard` validates only *present*
+`active` keys (`{"band":"10ghz"}` passes) → added a fail-closed completeness check; **C9** the
+6-subject real smokes were themselves exposing cohort-member outer scores → made the real-data
+smoke **mechanism-only**; **C2/C3/C12** three unapproved protocol completions (baseline
+absent-index rule, the `ddof=0` tie-break estimator, the K=1 baseline guard path) → de-frozen and
+elevated to owner-approval items (the M6 C6-16 process rule). Plus C4 (fingerprint must bind exact
+QC frame membership), C6 (KNN `k>rows` fold-viability), C7 (clean commit before store builds),
+C8 (DoD split into pre-checkpoint / post-approval), C10 (matplotlib unpinned), C11 (per-family
+fitted-state capture), C13 (outer-test vs inner-val torch mutation contracts disentangled).
+
+**Round 2 (C14–C18, all applied).** Second-order refinements: **C14** "smoke computes no
+performance value" is infeasible (a nested search must compute scores to select) → reworded to
+"no performance value *leaves the process*", one code path, branch only at the reporting boundary;
+**C15** the fitted-state contract wasn't executable as typed (string hash in a `.tobytes()`-
+compared ndarray field; SVR missing `support_vectors_`) → all params ndarray, digest as uint8,
+separate JSON audit artifact; **C16** the dirty-tree guard was IBEX-only → both producers +
+store/analysis commit-match; **C17** moved O1–O3 into the "Deferred to owner" section proper;
+**C18** early stopping makes the inner-val trajectory variable-length.
+
+**Round 3 (C19–C21, all applied).** **C19 (blocking) reverted my own C18 fix**: I had changed the
+torch trainer to run-to-fixed-max-epochs to make the inner-val test clean, but that diverged from
+the frozen early-stopping protocol (`patience`/`min_delta`) and would make T18 protect a
+*different* algorithm than the DL baselines actually run — reverted to true early stopping with a
+**common-prefix** inner-val comparison (stop-time/checkpoint may differ). **C20**: the GBM digest
+must bind `init_` + combining hyperparameters, not just tree nodes. **C21**: fold-viability must
+be explicit pre-fit predicates with reason codes, not a broad try/except that could swallow real
+bugs — unexpected fit/predict exceptions now propagate loudly.
+
+**Outcome.** `Status: REVIEW_COMPLETE`, `Codex: NO MORE COMMENTS`. Plan test estimate ≈84 new
+tests (576 → ~660), T18 skip→pass. **Owner cleared O1–O3 (2026-07-25), all recommended options:**
+O1 inner-fold-variance = **population std `np.std(ddof=0)`**; O2 baseline absent-index =
+**global training-fold mean** (keeps every test session scored, so radar/baseline share the
+session set the paired Wilcoxon needs); O3 K=1 baseline guard = **config-level
+`protocol_freeze_guard(config, active=None)`** (no WST axes to validate; frozen M6 guard code
+untouched). Folded into the plan body (§2.3/§2.4/§6) and the Deferred-to-owner threads.
+**The plan is final.** Implementation is the next session's work, on a new `v1_milestone_7`
+branch from `v1_milestone_6` (`357f734`); step 1 = the git-provenance fix + matplotlib pin, then
+metrics → regressors → harness → the frozen-suite rebind, test-first. Commit only when asked.
+
 ## 2026-07-25 — MILESTONE 6 IMPLEMENTED: the config-freeze gate. 11 frozen config sections + 2 new src modules + 50 tests; full suite 576 passed / 17 skipped; `test_no_leakage.py` untouched.
 
 M6 is code-complete. It is a pure config/validation milestone — **zero computation on cohort

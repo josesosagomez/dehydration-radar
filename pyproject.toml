@@ -25,6 +25,10 @@ dependencies = [
     "kymatio>=0.3",
     "h5py>=3.16.0",
     "torch>=2.13.0",
+    # Added at milestone 7 for the Exp A predicted-vs-actual scatter. Rendered via the
+    # headless Agg backend (no display). matplotlib has no scipy dependency, so it does
+    # NOT disturb the scipy <1.17 pin above (verified at M7).
+    "matplotlib>=3.7",
 ]
 
 [dependency-groups]

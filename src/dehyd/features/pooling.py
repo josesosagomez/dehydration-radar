@@ -79,6 +79,34 @@ def pool_stats(S: np.ndarray, meta) -> np.ndarray:
     return stacked.reshape(-1)
 
 
+def pool_stats_batch(S: np.ndarray, meta) -> np.ndarray:
+    """Batched `pool_stats`: [N, C, n_paths, n_time] -> [N, D].
+
+    Bit-identical to stacking `pool_stats(S[i], meta)` — same operations, one extra leading
+    axis — so the store consumer can pool all of a session's frames at once (the milestone-7
+    tuned-ε reconstruction hotspot) without a Python per-frame loop.
+    """
+    S = np.asarray(S, dtype=np.float64)
+    if S.ndim != 4:
+        raise PoolingError(f"pool_stats_batch expects [N, C, n_paths, n_time], got {S.shape}")
+    order = np.asarray(meta["order"] if isinstance(meta, dict) else meta.meta()["order"])
+    n_frames, n_channels, n_paths, n_time = S.shape
+    if n_paths != order.shape[0]:
+        raise PoolingError(f"path-count mismatch: S has {n_paths} paths, meta has {order.shape[0]}")
+    if n_time < 2:
+        raise PoolingError(f"n_time must be >= 2 so each half is nonempty, got {n_time}")
+
+    slices = _segment_slices(n_time)
+    columns = []
+    for segment in SEGMENTS:
+        seg = S[:, :, :, slices[segment]]  # [N, C, n_paths, seg_len]
+        columns.append(seg.mean(axis=-1))
+        if _segment_has_std(n_time, segment):
+            columns.append(seg.std(axis=-1, ddof=0))
+    stacked = np.stack(columns, axis=-1)  # [N, C, n_paths, n_stats]
+    return stacked.reshape(n_frames, -1)
+
+
 def feature_layout(meta, n_time: int, n_channels: int) -> tuple:
     """Per-element metadata of the pooled per-frame vector.
 

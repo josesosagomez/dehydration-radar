@@ -236,10 +236,17 @@ class SessionVariant77Result:
     prelog_scale: dict  # {(tiling_idx, fusion): (v0, v1, v2)} — KEYED BY fusion (C5-10)
     shapes: dict  # {tiling_idx: (n_paths, n_time)}
     all_finite: bool
+    # Milestone 7 (keep_raw=True only): the RAW pre-log fused tensor + meta order per tiling,
+    # for the PRIMARY fusion "mean" (fusion is not a search axis), so the tuned-ε branch can be
+    # reconstructed from a persistent store. None by default; vectors/prelog_scale unchanged.
+    raw: dict | None = None  # {tiling_idx: {"S": [N,2,P,t] pre-log (mean fusion), "order": [P]}}
+
+
+PRIMARY_FUSION_77 = "mean"
 
 
 def extract_session_variants_77(cube: np.ndarray, pre77: Preprocess77Config,
-                                wst77: WST77Config) -> SessionVariant77Result:
+                                wst77: WST77Config, *, keep_raw: bool = False) -> SessionVariant77Result:
     """Cohort-loop form: preprocess once, scatter once per tiling, derive all variants.
 
     Per (tiling, fusion) it reuses ONE shared raw fused tensor for every
@@ -247,13 +254,17 @@ def extract_session_variants_77(cube: np.ndarray, pre77: Preprocess77Config,
     IN-RUN reuse of a deterministic intermediate, NOT a persistent cache. Computing both
     fusions/families is for diagnostics + the DL path; only (mean, pooled) is the primary
     classical modeling path.
-    """
+
+    `keep_raw=True` additionally returns the raw pre-log fused tensor + meta order per tiling
+    for the primary fusion "mean" (the M7 feature-store tuned-ε input); it does not change any
+    vector/prelog_scale/shape (same fused tensor)."""
     gated = preprocess_cube_77(cube, pre77)
     n_in, n_frames = gated.shape[2], gated.shape[0]
 
     vectors: dict = {}
     prelog_scale: dict = {}
     shapes: dict = {}
+    raw: dict = {}
     all_finite = True
 
     for ti, tiling in enumerate(wst77.tilings):
@@ -268,6 +279,8 @@ def extract_session_variants_77(cube: np.ndarray, pre77: Preprocess77Config,
             fused_frames = np.stack([_fuse_rx(pr, fusion) for pr in per_rx_frames])  # [N,2,P,t]
             shapes.setdefault(ti, (fused_frames.shape[-2], fused_frames.shape[-1]))
             prelog_scale[(ti, fusion)] = _prelog_scale_77(fused_frames, meta)
+            if keep_raw and fusion == PRIMARY_FUSION_77:
+                raw[ti] = {"S": fused_frames.copy(), "order": np.asarray(meta["order"]).copy()}
             for log_branch in DATA_INDEPENDENT_LOG_BRANCHES:
                 logged = np.stack([
                     apply_order_log_77(fused_frames[i], meta, wst77, log_branch=log_branch)
@@ -280,7 +293,8 @@ def extract_session_variants_77(cube: np.ndarray, pre77: Preprocess77Config,
                     all_finite = all_finite and bool(np.all(np.isfinite(vec)))
 
     return SessionVariant77Result(
-        vectors=vectors, prelog_scale=prelog_scale, shapes=shapes, all_finite=all_finite
+        vectors=vectors, prelog_scale=prelog_scale, shapes=shapes, all_finite=all_finite,
+        raw=(raw if keep_raw else None),
     )
 
 

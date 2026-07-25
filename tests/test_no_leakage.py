@@ -433,25 +433,44 @@ def test_t17_unequal_session_counts_run_end_to_end():
         assert np.isfinite(result.inner_scores).all()
 
 
-@pytest.mark.skip(reason="torch fit path lands with harness.py at M6")
 def test_t18_torch_mutation_property():
     """T18: the torch leg of the mutation property test.
 
-    SKIP SCOPE IS CRITICAL: both guards are inside this function. A module-level
+    SKIP SCOPE IS CRITICAL: the torch guard is inside this function. A module-level
     pytest.importorskip("torch") would skip T1-T17 and T19 as well, letting this file
     report green while none of its core assertions ran.
 
-    torch enters the environment at M4 (WST cross-backend validation), but there is no
-    torch TRAINING procedure to test until harness.py at M6 — hence the static skip
-    above, which is removed then. Must be green before any torch result is reported.
+    Activated at milestone 7 (the harness milestone — the surrounding "M6" wording is the
+    pre-renumber name): the static skip is removed and the real torch fit path
+    (dehyd.models.torch_fit.run_torch_nested) is exercised, per the pre-registered
+    A-M7-1 amendment. This is the ONE sanctioned edit to this otherwise-frozen file.
 
-    Asserts, under the same mutation protocol: bit-identical epoch budget (median of
-    inner-fold selections), input-normalization statistics, class/sampler weights,
-    early-stopping selection, every state_dict tensor, and training-set predictions —
-    only the held-out prediction/score may change.
+    Asserts, under the same (outer-test) mutation protocol: bit-identical epoch budget
+    (median of inner-fold selections), input-normalization statistics, class/sampler
+    weights, early-stopping selection, every state_dict tensor, and training-set
+    predictions — only the held-out prediction/score may change.
     """
     pytest.importorskip("torch")
-    raise AssertionError("unreachable until M6")
+    from dehyd.models.torch_fit import TorchFitSpec, run_torch_nested
+
+    spec = TorchFitSpec(max_epochs=25, patience=4, min_delta=1e-4, lr=1e-2)
+    held_out = 3
+    data = make_dataset()
+    mutated = mutate_subject(data, held_out, features=True, labels=True)
+
+    base = fold_by_test_subject(run_torch_nested(data, spec, seed=0), held_out)
+    mut = fold_by_test_subject(run_torch_nested(mutated, spec, seed=0), held_out)
+
+    # The held-out subject is in NEITHER train nor inner-val, so everything determined
+    # before scoring is bit-identical: the epoch budget, every fitted quantity (input
+    # normalization, sampler weights, and every state_dict tensor — assert_fits_identical
+    # compares them by .tobytes()), and the training-set predictions.
+    assert base.epoch_budget == mut.epoch_budget
+    assert_fits_identical(base.final_fits, mut.final_fits)
+    assert base.train_predictions.tobytes() == mut.train_predictions.tobytes()
+
+    # Only the held-out subject's prediction (its features were mutated) may move.
+    assert base.test_predictions.tobytes() != mut.test_predictions.tobytes()
 
 
 # ================================================================ Part D — fit audit

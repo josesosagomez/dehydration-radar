@@ -40,6 +40,7 @@ TRACKED_PACKAGES = (
     "pytest",
     "torch",  # absent until milestone 4; recorded as None until then
     "h5py",   # absent until milestone 2
+    "matplotlib",  # added milestone 7 (Exp A scatter)
 )
 
 
@@ -55,7 +56,32 @@ def sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
+def _env_dirty():
+    """Parse DEHYD_GIT_DIRTY into a bool, or None if unset/blank.
+
+    The submit wrapper captures the tree state at submit time; "1"/"true"/"yes" mean a
+    dirty tree, "0"/"false"/"no" a clean one. Anything else (or unset) is None.
+    """
+    raw = os.environ.get("DEHYD_GIT_DIRTY")
+    if raw is None:
+        return None
+    raw = raw.strip().lower()
+    if raw in ("1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no", ""):
+        return False
+    return None
+
+
 def _git_info() -> dict:
+    """Git revision for provenance, with an env-var fallback for cluster compute nodes.
+
+    On IBEX compute nodes the in-process `git` call returns None (M5's `safe.directory`
+    fix did not take there — git ignores that config outside a protected scope). So each
+    field falls back to DEHYD_GIT_COMMIT / DEHYD_GIT_BRANCH / DEHYD_GIT_DIRTY, which the
+    sbatch submit wrapper captures on the LOGIN node at submit time. A run therefore
+    self-attests its revision even where git itself cannot answer.
+    """
     def run(args):
         try:
             out = subprocess.run(
@@ -71,11 +97,19 @@ def _git_info() -> dict:
 
     commit = run(["git", "rev-parse", "HEAD"])
     status = run(["git", "status", "--porcelain"])
-    return {
-        "commit": commit,
-        "dirty": None if status is None else bool(status),
-        "branch": run(["git", "rev-parse", "--abbrev-ref", "HEAD"]),
-    }
+    branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+
+    # Per-field fallback: use the env var only where the live git call gave nothing, so a
+    # working local checkout always reports its own true state and never the stale env.
+    if commit is None:
+        commit = os.environ.get("DEHYD_GIT_COMMIT") or None
+    if branch is None:
+        branch = os.environ.get("DEHYD_GIT_BRANCH") or None
+    dirty = None if status is None else bool(status)
+    if dirty is None:
+        dirty = _env_dirty()
+
+    return {"commit": commit, "dirty": dirty, "branch": branch}
 
 
 def _package_versions() -> dict:

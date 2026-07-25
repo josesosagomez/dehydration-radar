@@ -295,3 +295,73 @@ def test_sliced_manifest_hashes_only_its_files(setup):
     payload = load(record_run(config, manifest[manifest["rel_path"] == one_rel]))
     assert len(payload["inputs"]["radar_files"]) == 1
     assert payload["inputs"]["radar_files"][0]["rel_path"] == one_rel
+
+
+# ------------------------------------- M7: git-commit env fallback (compute nodes)
+# On IBEX compute nodes the in-process `git` call returns None (safe.directory did not
+# take). The sbatch submit wrapper captures the revision at submit time into
+# DEHYD_GIT_COMMIT/_BRANCH/_DIRTY, and _git_info falls back to them, so a cluster run
+# still self-attests its revision. These tests kill the live git call to force that path.
+
+
+@pytest.fixture
+def no_live_git(monkeypatch):
+    """Make every in-process `git ...` subprocess fail, as on a compute node."""
+    import dehyd.provenance as prov
+
+    def boom(*args, **kwargs):
+        raise OSError("git unavailable (simulated compute node)")
+
+    monkeypatch.setattr(prov.subprocess, "run", boom)
+    # Ensure no stray env leaks between tests.
+    for var in ("DEHYD_GIT_COMMIT", "DEHYD_GIT_BRANCH", "DEHYD_GIT_DIRTY"):
+        monkeypatch.delenv(var, raising=False)
+    return monkeypatch
+
+
+def test_git_commit_env_fallback_when_git_fails(setup, no_live_git):
+    config, manifest, folds = setup
+    no_live_git.setenv("DEHYD_GIT_COMMIT", "deadbeef" * 5)  # 40-char sha
+    no_live_git.setenv("DEHYD_GIT_BRANCH", "v1_milestone_7")
+    no_live_git.setenv("DEHYD_GIT_DIRTY", "false")
+
+    out = record_run(config, manifest, folds)
+    payload = load(out)
+    assert payload["git"]["commit"] == "deadbeef" * 5
+    assert payload["git"]["branch"] == "v1_milestone_7"
+    assert payload["git"]["dirty"] is False
+    # The run directory's short-rev comes from the env commit, not "nogit".
+    assert out.parent.name.endswith("deadbeef")
+
+
+def test_git_degrades_to_none_without_env(setup, no_live_git):
+    """With neither a live git nor the env vars, git fields are None (dir uses 'nogit')."""
+    config, manifest, folds = setup
+    out = record_run(config, manifest, folds)
+    payload = load(out)
+    assert payload["git"]["commit"] is None
+    assert payload["git"]["branch"] is None
+    assert payload["git"]["dirty"] is None
+    assert out.parent.name.endswith("nogit")
+
+
+def test_live_git_is_not_overridden_by_env(setup, monkeypatch):
+    """A working local checkout reports its own true commit, never a stale env value."""
+    config, manifest, folds = setup
+    monkeypatch.setenv("DEHYD_GIT_COMMIT", "0" * 40)
+    payload = load(record_run(config, manifest, folds))
+    # This repo is a real git checkout, so the live call answers and the env is ignored.
+    assert payload["git"]["commit"] != "0" * 40
+
+
+def test_env_dirty_parsing(monkeypatch):
+    from dehyd.provenance import _env_dirty
+
+    for truthy in ("1", "true", "TRUE", "yes", " Yes "):
+        monkeypatch.setenv("DEHYD_GIT_DIRTY", truthy)
+        assert _env_dirty() is True
+    for falsy in ("0", "false", "no", ""):
+        monkeypatch.setenv("DEHYD_GIT_DIRTY", falsy)
+        assert _env_dirty() is False
+    monkeypatch.delenv("DEHYD_GIT_DIRTY", raising=False)
+    assert _env_dirty() is None

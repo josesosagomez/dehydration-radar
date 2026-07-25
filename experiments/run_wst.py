@@ -11,7 +11,7 @@ provenance record carrying the measured `wst_spec`.
 runs; a surprising distribution is a finding for HISTORY.md and the owner, never a licence
 to retune (the M2/M3 doctrine). All extraction logic lives in `dehyd.features.extraction`
 (library code); `main()` only sequences it, so the reusable wiring is tested directly and
-the M6 harness imports a module, not this script.
+the M7 harness imports a module, not this script.
 """
 
 from __future__ import annotations

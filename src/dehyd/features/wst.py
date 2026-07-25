@@ -237,16 +237,22 @@ def scatter_channels(channels: np.ndarray, scattering) -> np.ndarray:
 # ------------------------------------------------------------------- order-aware log
 
 
-def apply_order_log(S: np.ndarray, meta, wst_cfg: WSTConfig, *, log_on: bool) -> np.ndarray:
+def apply_order_log(
+    S: np.ndarray, meta, wst_cfg: WSTConfig, *, log_on: bool, epsilon_by_order: dict | None = None
+) -> np.ndarray:
     """Order-aware log (implementation_plan.md, "Averaging / log").
 
     log_on=False -> S unchanged. log_on=True -> orders 1 and 2 become
-    `log(S + wst_cfg.log_epsilon)`; **order 0 is left linear** (S0 = x * phi is a signed
-    low-pass of the median/MAD-standardized input and can be negative -- logging it is
-    the exact bug this rule prevents). `meta` (or a dict carrying "order") supplies the
-    per-path order; a mismatch between S's path count and `meta` raises (a metadata
-    reorder or mismatched tiling must fail loudly). `log_on` is a call argument (an
-    inner-CV axis at M6), not config.
+    `log(S + eps)`; **order 0 is left linear** (S0 = x * phi is a signed low-pass of the
+    median/MAD-standardized input and can be negative -- logging it is the exact bug this
+    rule prevents). `meta` (or a dict carrying "order") supplies the per-path order; a
+    mismatch between S's path count and `meta` raises. `log_on` is a call argument (an
+    inner-CV axis), not config.
+
+    `epsilon_by_order` (the milestone-7 tuned-ε path, mirroring `apply_order_log_77`):
+    None -> the frozen `wst_cfg.log_epsilon` for both orders (bit-identical to the M4
+    behaviour); a {order -> eps} dict -> that fold-local, train-only ε per order. Passing
+    {1: 1e-6, 2: 1e-6} reproduces the frozen path byte-for-byte.
     """
     S = np.asarray(S, dtype=np.float64)
     order = np.asarray(meta["order"] if isinstance(meta, dict) else meta.meta()["order"])
@@ -258,8 +264,14 @@ def apply_order_log(S: np.ndarray, meta, wst_cfg: WSTConfig, *, log_on: bool) ->
     if not log_on:
         return S
     out = S.copy()
-    logged = order >= 1  # orders 1 and 2 are modulus-based (>= 0); order 0 stays linear
-    out[..., logged, :] = np.log(S[..., logged, :] + wst_cfg.log_epsilon)
+    if epsilon_by_order is None:
+        logged = order >= 1  # orders 1 and 2 are modulus-based (>= 0); order 0 stays linear
+        out[..., logged, :] = np.log(S[..., logged, :] + wst_cfg.log_epsilon)
+        return out
+    for o in (1, 2):
+        mask = order == o
+        if mask.any():
+            out[..., mask, :] = np.log(S[..., mask, :] + float(epsilon_by_order[o]))
     return out
 
 

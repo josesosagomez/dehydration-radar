@@ -1,6 +1,6 @@
 """Reusable manifest->features extraction wiring (library code in `src/`).
 
-This lives in `src/` — not inside a CLI script — so the M6 harness and `run_wst.py` are
+This lives in `src/` — not inside a CLI script — so the M7 harness and `run_wst.py` are
 both thin consumers of it and the repository's dependency direction (library <- scripts,
 never the reverse) holds. It is a linear composition of the public features/ functions:
 preprocess -> scatter -> order-log -> pool/flatten -> session-aggregate.
@@ -46,6 +46,11 @@ class SessionVariantResult:
     prelog_scale: dict  # {tiling_index: (v0, v1, v2)} — pre-log order-0/1/2 scale
     shapes: dict  # {tiling_index: (n_paths, n_time)}
     all_finite: bool
+    # Milestone 7 (keep_raw=True only): the RAW pre-log scattering tensor + meta order per
+    # tiling, so the fold-local tuned-ε branch can be reconstructed from a persistent store
+    # without re-scattering. None by default (M4 behaviour unchanged; vectors/prelog_scale
+    # are computed identically whether or not raw is kept).
+    raw: dict | None = None  # {tiling_index: {"S": [N,C,P,t] pre-log, "order": [P]}}
 
 
 def _build(tiling: WSTTiling, wst_cfg: WSTConfig, n_in: int, fs_hz: float):
@@ -115,14 +120,20 @@ def extract_session_variants(
     *,
     reduction: str,
     channel: str,
+    keep_raw: bool = False,
 ) -> SessionVariantResult:
-    """Cohort-loop form: preprocess once, scatter once per tiling, derive all variants."""
+    """Cohort-loop form: preprocess once, scatter once per tiling, derive all variants.
+
+    `keep_raw=True` additionally returns the RAW pre-log scattering tensor + meta order per
+    tiling (the milestone-7 feature-store input for the tuned-ε branch). It does NOT change
+    `vectors`/`prelog_scale`/`shapes`/`all_finite` — those are computed from the same `S`."""
     frames = preprocess_cube(cube, pre, reduction=reduction, channel=channel)
     n_in = frames.shape[-1]
 
     vectors: dict = {}
     prelog_scale: dict = {}
     shapes: dict = {}
+    raw: dict = {}
     all_finite = True
 
     for ti, tiling in enumerate(wst_cfg.tilings):
@@ -131,6 +142,8 @@ def extract_session_variants(
         S = scatter_frames(frames, scattering)  # scattered ONCE per tiling
         shapes[ti] = (S.shape[-2], S.shape[-1])
         prelog_scale[ti] = _prelog_scale(S, meta)
+        if keep_raw:
+            raw[ti] = {"S": S.copy(), "order": np.asarray(meta["order"]).copy()}
         for log_on in (False, True):
             logged = _apply_log(S, meta, wst_cfg, log_on)
             for family in FAMILIES:
@@ -139,7 +152,8 @@ def extract_session_variants(
                 all_finite = all_finite and bool(np.all(np.isfinite(vec)))
 
     return SessionVariantResult(
-        vectors=vectors, prelog_scale=prelog_scale, shapes=shapes, all_finite=all_finite
+        vectors=vectors, prelog_scale=prelog_scale, shapes=shapes, all_finite=all_finite,
+        raw=(raw if keep_raw else None),
     )
 
 
