@@ -731,13 +731,118 @@ run on IBEX as CPU batch jobs (a single QC job; a job array over the 80 cells fo
 task re-certifying its own file's axis and fingerprinting its shard), differing from the local
 smoke only by a paths-only overlay — the same code, as the compute policy requires.
 
-## 5. Fluid-loss regression — Experiment A  *(fill at milestone 7)*
+## 5. The config freeze — the whole protocol, before any result  *(milestone 6 — complete)*
 
-## 6. Clock-decoupling — Experiment B  *(fill at milestone 8)*
+The evaluation protocol (§0.1) makes leakage impossible *within* a single experiment: no
+held-out subject's frame reaches training, and every fitted quantity is estimated inside the
+fold. But the study runs seven experiments (A–G) on one 16-subject cohort. A subtler leak sits
+between them: if a modelling choice — a search space, a baseline's architecture, an ordinal
+family, a statistical test — is decided *after* looking at Experiment A's per-subject
+predictions, that choice has been informed by subjects who will later serve as held-out test
+subjects in B–G. The information travels across experiments even though no single experiment
+violates its own protocol. The remedy is chronological: commit the complete A–G design, for
+both radar bands, to versioned configuration and to git **before any outer-fold result from any
+experiment is inspected**. This milestone is that commitment.
 
-## 7. Ordinal classification & baselines — Experiments C, D  *(fill at milestone 9)*
+### What "frozen" means mechanically
 
-## 8. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
+The design is not merely documented; it is a set of validated configuration objects the code
+refuses to run outside of. Eleven dataclasses hold the two band-specific search spaces, the
+per-family hyperparameter grids, the baseline specifications for both bands, the five
+downstream experiment designs (B, C, E, F, G), the full statistical protocol, and a small set
+of protocol constants. Each is a *frozen record*: a run's configuration file may restate a
+value at its approved default — so the file is a complete, self-describing record — but may not
+change it, and a change is a load-time error, not a silent override. This is stricter than the
+earlier preprocessing and WST sections, which legitimately carry live inner-CV axes and
+pre-declared ablations; nothing in the milestone-6 sections is a knob, because every one of
+their values was fixed before results existed.
+
+A second guard runs at modelling time. The single canonical feature artifact is written only
+under one exact preprocessing/WST specification, enforced since earlier milestones. But model
+*selection* legitimately explores approved alternatives — for instance either of the two range
+gates — so a separate guard validates that a run stays inside the *whitelist* rather than at a
+single canonical point: every axis value actually used for a fit (which reduction, channel,
+tiling, log branch, range gate, model family) is checked for membership in the frozen search
+space. Crucially, those axis values are call arguments to the extraction and modelling
+functions, not stored configuration fields, so a configuration-only check could never see
+them; the guard therefore takes the active per-fit protocol as an explicit argument and
+validates it against the same whitelist, regardless of how the caller produced it. This is
+defence in depth over the harness's own enumeration, not a substitute for it.
+
+### The three decisions the freeze forced into the open
+
+A design freeze is only honest if the choices being frozen are themselves free of hindsight.
+Three had to be settled here on grounds that do not depend on cohort performance, and each was
+resolved by owner decision before the freeze closed.
+
+*The third log branch.* The WST log transform carries an optional data-adaptive variant whose
+per-order ε is fit on the training fold. An earlier plan proposed to admit this branch only if
+a preliminary check showed the second-order scattering coefficients carried predictive value —
+but that check, as specifiable, is a full leave-one-subject-out comparison across the whole
+cohort, whose aggregate result would then set a global modelling option applied to the same
+subjects later held out. That is exactly the cross-experiment leak the freeze exists to
+prevent, and it echoes the milestone-5 precedent that leakage-sensitive choices are decided on
+mechanism, never on cohort-wide performance. The check was retracted; the branch is instead an
+unconditional inner-CV candidate for both bands, leakage-safe by construction and a strictly
+smaller change to the search space than standing up a separate cohort-wide test would have
+been.
+
+*The ordinal comparison model.* The secondary five-class task specifies a proportional-odds /
+cumulative-link regressor with per-fold inverse-frequency class weighting. The natural library
+implementation, verified directly against the pinned version, has no mechanism for observation
+weights at all — its fitting routine simply does not accept them — so it cannot satisfy the
+weighting requirement. Rather than quietly drop the weighting (which the protocol requires) or
+quietly swap in a different model (which would change what is being compared without saying
+so), the substitution was made explicit: the comparison family is a Frank–Hall ordinal
+decomposition over binary logistic regressions, which does accept the required weights, and
+which is recorded as a deliberate, documented departure from a literal cumulative-link model
+rather than presented as one.
+
+*The 77 GHz physics baseline.* Promoting the 77 GHz arm to a full parallel set of experiments
+required a physics baseline analogous to the 10 GHz reflected-power ratio. A first proposal
+split the Doppler spectrum at a physiologically motivated 2 Hz boundary — but the system's
+Doppler resolution, set by the chirp count and pulse-repetition frequency, is coarser than that
+boundary, so no such cut is representable and no individual physiological rate is resolvable in
+the recorded aperture at all. The baseline was redefined honestly as a static-versus-any-motion
+energy ratio (the zero-Doppler bin against all resolvable motion bins), and the chapter states
+that limitation plainly rather than letting the "physics baseline" label imply a specificity
+the measurement cannot support.
+
+### Provenance of the frozen values
+
+Every value that the main design left unstated was proposed on non-performance grounds —
+standard small hyperparameter grids, conventional small-dataset training defaults, an arbitrary
+non-tuned anchor for the staged feature search — and confirmed by owner decision as a group,
+with none derived from running anything against the cohort. The one piece of executable logic
+the milestone adds is the model-selection tie-break, made concrete as a pure comparison over
+already-computed scores: lower validation error, then a frozen simplicity ranking over the
+model families, then smaller feature dimension, then lower inner-fold variance, with
+non-evaluable candidates filtered before the comparison so that an undefined score can never
+decide a winner by accident. It fits nothing and reads no data; the fitting it will later serve
+belongs to the harness milestone.
+
+### Correctness
+
+The milestone introduces no computation on cohort data, so its correctness is entirely a matter
+of the frozen configuration loading, rejecting changes, and round-tripping into the provenance
+record, and of the two guards accepting exactly the approved space and no more. Fifty tests
+establish this: that each frozen section loads at its pinned values and rejects any change
+(including the subtle case of a boolean written as an integer); that the two band search spaces
+cannot express each other's candidates, so a 10 GHz-only option cannot leak onto the 77 GHz
+arm; that every family's grid fits under the shared search budget; that the tie-break honours
+its ordering and excludes undefined scores; and that the modelling guard admits both approved
+range gates while rejecting an out-of-whitelist gate or a mistyped call-time axis, all without
+weakening the strict single-point guard on the artifact path. The no-leakage test remains
+byte-for-byte unchanged, as it must: this milestone adds no cross-validation code for it to
+exercise.
+
+## 6. Fluid-loss regression — Experiment A  *(fill at milestone 7)*
+
+## 7. Clock-decoupling — Experiment B  *(fill at milestone 8)*
+
+## 8. Ordinal classification & baselines — Experiments C, D  *(fill at milestone 9)*
+
+## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
 ## Provenance index
 

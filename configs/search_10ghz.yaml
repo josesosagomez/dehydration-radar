@@ -1,0 +1,32 @@
+# 10 GHz Exp A/WST inner-CV search space + per-family model grids (implementation_plan.md
+# §"LOSO harness"). FROZEN at the milestone-6 config-freeze gate (Step 0, 2026-07-25).
+#
+# Every field here is a frozen protocol constant: a run YAML may RESTATE a value at its
+# owner-approved default (a complete record) but may not CHANGE it, and modelling
+# entrypoints re-validate via protocol_freeze_guard. The tuple-valued axes and grids live
+# in code (src/dehyd/config.py SearchSpace10GHzConfig / ModelGridConfig); they are the
+# whitelist the guard checks a call-time protocol record against. Documented here in
+# comments; restating them in YAML is allowed only at the exact frozen values.
+#
+# Inner-CV axes (code-frozen tuples):
+#   reduction:      [A, B]                 # chirp-mean vs Option-B peak isolation
+#   channel:        [mag, iq]
+#   tiling:         [T1, T2, T3]
+#   log_branches:   [off, on_frozen_eps, on_tuned_eps]   # all three unconditional (A-M6-1)
+#   range_gate_m:   [[1.0, 2.0], [0.9, 3.0]]
+#   model_families: [ridge, svr, rf, gbm, knn]
+
+search_10ghz:
+  budget_k: 12                 # per-family model-hyperparameter cap (Step 0 item 3)
+  stage1_anchor_model: ridge   # Stage-1 feature-axis search uses a fixed ridge anchor
+  stage1_anchor_ridge_alpha: 1.0
+  tuned_eps_k: 0.1             # on_tuned_eps: eps_o = k * (train-fold order-o scale)
+
+# Per-family Stage-2 grids, all code-frozen tuples (each family's combination count <= 12):
+#   ridge_alphas: [0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]        # 8
+#   svr_c: [0.1, 1.0, 10.0, 100.0]  x  svr_epsilon: [0.01, 0.1, 0.3]   # 12
+#   rf_n_estimators: [100, 300]  x  rf_max_depth: [3, 5, null]         # 6
+#   gbm_n_estimators: [100, 300] x gbm_learning_rate: [0.01, 0.1] x gbm_max_depth: [2, 3]  # 8
+#   knn_n_neighbors: [3, 5, 7, 9, 11, 13, 15]                          # 7
+#   baseline_learning_rate: [3e-4, 1e-3, 3e-3] x baseline_weight_decay: [0.0, 1e-4]  # 6
+model_grid: {}

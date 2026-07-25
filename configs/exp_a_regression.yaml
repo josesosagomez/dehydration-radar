@@ -7,6 +7,7 @@ include:
   - data.yaml
   - preprocess.yaml
   - wst.yaml
+  - search_10ghz.yaml   # the frozen Exp A/WST search space + model grids (milestone 6)
 
 run:
   seed: 20260721
@@ -19,5 +20,6 @@ split:
   n_inner_max: 5        # GroupKFold(min(5, n_train)) over outer-training subjects
   min_train_subjects: 3 # below this an outer fold is non-selectable, not degenerate
 
-# The Exp A search space is NOT defined here yet — it is fixed at the milestone-5
-# config-freeze gate, before any outer results are inspected.
+# The Exp A search space was frozen at the milestone-6 config-freeze gate (search_10ghz.yaml,
+# included above; src/dehyd/config.py SearchSpace10GHzConfig), before any outer results were
+# inspected. The staged-search order and per-family budget K are frozen there too.

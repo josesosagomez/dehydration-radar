@@ -1,0 +1,8 @@
+# Exp B — clock-decoupling (implementation_plan.md §B, A-M6-3). FROZEN at milestone 6.
+# Reuses Exp A's band-specific search space under Exp B's OWN equal-session residual-MAE
+# objective (not Exp A's fluid-loss MAE). Code: src/dehyd/config.py ExpBConfig.
+
+exp_b:
+  reuse_exp_a_search_space: true
+  objective: equal_session_residual_mae
+  session_specific_variant_enabled: true   # the four session-specific models, secondary

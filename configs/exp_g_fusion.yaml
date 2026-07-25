@@ -1,0 +1,10 @@
+# Exp G — cross-band 10+77 GHz fusion combiner (implementation_plan.md §G). FROZEN at
+# milestone 6. Records the already-frozen constrained convex-weight selection rule as
+# config; the alpha value itself is only ever fit inside M7's CV on cross-fitted OOF
+# predictions. Code: src/dehyd/config.py ExpGConfig.
+
+exp_g:
+  alpha_tie_break: closest_to_one     # ties -> max weight on the primary 10 GHz band
+  seed_pairing: true                  # pair seed k across bands; no silent ensembling
+  objective: subject_balanced_oof_mae
+  # Code-frozen tuple: alpha_grid [0.0, 0.05, ..., 1.0]  (21 points).

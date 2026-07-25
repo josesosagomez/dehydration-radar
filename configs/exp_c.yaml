@@ -1,0 +1,20 @@
+# Exp C — ordinal 5-class (implementation_plan.md §C). FROZEN at milestone 6.
+#
+# Family (a): threshold family (a)'s OWN continuous L-predictor's in-sample inner-training
+# predictions at fixed quantiles (never validation/test predictions -> no leakage).
+# Family (b): the Frank-Hall ordinal decomposition (A-M6-5, owner-approved 2026-07-25).
+# statsmodels.OrderedModel (the literal cumulative-link model) was verified to have NO
+# sample_weight support, so it cannot carry the mandatory inverse-frequency class weights;
+# Frank-Hall (4 independent binary sklearn LogisticRegression thresholds) does. This is a
+# documented substitution of a different statistical model, not a silent swap.
+# Code: src/dehyd/config.py ExpCConfig.
+
+exp_c:
+  cutpoint_source: family_a_regressor_in_sample_predictions_inner_train
+  cutpoint_min_separation: 1.0e-9   # nudge tied cutpoints until strictly increasing
+  class_weight_formula: inverse_frequency_inner_train
+  proportional_odds_impl: frank_hall_ordinal_decomposition_sklearn_logisticregression
+  selection_metric_primary: class_unit_mae
+  selection_metric_secondary: qwk
+  # Code-frozen tuples: cutpoint_quantiles [0.2, 0.4, 0.6, 0.8];
+  #   class_weight_unsupported_families [knn]; proportional_odds_c_grid [0.1, 1.0, 10.0].

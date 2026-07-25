@@ -4,6 +4,441 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-25 — MILESTONE 6 IMPLEMENTED: the config-freeze gate. 11 frozen config sections + 2 new src modules + 50 tests; full suite 576 passed / 17 skipped; `test_no_leakage.py` untouched.
+
+M6 is code-complete. It is a pure config/validation milestone — **zero computation on cohort
+data** — so the whole thing is deterministic schema + two small guards, and the no-leakage
+test needed no changes (nothing enters a CV loop).
+
+**Config layer (`src/dehyd/config.py`, additive only).** 11 new frozen dataclasses:
+`SearchSpace10GHzConfig` / `SearchSpace77GHzConfig` (band-keyed — 77 GHz's reduction/channel/
+gate are FIXED scalars, not candidate tuples, so a 10 GHz-only candidate is structurally
+inexpressible there, C6-03), `ModelGridConfig`, `BaselineConfig` (both bands), `ExpBConfig`..
+`ExpGConfig`, `StatsConfig`, `ProtocolFreezeConfig`. All wired into `Config` via
+`default_factory` (existing configs load unchanged) and into `known_sections`.
+
+**Design decision — one generic frozen-record builder, not 11 verbose validators.** Unlike
+qc/preprocess/wst (which carry live inner-CV axes + pre-declared ablations, hence per-field
+validation), every M6 field is frozen post-Step-0. So `_build_frozen_record` implements one
+contract for all 11 sections: a run YAML may RESTATE a field at its default (complete record)
+but any CHANGED value is a ConfigError. Needed a type-aware equality (`_frozen_matches`):
+list→tuple normalization so a restated tuple compares equal, and bool-vs-int strictness so
+`reuse_exp_a_search_space: 1` is rejected (YAML has true/false; `True == 1` must not slip
+through). This is stricter than the qc/preprocess pattern *because the sections are genuinely
+all-frozen*, not an inconsistency.
+
+**`src/dehyd/eval/selection.py` (the ONLY executable selection code M6 adds, C6-27).**
+`select_candidate(list[CandidateScore])` — a pure tie-break over already-computed scores (no
+data, no fitting): lower `inner_val_mae` → lower `simplicity_rank` (frozen ridge=0<knn=1<svr=2
+<rf=3<gbm=4, C6-30 — an ordinal ranking, not a parameter count) → lower `feature_dimension` →
+lower `inner_fold_variance`. Non-finite MAE / non-finite-or-negative variance candidates are
+filtered *before* the tie-break (C6-34, so NaN ordering can't decide a winner); all-non-finite
+raises. `min()` gives deterministic first-in-order tie resolution. The fit/score behaviour is
+M7's; this is the tie-break half only.
+
+**`src/dehyd/features/protocol_freeze.py` — `protocol_freeze_guard(config, active=None)`.**
+Composes `canonical_spec_guard_77` unchanged (no 77 GHz feature field is a search axis);
+re-validates the 10 GHz preprocess/wst fields locally with the one range-gate exception
+(`model_gate_m` checked for MEMBERSHIP in the frozen `range_gate_m` whitelist, so BOTH approved
+gates pass — the strict artifact guard `canonical_spec_guard` that demands the single (1.0,2.0)
+is untouched on the write path, C6-24); validates every M6 section equals its canonical
+default; and, given an `active` per-fit record, validates each axis against the band whitelist
+(C6-29 — those axes are call arguments, never stored config, so a config-only guard is blind to
+them). Deliberately duplicates ~12 lines of `canonical_spec_guard`'s loop to keep
+`extraction.py` untouched (flagged as a future-refactor option in the plan §6).
+
+**Configs.** 10 new YAML files (`search_10ghz`, `search_77ghz`, `baselines`, `stats`,
+`exp_{b,c,e,f,g_fusion}`, `protocol_freeze`), wst77.yaml-style: restate salient scalars,
+document code-frozen tuples in comments. `exp_a_regression.yaml` now `include:`s
+`search_10ghz.yaml` and its stale "milestone-5 config-freeze" comment is fixed (A-M5-2
+renumber). **YAML-1.1 trap bitten again:** `log_10ghz: off` parsed as boolean `False` →
+quoted to `"off"` in exp_e.yaml.
+
+**`implementation_plan.md` A-M6-1/A-M6-2/A-M6-5 all read APPLIED** (owner-approved 2026-07-25);
+the log-branch pre-check retraction, the 77 GHz baselines, and the Frank-Hall substitution are
+reflected in both documents consistently.
+
+**Tests: +50 (526→576).** test_config.py M6 group (frozen-record load/restate/reject-change/
+reject-unknown/bool-safety; band literal-pins; cross-band inexpressibility; budget-fits;
+config_to_dict round-trip; all 10 committed files load); test_selection.py (14, tie-break +
+NaN/empty/all-non-finite); test_protocol_freeze.py (guard composition, both-gates-pass/
+bad-gate-fails, call-time axis rejection with canonical config, 77 GHz fixed-axis equality,
+entrypoint-runs-guard-before-I/O, artifact-guard-still-strict). A capability test asserts
+sklearn `LogisticRegression.fit` accepts `sample_weight` — the executable premise behind
+A-M6-5. **Full suite 576 passed / 17 skipped** (same 17 realdata/torch-mutation skips as M5).
+`git diff f3fbade -- tests/test_no_leakage.py` clean. Skipped `--realdata` deliberately: M6
+touches no data-loading code and has no realdata tests.
+
+**Open (owner-triggered):** the freeze commit + annotated tag (`config-freeze-v1`) — DoD D7,
+not done automatically. Nothing committed yet.
+
+## 2026-07-25 — M6 PLAN, Step 0 RESOLVED: all five owner decisions recorded; `statsmodels.OrderedModel` verified and rejected, Frank-Hall approved as an explicit substitution (A-M6-5).
+
+Following the closed Codex review (38 comments, 5 rounds), the owner ruled on all five Step
+0 items in one pass:
+
+1. **A-M6-1 (log-axis pre-check) — retracted.** The `on+tuned-ε` log branch is now an
+   unconditional inner-CV candidate for both bands, never gated by a cohort-wide predictive
+   check. `implementation_plan.md` A-M6-1 status changed from PROPOSED to **APPLIED**.
+2. **A-M6-2 (77 GHz Exp D baselines) — approved as corrected**, including the DC-bin-vs-
+   any-motion physics baseline: the owner confirmed it's worth reporting despite being
+   unable to distinguish breathing from any other motion (a coarser contrast than the
+   10 GHz physics baseline, which rests on a real M3 measurement). Status: **APPLIED**.
+3. **Budget-parity interpretation — approved as proposed**: representation-level choices
+   (feature axes / raw-vs-matched input) exempt from the search budget K; model/training
+   hyperparameter grids capped at K=12 uniformly across every family, WST or baseline.
+4. **Every §3 provisional constant — accepted as-is**, no changes requested.
+5. **Exp C's proportional-odds implementation — resolved by actual verification, not
+   guesswork.** Per the owner's instruction ("go with A, if wrong then B"), candidate A
+   (`statsmodels.miscmodels.ordinal_model.OrderedModel`) was checked directly rather than
+   assumed: `uv run --with statsmodels` (an ephemeral install, no change to the project's
+   pinned `pyproject.toml`/`uv.lock`) confirmed its `__init__`/`.fit()` signatures carry
+   **no `sample_weight`/`freq_weights` parameter anywhere**, and it inherits from
+   `GenericLikelihoodModel` — a generic MLE optimizer with no observation-weighting
+   mechanism at all. Candidate A cannot implement the inverse-frequency class weighting
+   `implementation_plan.md` §C requires, full stop. **Moved to candidate B**: the Frank-Hall
+   ordinal decomposition (4 independent binary `sklearn.LogisticRegression` classifiers,
+   guaranteed `sample_weight` support), recorded as **`implementation_plan.md` A-M6-5,
+   APPLIED** — an explicit, documented substitution of a genuinely different statistical
+   model for the approved one, not a silent swap (the exact process the round-3 self-
+   correction, C6-28→C6-31, existed to prevent from happening quietly).
+
+`plans/MILESTONE_6_PLAN.md`'s Step 0 section is now a resolved record, not an open gate;
+every "[provisional]"/"pending"/"PROPOSED" marker in the document has been updated to
+reflect the settled state. `implementation_plan.md`'s A-M6-1/A-M6-2/A-M6-5 tags all read
+APPLIED. M6 config implementation can now proceed (§1 step 2 onward).
+
+## 2026-07-25 — M6 PLAN, Codex review CLOSED: "NO MORE COMMENTS" after 5 rounds, 38 comments total (C6-01..C6-38).
+
+Codex's closing note: the plan is now "methodologically coherent, executable once its
+explicit Step 0 gate clears, and faithful to the authoritative design wherever it does not
+openly request an amendment," and recommends removing the leaking cohort-wide pre-check
+(Step 0 item 1) when the owner reviews it. `plans/MILESTONE_6_PLAN.md` is left clean of
+review-comment markers; every one of the 38 comments across 5 rounds ended either
+applied-and-fixed or escalated to the explicit **Step 0 owner-approval gate** at the top of
+the plan — none were disputed.
+
+**What Step 0 now asks the owner to decide, in one place:**
+1. Retract the order-2-usefulness pre-check (A-M6-1)? Codex's own recommendation: yes —
+   remove it, since it's genuine cohort-level leakage as specified.
+2. Approve the corrected 77 GHz Exp D baseline design (A-M6-2), including whether the
+   now-honest DC-vs-any-motion physics contrast (not the physiologically-invalid 2 Hz
+   version) is worth reporting at all.
+3. Approve the budget-parity interpretation (representation-level choices exempt from K,
+   model-hyperparameter grids capped at K uniformly) or direct a different reconciliation.
+4. Confirm, replace, or accept every §3 provisional constant (model grids, `k=0.1`, DL
+   training hyperparameters).
+5. Choose Exp C's proportional-odds implementation — a genuine cumulative-link model
+   (`statsmodels.OrderedModel`, weighting support to be verified before `ExpCConfig` is
+   written) or an explicitly-amended Frank-Hall substitution — with the weighting-support
+   check itself required as part of clearing this item, not deferred to M7.
+
+**The single most valuable lesson from this whole review, worth remembering past this
+milestone:** the review caught not just bugs (dimensional errors, unrealizable physics
+constants, missing test scope) but two instances of the *same* process failure — treating a
+technically-sound fix to previously-approved design as already settled, once at the A-M4-7
+pre-check (round 2, C6-16) and once again mid-fix at the Exp C library substitution (round 3,
+C6-28→C6-31). Both times the fix itself was reasonable; the mistake was applying it silently
+instead of proposing it. That is now structurally prevented by the Step 0 gate rather than
+relying on remembering to ask each time.
+
+## 2026-07-25 — M6 PLAN, Codex review round 4: 4 comments, mostly consistency lapses from round 3's own rapid-fire fixes.
+
+**C6-35 (blocking)** — Step 0 item 2 still described the just-retracted 2 Hz Doppler cutoff
+and asked the owner to approve it "as drafted," even though the rest of the document (§2.1,
+`implementation_plan.md`'s A-M6-2) had already been corrected to the DC-bin-vs-motion design
+in the same round. Left uncorrected, the owner could have approved the wrong physics
+baseline. Fixed: Step 0 item 2 now describes the current, axis-consistent proposal.
+
+**C6-36 (blocking)** — Step 0 item 5 said Exp C's proportional-odds implementation needs
+verifying, but §7's carry-forward still deferred that verification to M7 — too late, since
+an unverified required capability (does `statsmodels.OrderedModel` actually accept the
+mandatory inverse-frequency weights?) shouldn't be allowed to cross the freeze gate at all.
+Fixed: verification is now an explicit, required action *within* Step 0 itself — reading the
+pinned `statsmodels` source/docs or running a two-line smoke fit with weights, with the
+answer recorded — and `ExpCConfig` is not written until that's actually done.
+
+**C6-37 (should-fix)** — the build-sequence table still said "owner approval on the four
+items above" after Step 0 grew to five items in round 3. Fixed.
+
+**C6-38 (should-fix)** — `StatsConfig` had quietly invented a `holm_family_expf_exploratory
+= 2` correction for Exp F's two exploratory covariate contrasts (2v1, 4v3). Checked against
+`implementation_plan.md` §F directly: it labels those two contrasts "exploratory" but never
+says they form a Holm-corrected family together — only the two PRIMARY contrasts (3v1, 4v2)
+get an explicit "Holm over 2." Inventing a second correction scheme for the exploratory pair
+would have been exactly the kind of undisclosed protocol addition this whole freeze exists to
+prevent. Fixed: removed the invented correction; the exploratory contrasts are now recorded
+as reported individually and uncorrected, matching the approved text exactly.
+
+**No comments were disputed.** The pattern across rounds 3 and 4 is worth naming explicitly:
+fixing one comment can introduce or leave behind an inconsistency elsewhere in the same
+document (a stale cross-reference, an outdated Step-0 description, a table that didn't get
+its count updated) — worth a deliberate consistency pass after any batch of edits, not just
+trusting that each fix was locally correct.
+
+## 2026-07-25 — M6 PLAN, Codex review round 3: 9 comments (arriving in two waves mid-fix), including a self-correction caught within the round itself.
+
+**The most interesting one: C6-28 → C6-31, a fix that was itself wrong.** Round 2 flagged
+that the proposed `mord.LogisticAT` ordinal library had unverified `sample_weight` support
+with a silent unweighted-fallback escape hatch — not acceptable, since
+`implementation_plan.md` §C requires inverse-frequency class weighting, full stop. The first
+attempt to fix this substituted a Frank-Hall binary decomposition over
+`sklearn.LogisticRegression` (guaranteed weighting support, no new dependency) — but a
+follow-up comment in the same round (C6-31) correctly caught that Frank-Hall is a
+**genuinely different statistical model** from the approved proportional-odds/cumulative-link
+family (separate coefficients per threshold vs. one shared slope with ordered cutpoints).
+Silently swapping the approved family to solve a library problem is exactly the kind of
+unapproved design change Step 0 exists to catch. **Un-applied and re-escalated**: Step 0
+gained a fifth item presenting both candidates — a genuine cumulative-link implementation
+(e.g. `statsmodels.OrderedModel`, weighting support still unverified) or the Frank-Hall
+substitution (needs its own `implementation_plan.md` amendment, not a config choice) — for
+the owner to decide between, rather than picking one and calling it settled.
+
+**C6-26 (blocking) — the 77 GHz baseline proposal (A-M6-2) was dimensionally broken.** Its
+"raw" CNN input averaged away the chirp/slow-time axis, then its own physics baseline tried
+to run a Doppler FFT over that same (now axis-less) signal; its "matched" input claimed a
+pre-WST Rx fusion that Exp G's own no-coherent-complex-Rx-averaging rule explicitly forbids
+(fusion only exists post-WST). Fixed in both documents: the raw input now averages over
+fast-time and Rx instead (retaining chirp/slow-time), and the matched input uses one fixed
+representative Rx (index 0) with no cross-Rx averaging at all.
+
+**C6-33 (blocking) — the proposed 2 Hz Doppler cutoff for that same physics baseline was not
+physically realizable.** The system's actual Doppler frequency resolution is
+`PRF/256 ≈ 7.63 Hz` — coarser than the proposed 2 Hz cutoff itself, meaning `|f_D|<2Hz`
+would have silently selected only the DC bin regardless of the stated number, and no
+physiological rate (breathing ≈0.2–0.5 Hz, heart rate ≈1–1.5 Hz) is resolvable at all in the
+≈131 ms chirp-burst aperture this system captures. This is a basic arithmetic check I should
+have run before proposing the value. Redefined honestly in both documents as a DC-bin-vs-
+any-motion split (bin 0 vs. bins 1–127) — a coarser, non-rate-specific feature, flagged for
+the owner to judge whether it's still worth reporting.
+
+**C6-27 (blocking) — the staged-selection section implied real fitting code existed to
+test, when M6 (deliberately) builds none.** `T-C6-stage` claimed to run the Stage-1→Stage-2
+algorithm and inspect fitted parameters, but no file/function for it lived anywhere in §2,
+and `eval/harness.py` is explicitly M7's. Added exactly one small, genuinely non-modeling
+helper — `src/dehyd/eval/selection.py`'s `select_candidate`, a pure tie-break comparison over
+already-computed scores, no data or fitting involved — and explicitly deferred the real
+fit/score behavioral claim to M7.
+
+**C6-30 (blocking) — a direct consequence of C6-27's fix: the prose tie-break and the new
+`select_candidate`'s `effective_params: int` field were two different, inconsistent
+definitions of "simpler model," with no frozen mapping between them** (and "effective
+parameters" isn't even comparable across ridge/knn/svr/rf/gbm). Replaced with two
+deterministic components used identically by both: a frozen `simplicity_rank` family
+ordering (ridge=0 < knn=1 < svr=2 < rf=3 < gbm=4) and `feature_dimension` (computed from
+already-recorded WST geometry, not fit-time data).
+
+**C6-29 (blocking) — the whitelist guard could only validate what `Config` statically
+declares as allowed; reduction/channel/tiling/log-branch are call arguments, never stored in
+`Config` at all**, so an out-of-whitelist call-time value would pass the guard silently.
+Added a required `active=` parameter carrying the exact per-fit protocol record, checked
+against the same whitelists regardless of how the caller produced it (defense-in-depth, not
+"trust the entrypoint's loop").
+
+**C6-34 (should-fix) — `select_candidate` had no defined behavior for non-finite scores**,
+and Python's NaN comparison semantics could make the result silently order-dependent. Added
+an explicit finite-value filter before the tie-break runs, raising if nothing survives it —
+mirroring Exp C's existing "non-evaluable configs are skipped" convention.
+
+**No comments were disputed.** All 9 were correct, including the one (C6-31) that caught my
+own immediately-prior fix. The lesson from this round, on top of round 2's: even a
+technically-motivated substitution (swap library A for library B to solve a real problem)
+can silently change WHAT is being evaluated, not just HOW — that distinction needs the same
+Step-0 gate as any other change to previously-approved design, not just changes that look
+like design changes on their face.
+
+## 2026-07-25 — M6 PLAN, Codex review round 2: 10 follow-up comments — the most important one a process correction, not a technical one.
+
+**The headline finding (C6-16, agreed in full — a process error, not a technical one).**
+Round 1 fixed a real leakage bug (the order-2 pre-check, see below) by rewriting
+`implementation_plan.md`'s A-M4-7 gating rule and labeling it "retracted" — but
+`implementation_plan.md` is this task's explicit authoritative base, and a milestone plan
+was told not to override it. Reversing a previously-approved mechanism and simply asserting
+the reversal, even with a sound technical argument attached, is exactly the kind of change
+this project's own established practice (A-M5-1/A-M5-2) requires an **owner-approved
+prerequisite** for, not a narrative applied after the fact. **Fixed:** both `A-M6-1` (the
+pre-check retraction) and the new `A-M6-2` (77 GHz Exp D baselines, genuinely new design
+content, not an ambiguity fix) are now marked **PROPOSED — PENDING OWNER APPROVAL** in
+`implementation_plan.md` itself, and `MILESTONE_6_PLAN.md` gained an explicit **"Step 0 —
+owner decisions required before implementation"** section, gating all config-writing behind
+four items: the A-M6-1 approval, the A-M6-2 approval, a budget-parity interpretation
+(below), and every remaining §3 provisional constant. The technical analysis behind A-M6-1
+is left standing (Codex did not dispute its correctness) — only its premature "already
+settled" framing was wrong.
+
+**Other blocking follow-ups, all agreed and applied:**
+- **C6-17** — the tuned-ε mechanism defined how to reduce ONE session's coefficients to a
+  scalar (`_prelog_scale`) but never how multiple training sessions' scalars become one
+  fold-level `scale_o`. Fixed in `implementation_plan.md`: subject-balanced two-stage
+  aggregation (mean within each training subject's eligible sessions, then median across
+  training subjects — matching the "equal weight per subject" convention already used for
+  Exp B/G), a non-finite/non-positive fallback to the frozen `log_epsilon=1e-6`, and an
+  explicit statement that the resulting ε is applied as a fixed constant to train/validation/
+  outer-test frames alike (the same fit-on-train-only pattern as every other fitted quantity).
+- **C6-18** — the staged-selection algorithm said Stage 1/2 score candidates on **inner-
+  training** MAE, which scores a candidate on the data used to fit it — contrary to
+  `implementation_plan.md`'s own "mean over inner-**val** subjects" selection rule. Fixed:
+  both stages now fit on inner-training and score on inner-validation, with an added
+  mutation-property acceptance test (mutate inner-validation labels → selection can change,
+  fitted parameters must not).
+- **C6-19** — WST-classical's Stage 1 evaluated up to 72 feature-axis configs uncapped, while
+  CNN/spectrogram baselines had no comparable grid at all — violating `implementation_plan.md`
+  §D's "same inner-CV configuration budget (≤K) each" rule. This is a genuine interpretive
+  question (not a numeric fix), so it's proposed, not applied: representation-level choices
+  (WST's feature axes; a baseline's raw-vs-matched input) are symmetric and exempt from K on
+  both sides; model/training-hyperparameter grids are capped at K=12 uniformly, with a new
+  small `baseline_learning_rate × baseline_weight_decay` grid added so baselines have
+  something real to cap. Flagged as Step 0 item 3 — if rejected, Stage 1 needs a bounded
+  redesign, not just a config change.
+- **C6-20** — `StatsConfig` only had 6 fields; the actual `implementation_plan.md`
+  §Statistics protocol is long and detailed (confidence level, resample unit, BCa fallback,
+  metric-aware seed collapse, the >5%-skip unreliability flag, Exp B's two distinct
+  estimands, the Holm families, the robustness-bootstrap safeguards). Expanded to ~20 fields,
+  pure transcription of an already-approved protocol, no redesign.
+- **C6-21** — round 1's 77 GHz baseline fix added only the physics-cutoff *field*; the raw/
+  matched/spectrogram tensor definitions lived only in `implementation_plan.md` prose and
+  were never mirrored into `BaselineConfig` — meaning the planned tests claimed to pin fields
+  that didn't exist. Added the missing fields (`raw_reduction_77ghz`, `matched_input_77ghz`,
+  channel counts for each 77 GHz baseline variant).
+- **C6-23** — `ExpCConfig`'s cutpoint source was unstated (true labels? predictions? whose?).
+  Fixed: cutpoints are quantiles of family (a)'s own regressor's **in-sample predictions on
+  inner-training sessions** (never validation/outer-test — that would leak). Added the
+  inverse-frequency class-weight formula as an executable rule, and flagged — not silently
+  assumed — that `mord.LogisticAT`'s `sample_weight` support is **unverified** against the
+  pinned version; if absent, family (b) needs an owner-approved substitute before M7.
+- **C6-24** — the whitelist guard's round-1 design called `canonical_spec_guard(config)`
+  unchanged, which **factually would reject** the approved `(0.9,3.0)` 10 GHz range-gate
+  candidate (verified: `canonical_spec_guard` checks `preprocess.model_gate_m` against the
+  single canonical `(1.0,2.0)` default). Fixed: the guard now re-implements a small local
+  field comparison for the 10 GHz `preprocess`/`wst` sections with one exception (range-gate
+  membership, not equality), while `canonical_spec_guard`/`canonical_spec_guard_77` stay
+  exactly as-is on the curated-artifact write path — deliberately avoiding a touch to
+  `extraction.py`'s frozen front-end code, flagged as a duplication tradeoff in case the
+  owner would rather see a shared-helper refactor there instead.
+- **C6-22 (should-fix)** — spectrogram inputs need **train-only per-frequency mean/std**,
+  distinct from the raw/matched inputs' robust per-channel standardization; Adam betas,
+  weight init, loss function, and checkpoint metric/direction were all implicit. All named
+  explicitly now (flagged provisional where `implementation_plan.md` doesn't state them).
+- **C6-25 (blocking)** — nothing previously stopped the plan from writing/testing every
+  provisional constant and declaring the milestone done without explicit owner sign-off.
+  Folded into the same Step 0 gate as C6-16/C6-19: D0 now requires Step 0 cleared, and §3
+  must be empty or every row explicitly owner-accepted before D2 can be satisfied.
+
+**No comments were disputed** — all 10 were correct. The structural lesson (C6-16) is the one
+worth remembering going forward: a correction to previously-approved design, however
+technically sound, gets proposed and gated for approval — it does not get applied and
+back-filled with a rationale.
+
+## 2026-07-25 — M6 PLAN, Codex review round 1: 15 comments (5 blocking-tier resolved as blocking), one genuine leakage conflict traced back to `implementation_plan.md` itself and fixed there.
+
+**The headline finding (C6-01, agreed in full).** The plan's draft order-2-usefulness
+pre-check ran a full-cohort LOSO comparison (order-{0,1} vs order-{0,1,2} features) to decide
+whether the `on+tuned-ε` log branch enters the search space. Codex correctly identified that
+this is leakage: a full LOSO run uses every subject as an outer-test subject at some point, so
+using its aggregate result to set a *global* search-space bit — later applied to the SAME 16
+subjects' Exp A/B/etc. evaluation — is indistinguishable from "a configuration chosen by
+outer-test scores," directly conflicting with CLAUDE.md/ROADMAP invariants 2–3 and the main
+plan's own "outer-test subject is touched only for final scoring." It also broke the
+precedent the project already set at M5 (A-M5-6): decide leakage-sensitive protocol
+questions on mechanism/physics grounds, never on cohort-wide predictive/survival evidence.
+**Retracted.** `implementation_plan.md`'s WST-parameterization section amended (A-M6-1): the
+log axis's third branch is now an **unconditional** inner-CV candidate for both bands,
+selected fold-locally exactly like tiling/model family — leakage-safe by construction, and a
+strictly smaller search-space change (one axis 2→3 values) than the retracted pre-check would
+have been. Direct consequence: M6 now performs **zero predictive computation** — it is pure
+config specification, which is a stronger, simpler milestone invariant than the original draft
+had.
+
+**Other blocking comments, all agreed and applied by rewriting the affected sections:**
+- **C6-02** (ordering: freeze everything before running anything) — resolved structurally by
+  the C6-01 fix; nothing in M6 computes anything anymore, so there's no "before/after" to get
+  wrong.
+- **C6-03** — the shared `SearchSpaceConfig` couldn't represent 10 GHz vs 77 GHz's genuinely
+  different search axes (77 GHz has no reduction/channel/gate axes) and had no explicit tiling
+  field. Split into `SearchSpace10GHzConfig`/`SearchSpace77GHzConfig`, band-keyed, tiling added.
+- **C6-04** — the tuned-ε mechanism's `k` and "coefficient scale" were never actually specified
+  in `implementation_plan.md` (a real gap in the authoritative document, not just the milestone
+  plan). Fixed there (A-M6-1): `k = 0.1` [provisional], `scale_o` reuses the existing
+  `_prelog_scale` function restricted to the fold's training sessions, zero-scale falls back to
+  the frozen `log_epsilon = 1e-6`.
+- **C6-05** — `budget_k` was a cap with no enumerated grids or staged-selection algorithm.
+  Added concrete per-family grids (Ridge/SVR/RF/GBM/KNN, each ≤12 combos) and a literal
+  two-stage algorithm (Stage 1: ridge-anchored feature-axis search; Stage 2: model
+  family/grid search on the Stage-1 winner; tie-break = MAE → simplicity → inner-fold
+  variance).
+- **C6-06** — `config.py`'s `_reject_unknown` rejects unknown YAML keys and ignores comments,
+  so the draft's "YAML comments/literals" for Exp B–G could never actually be loaded or
+  validated. Added real dataclasses (`ExpBConfig`..`ExpGConfig`) for every experiment.
+- **C6-07** — 77 GHz Exp D baselines were entirely unaddressed despite 77 GHz being promoted to
+  a full parallel A–F arm. Added a complete 77 GHz baseline spec to `implementation_plan.md`
+  (A-M6-2): raw/matched 1D-CNN (1-channel real / 2-channel complex, since 77 GHz raw ADC is
+  real, not complex), spectrogram+2D-CNN, and a **Doppler-domain** physics baseline (quasi-static
+  vs motion energy ratio, cut at 2 Hz [provisional] — physiologically motivated, not derived
+  from an audited file, flagged for confirmation).
+- **C6-08** — 10 GHz `BaselineConfig` was missing 2D-CNN architecture, session-balanced
+  sampling formula, and training hyperparameters (batch size, epoch ceiling, early-stopping
+  patience/min-delta). All added, batch/epoch/patience values marked [provisional].
+- **C6-09** — the Exp E interpretability config was a placeholder ("one tiling + one model,
+  named later"). Named concretely and non-performance-based: 10 GHz = reduction A / mag / T1 /
+  log off / 1–2 m gate; 77 GHz = T1_77 / log off; both ridge (α=1.0, the same non-tuned anchor
+  as Stage 1); deterministic 4-fold subject assignment via sorted-ID array split.
+- **C6-10** — Exp C's cutpoint-fitting algorithm and proportional-odds implementation were
+  unspecified. Added: cutpoints = training quantiles at {0.2,0.4,0.6,0.8} with a tiny
+  degenerate-tie separation; proportional-odds = `mord.LogisticAT` — **flagged as a new
+  third-party dependency needing owner sign-off** before it enters `pyproject.toml`/`uv.lock`.
+- **C6-11** — Exp B never stated whether it reuses Exp A's search space or invents its own.
+  Clarified in `implementation_plan.md` (A-M6-3): Exp B reuses Exp A's identical search space,
+  scored on Exp B's own equal-session residual-MAE objective.
+- **C6-12** — Exp F never stated how "the identical selected radar feature set" for models 3/4
+  is obtained. Clarified in `implementation_plan.md` (A-M6-4): reuse that outer fold's
+  Exp A-selected *feature* configuration (not model family), refit with ridge.
+- **C6-13/C6-14** (should-fix; smoke-test subject count, pre-check IBEX provenance) — both moot
+  after C6-01's retraction removed the pre-check script and its IBEX job entirely.
+- **C6-15** — the whitelist validator only checked 3 constants, missing the rest of the freeze
+  and never composing the existing `canonical_spec_guard`/`canonical_spec_guard_77`. Redesigned
+  to call both existing guards and validate every new frozen section, plus an entrypoint-order
+  test.
+
+**No comments were disputed** — all 15 were correct on inspection; every fix landed in both
+`MILESTONE_6_PLAN.md` and, where the gap traced back to the authoritative document,
+`implementation_plan.md` itself (A-M6-1..4), so the two stay consistent. A short list of
+provisional constants (`k`, the model grids, DL training hyperparameters, the `mord`
+dependency, the 77 GHz physics-baseline Doppler cut) is now collected in the plan's §3,
+flagged for explicit owner confirmation before the freeze closes — none were derived from
+running anything against the cohort.
+
+## 2026-07-25 — M6 PLANNED: `plans/MILESTONE_6_PLAN.md` drafted; two owner decisions settled ahead of the freeze.
+
+**Decision 1 — 77 GHz in-band QC threshold (0.30) stays FROZEN, not moved inside inner CV.**
+Despite sitting at percentile 9.6 of a unimodal in-band distribution (0.28 vs 0.32 would give
+a materially different population — see the 2026-07-24 M5 cohort-QC entry), the owner chose
+to keep it frozen rather than declare it data-adaptive. Reasoning: the confound check was
+negative (median in-band ratio flat across S0–S4, 0.365/0.358/0.365/0.363/0.374 — QC is not
+behaving in a hydration-dependent way), and moving it inside CV would make session
+eligibility fold-dependent, which breaks the frozen-eligibility precondition the
+`test_no_leakage.py` mutation property and the whole manifest/harness design currently rest
+on — a large structural cost for a confound that isn't there. A labeled-**exploratory**
+sensitivity re-run at 0.28/0.32 is pre-registered for **after** primary results, so the
+threshold-sensitivity finding isn't simply dropped, only deferred to a place where it can't
+leak.
+
+**Decision 2 — the order-2-usefulness pre-check runs on BOTH bands, gated per band.** Both
+10 GHz (M4) and 77 GHz (M5) show the same ~1.8× across-subject order-2 pre-log scale spread
+and <1% fold-to-fold stability, but the two bands' physical content differs (fast-time beat
+vs slow-time Doppler), so each band's `on+tuned-ε` log branch is confirmed or dropped on its
+**own** evidence rather than borrowing one band's verdict for both. 10 GHz features already
+exist as session-level diagnostics; 77 GHz needs one small CPU IBEX pass over the 72 eligible
+cells (reusing `extraction_77.py` as-is — no new library code) since only per-cell
+diagnostics, not full feature vectors, exist for 77 GHz so far.
+
+**Plan drafted**: `plans/MILESTONE_6_PLAN.md`, §0–§7, mirroring the M2–M5 template. M6 is
+mostly config + one whitelist validator + the one pre-check computation above — no harness,
+no outer-fold evaluation, `tests/test_no_leakage.py` untouched. Two values the plan proposes
+that implementation_plan.md leaves unstated are flagged for Codex/owner review rather than
+silently fixed: the per-family search-space budget **K = 12** (a proposal, not yet
+authoritative), and the pre-check's own ridge λ grid `{0.1, 1.0, 10.0}`. Awaiting Codex
+review + owner approval before implementation starts on `v1_milestone_6`.
+
 ---
 
 ## 2026-07-24 — M5 cohort QC on IBEX: **90.4% frame survival, 72/80 sessions, ZERO flatline** — the bin-0 correction validated at scale.

@@ -1,0 +1,22 @@
+# 77 GHz Exp A/WST inner-CV search space (implementation_plan.md §"LOSO harness", Exp G).
+# FROZEN at the milestone-6 config-freeze gate (Step 0, 2026-07-25).
+#
+# Unlike 10 GHz, reduction/channel/gate are FIXED here, not candidate sets: Exp G freezes
+# the primary slow-time I/Q chain and the single 2-4 m gate. Only tiling and the log
+# branch are inner-CV axes. A 10 GHz-only candidate (a second reduction or a model gate)
+# is therefore structurally inexpressible in SearchSpace77GHzConfig.
+#
+# Inner-CV axes (code-frozen tuples):
+#   tiling:         [T1_77, T2_77, T3_77]   # Doppler tilings Q=(8,4)@20ms / (6,4)@40ms / (4,2)@60ms
+#   log_branches:   [off, on_frozen_eps, on_tuned_eps]   # all three unconditional (A-M6-1)
+#   model_families: [ridge, svr, rf, gbm, knn]
+# Fixed (scalars, not candidate sets):
+#   reduction: slow_time_iq_primary
+#   channel:   iq
+#   gate_m:    [2.0, 4.0]
+
+search_77ghz:
+  budget_k: 12
+  stage1_anchor_model: ridge
+  stage1_anchor_ridge_alpha: 1.0
+  tuned_eps_k: 0.1

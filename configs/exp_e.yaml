@@ -1,0 +1,17 @@
+# Exp E — the single pre-registered interpretability configuration (implementation_plan.md
+# §E). FROZEN at milestone 6. Fixed a priori and non-performance-based (the simplest/first
+# option on each axis) so path importances are comparable across folds. Runs on the Exp B
+# (clock-decoupled) model as primary. Code: src/dehyd/config.py ExpEConfig.
+
+exp_e:
+  reduction_10ghz: A
+  channel_10ghz: mag
+  tiling_10ghz: T1
+  log_10ghz: "off"             # quoted: bare `off` is a YAML-1.1 boolean
+  tiling_77ghz: T1_77          # first/smallest Doppler tiling, Q=(8,4)@20ms
+  log_77ghz: "off"
+  model: ridge
+  ridge_alpha: 1.0             # same non-tuned anchor as the Stage-1 search
+  n_folds: 4                   # 4-fold subject-grouped interpretability CV
+  fold_assignment: sorted_subject_id_array_split   # deterministic, no RNG
+  # Code-frozen tuple: gate_10ghz_m [1.0, 2.0].

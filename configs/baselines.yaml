@@ -1,0 +1,38 @@
+# Exp D baseline specs, both bands (implementation_plan.md §D + A-M6-2). FROZEN at the
+# milestone-6 config-freeze gate (Step 0, 2026-07-25). Architecture/optimizer constants
+# are shared across bands; the band-specific fields carry the 10 GHz range-power split and
+# the 77 GHz axis-consistent raw/matched/spectrogram tensors + DC-vs-any-motion Doppler
+# physics split. Tuple fields are code-frozen (src/dehyd/config.py BaselineConfig).
+
+baselines:
+  # Shared CNN / 2D-CNN architecture (tuples cnn_channels/cnn2d_channels code-frozen).
+  cnn_kernel: 7
+  cnn_pool: 4
+  cnn2d_kernel: 3
+  cnn2d_pool: 2
+  # Optimizer / training (owner-confirmed provisional defaults, MILESTONE_6_PLAN.md §3).
+  optimizer: adam
+  lr: 1.0e-3
+  loss: mse
+  batch_size: 16
+  max_epochs: 200
+  early_stopping_patience: 15
+  early_stopping_min_delta: 1.0e-4
+  frame_to_session_aggregation: median   # matches the session-level primary
+  # Distinct normalization rules: robust per-channel for raw/matched 1D; train-only
+  # per-frequency mean/std for spectrograms (recorded in the M7 fit-audit).
+  raw_matched_standardize: robust_per_channel
+  spectrogram_standardize: train_only_per_frequency_mean_std
+  spectrogram_hann: 64
+  spectrogram_hop: 16
+  spectrogram_nfft: 128
+  # 77 GHz raw/matched tensor definitions (A-M6-2): raw keeps the chirp/slow-time axis;
+  # matched is one fixed Rx (index 0), never coherently fused across Rx.
+  raw_reduction_77ghz: mean_over_fast_time_and_rx
+  matched_input_77ghz: chain_steps_1_5_single_rx_range_bin_mean
+  matched_reference_rx_index_77ghz: 0
+  physics_prf_hz_77ghz: 1953.125
+  # Code-frozen tuple fields (documented, not restated to avoid verbose nested YAML):
+  #   cnn_channels: [16, 32, 64]   cnn2d_channels: [16, 32]   adam_betas: [0.9, 0.999]
+  #   physics_target_range_m_10ghz: [0.9, 1.5]  physics_background_range_m_10ghz: [1.5, 3.0]
+  #   physics_static_band_bins_77ghz: [0, 0]    physics_motion_band_bins_77ghz: [1, 127]

@@ -1,0 +1,31 @@
+# Statistical protocol (implementation_plan.md §Statistics), transcribed into validated
+# config. FROZEN at the milestone-6 config-freeze gate (Step 0, 2026-07-25). No redesign:
+# every field names a choice §Statistics already makes. Code: src/dehyd/config.py StatsConfig.
+
+stats:
+  confidence_level: 0.95
+  bootstrap_b: 10000
+  ci_method: bca
+  ci_fallback: percentile           # when BCa is unstable at small N
+  resample_unit: subject            # subject-level cluster bootstrap over N_eval subjects
+  # Metric-type-aware seed collapse (seeds never counted as observations):
+  seed_collapse_additive: average_per_subject_before_resample
+  seed_collapse_pooled: average_metric_across_seeds_within_resample
+  undefined_metric_skip_threshold_pct: 5.0   # >5% skipped -> CI flagged unreliable
+  per_subject_pearson_r_min_sessions: 3      # descriptive only below this
+  # Exp B: two distinct estimands.
+  expb_aggregate_estimand: session_weighted_equal_weight_per_session
+  expb_paired_test_estimand: subject_weighted_complete_case_s1_s4
+  paired_test: wilcoxon_signed_rank
+  # Multiple-comparison families (Holm). Exp F's two covariate contrasts are exploratory
+  # per §F, which names NO Holm family for them -> reported individually, uncorrected.
+  holm_family_expb_per_session: 4
+  holm_family_expf_primary: 2
+  expf_exploratory_correction: none_reported_individually
+  holm_family_baseline_per_family: 3
+  composite_baseline_comparison: single_uncorrected
+  # Selection-variance robustness bootstrap (classical models only).
+  robustness_replicates_r: 200
+  robustness_min_distinct_subjects: 4
+  robustness_min_successful_replicates: 100
+  robustness_ordinal_min_classes: 5

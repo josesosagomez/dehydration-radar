@@ -1,0 +1,13 @@
+# Exp F — confound check (implementation_plan.md §F, A-M6-4). FROZEN at milestone 6.
+# Four nested ridge models sharing one clock encoding; models 3 and 4 reuse that outer
+# fold's Exp A-selected FEATURE configuration (refit with ridge, not the Exp A model
+# family), so the covariate contrast is not confounded by a different radar representation.
+# Code: src/dehyd/config.py ExpFConfig.
+
+exp_f:
+  radar_representation_rule: exp_a_selected_feature_config_per_fold
+  clock_encoding: session_index_one_hot
+  target_sensitivity: signed_kg_change   # (b) of the algebraic-coupling sensitivity analysis
+  # Code-frozen tuples: ridge_alphas [0.001 .. 10.0] (== model_grid.ridge_alphas);
+  #   covariates_primary [age, height, baseline_mass, bmi];
+  #   covariates_sensitivity [age, height]   # (a) of the sensitivity analysis

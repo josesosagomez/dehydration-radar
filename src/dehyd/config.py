@@ -239,6 +239,250 @@ class WST77Config:
     backend: str = "numpy"
 
 
+# ---------------------------------------------- milestone 6 (the config-freeze gate)
+# Every section below is a FROZEN RECORD of an owner-approved protocol decision
+# (plans/MILESTONE_6_PLAN.md, Step 0 resolved 2026-07-25). None is a live tuning knob:
+# a run's YAML may restate a scalar default (a complete record) but tuple-valued design
+# constants are code-frozen like wst.tilings, and modelling entrypoints additionally
+# validate every value at its frozen default via protocol_freeze_guard (features/
+# protocol_freeze.py). The dataclasses exist so the search-space whitelist, the baseline
+# specs, and the statistical protocol are one validated, provenance-recorded object
+# rather than prose the M7 harness has to re-derive.
+
+# Enumerated string domains, so a YAML typo fails at load rather than deep in M7.
+REDUCTIONS = ("A", "B")
+CHANNELS = ("mag", "iq")
+TILINGS_10GHZ = ("T1", "T2", "T3")
+TILINGS_77GHZ = ("T1_77", "T2_77", "T3_77")
+LOG_BRANCHES = ("off", "on_frozen_eps", "on_tuned_eps")
+MODEL_FAMILIES = ("ridge", "svr", "rf", "gbm", "knn")
+
+
+@dataclass(frozen=True)
+class SearchSpace10GHzConfig:
+    """The frozen Exp A/WST inner-CV search space for 10 GHz (implementation_plan.md
+    §"LOSO harness"). The tuple fields ARE the whitelist protocol_freeze_guard checks a
+    call-time protocol record against; they are code-frozen (YAML override rejected).
+    The log axis carries all three branches unconditionally (A-M6-1, owner-approved)."""
+
+    reduction: tuple[str, ...] = REDUCTIONS
+    channel: tuple[str, ...] = CHANNELS
+    tiling: tuple[str, ...] = TILINGS_10GHZ
+    log_branches: tuple[str, ...] = LOG_BRANCHES
+    range_gate_m: tuple[tuple[float, float], ...] = ((1.0, 2.0), (0.9, 3.0))
+    model_families: tuple[str, ...] = MODEL_FAMILIES
+    budget_k: int = 12
+    stage1_anchor_model: str = "ridge"
+    stage1_anchor_ridge_alpha: float = 1.0
+    tuned_eps_k: float = 0.1
+
+
+@dataclass(frozen=True)
+class SearchSpace77GHzConfig:
+    """The 77 GHz search space. reduction/channel/gate are FIXED (Exp G freezes the
+    primary slow-time I/Q chain and the 2-4 m gate) — scalars, not candidate sets, so a
+    10 GHz-only candidate (a second reduction or a model gate) cannot be expressed here.
+    Only tiling and the log branch are inner-CV axes."""
+
+    reduction: str = "slow_time_iq_primary"
+    channel: str = "iq"
+    gate_m: tuple[float, float] = (2.0, 4.0)
+    tiling: tuple[str, ...] = TILINGS_77GHZ
+    log_branches: tuple[str, ...] = LOG_BRANCHES
+    model_families: tuple[str, ...] = MODEL_FAMILIES
+    budget_k: int = 12
+    stage1_anchor_model: str = "ridge"
+    stage1_anchor_ridge_alpha: float = 1.0
+    tuned_eps_k: float = 0.1
+
+
+@dataclass(frozen=True)
+class ModelGridConfig:
+    """Per-family hyperparameter grids, enumerated so budget_k is a literal len() check
+    (T-C6-budget). Each family's total combination count is <= budget_k = 12; the
+    baseline learning-rate/weight-decay grid gives the budget-parity rule a real
+    candidate set to count on the baseline side (owner-approved, Step 0 item 3)."""
+
+    ridge_alphas: tuple[float, ...] = (0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0)  # 8
+    svr_c: tuple[float, ...] = (0.1, 1.0, 10.0, 100.0)
+    svr_epsilon: tuple[float, ...] = (0.01, 0.1, 0.3)  # 4 x 3 = 12
+    rf_n_estimators: tuple[int, ...] = (100, 300)
+    rf_max_depth: tuple[int | None, ...] = (3, 5, None)  # 2 x 3 = 6
+    gbm_n_estimators: tuple[int, ...] = (100, 300)
+    gbm_learning_rate: tuple[float, ...] = (0.01, 0.1)
+    gbm_max_depth: tuple[int, ...] = (2, 3)  # 2 x 2 x 2 = 8
+    knn_n_neighbors: tuple[int, ...] = (3, 5, 7, 9, 11, 13, 15)  # 7
+    baseline_learning_rate: tuple[float, ...] = (3e-4, 1e-3, 3e-3)
+    baseline_weight_decay: tuple[float, ...] = (0.0, 1e-4)  # 3 x 2 = 6
+
+
+@dataclass(frozen=True)
+class BaselineConfig:
+    """The frozen Exp D baseline specs, both bands (implementation_plan.md §D + A-M6-2).
+    Architecture/optimizer constants are shared; band-specific fields carry the 10 GHz
+    range-power split and the 77 GHz axis-consistent raw/matched/spectrogram tensor
+    definitions and the DC-vs-any-motion Doppler physics split (A-M6-2, owner-approved)."""
+
+    # Shared CNN / 2D-CNN architecture.
+    cnn_channels: tuple[int, int, int] = (16, 32, 64)
+    cnn_kernel: int = 7
+    cnn_pool: int = 4
+    cnn2d_channels: tuple[int, int] = (16, 32)
+    cnn2d_kernel: int = 3
+    cnn2d_pool: int = 2
+    # Optimizer / training (owner-confirmed provisional defaults, §3).
+    optimizer: str = "adam"
+    lr: float = 1e-3
+    adam_betas: tuple[float, float] = (0.9, 0.999)
+    adam_weight_decay_default: float = 0.0
+    weight_init: str = "framework_default"
+    loss: str = "mse"
+    batch_size: int = 16
+    max_epochs: int = 200
+    early_stopping_patience: int = 15
+    early_stopping_min_delta: float = 1e-4
+    checkpoint_metric: str = "inner_val_session_mae"
+    checkpoint_direction: str = "minimize"
+    frame_to_session_aggregation: str = "median"
+    # Two distinct normalization rules (implementation_plan.md "Fit-on-train-only").
+    raw_matched_standardize: str = "robust_per_channel"
+    spectrogram_standardize: str = "train_only_per_frequency_mean_std"
+    spectrogram_hann: int = 64
+    spectrogram_hop: int = 16
+    spectrogram_nfft: int = 128
+    # 10 GHz physics baseline (range-power ratio).
+    physics_target_range_m_10ghz: tuple[float, float] = (0.9, 1.5)
+    physics_background_range_m_10ghz: tuple[float, float] = (1.5, 3.0)
+    # 77 GHz raw/matched/spectrogram tensors (A-M6-2). The raw reduction retains the
+    # chirp/slow-time axis; the matched input is one fixed Rx, never coherently fused.
+    raw_reduction_77ghz: str = "mean_over_fast_time_and_rx"
+    raw_channels_77ghz: int = 1
+    matched_input_77ghz: str = "chain_steps_1_5_single_rx_range_bin_mean"
+    matched_reference_rx_index_77ghz: int = 0
+    matched_channels_77ghz: int = 2
+    spectrogram_primary_channels_77ghz: int = 1
+    spectrogram_ablation_channels_77ghz: int = 2
+    # 77 GHz Doppler physics baseline: DC bin vs any resolvable motion. A rate-specific
+    # cutoff is unrepresentable (df = PRF/256 ~ 7.63 Hz), so this is a bin-partition.
+    physics_static_band_bins_77ghz: tuple[int, int] = (0, 0)
+    physics_motion_band_bins_77ghz: tuple[int, int] = (1, 127)
+    physics_prf_hz_77ghz: float = 1953.125
+
+
+@dataclass(frozen=True)
+class ExpBConfig:
+    """Clock-decoupling (implementation_plan.md §B, A-M6-3). Reuses Exp A's search space
+    under Exp B's own equal-session residual-MAE objective."""
+
+    reuse_exp_a_search_space: bool = True
+    objective: str = "equal_session_residual_mae"
+    session_specific_variant_enabled: bool = True
+
+
+@dataclass(frozen=True)
+class ExpCConfig:
+    """Ordinal 5-class (implementation_plan.md §C). Family (a) thresholds family (a)'s
+    OWN in-sample inner-training predictions at fixed quantiles; family (b) is the
+    Frank-Hall ordinal decomposition (A-M6-5, owner-approved after statsmodels
+    OrderedModel was verified to lack sample_weight support). Both consume train-only
+    inverse-frequency class weights; KNN is excluded from weighted fitting."""
+
+    cutpoint_source: str = "family_a_regressor_in_sample_predictions_inner_train"
+    cutpoint_quantiles: tuple[float, ...] = (0.2, 0.4, 0.6, 0.8)
+    cutpoint_min_separation: float = 1e-9
+    class_weight_formula: str = "inverse_frequency_inner_train"
+    class_weight_unsupported_families: tuple[str, ...] = ("knn",)
+    proportional_odds_impl: str = "frank_hall_ordinal_decomposition_sklearn_logisticregression"
+    proportional_odds_c_grid: tuple[float, ...] = (0.1, 1.0, 10.0)
+    selection_metric_primary: str = "class_unit_mae"
+    selection_metric_secondary: str = "qwk"
+
+
+@dataclass(frozen=True)
+class ExpEConfig:
+    """The single pre-registered interpretability configuration (implementation_plan.md
+    §E), fixed a priori and non-performance-based so importances are comparable."""
+
+    reduction_10ghz: str = "A"
+    channel_10ghz: str = "mag"
+    tiling_10ghz: str = "T1"
+    log_10ghz: str = "off"
+    gate_10ghz_m: tuple[float, float] = (1.0, 2.0)
+    tiling_77ghz: str = "T1_77"
+    log_77ghz: str = "off"
+    model: str = "ridge"
+    ridge_alpha: float = 1.0
+    n_folds: int = 4
+    fold_assignment: str = "sorted_subject_id_array_split"
+
+
+@dataclass(frozen=True)
+class ExpFConfig:
+    """Confound check (implementation_plan.md §F, A-M6-4). Four nested ridge models on
+    one fixed clock encoding; models 3 and 4 reuse that fold's Exp A-selected feature
+    configuration (refit with ridge)."""
+
+    radar_representation_rule: str = "exp_a_selected_feature_config_per_fold"
+    ridge_alphas: tuple[float, ...] = (0.001, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0)
+    clock_encoding: str = "session_index_one_hot"
+    covariates_primary: tuple[str, ...] = ("age", "height", "baseline_mass", "bmi")
+    covariates_sensitivity: tuple[str, ...] = ("age", "height")
+    target_sensitivity: str = "signed_kg_change"
+
+
+@dataclass(frozen=True)
+class ExpGConfig:
+    """Cross-band fusion combiner (implementation_plan.md §G). Records the already-frozen
+    convex-weight selection rule as config; the alpha value itself is only fit in M7's CV."""
+
+    alpha_grid: tuple[float, ...] = tuple(round(0.05 * i, 2) for i in range(21))
+    alpha_tie_break: str = "closest_to_one"
+    seed_pairing: bool = True
+    objective: str = "subject_balanced_oof_mae"
+
+
+@dataclass(frozen=True)
+class StatsConfig:
+    """The full statistical protocol (implementation_plan.md §Statistics), transcribed
+    into validated config — no redesign, every field names a choice that section makes."""
+
+    confidence_level: float = 0.95
+    bootstrap_b: int = 10000
+    ci_method: str = "bca"
+    ci_fallback: str = "percentile"
+    resample_unit: str = "subject"
+    seed_collapse_additive: str = "average_per_subject_before_resample"
+    seed_collapse_pooled: str = "average_metric_across_seeds_within_resample"
+    undefined_metric_skip_threshold_pct: float = 5.0
+    per_subject_pearson_r_min_sessions: int = 3
+    expb_aggregate_estimand: str = "session_weighted_equal_weight_per_session"
+    expb_paired_test_estimand: str = "subject_weighted_complete_case_s1_s4"
+    paired_test: str = "wilcoxon_signed_rank"
+    holm_family_expb_per_session: int = 4
+    holm_family_expf_primary: int = 2
+    # Exp F's two covariate contrasts are "exploratory" per implementation_plan.md §F,
+    # which names NO Holm family for them — so they are reported individually, uncorrected.
+    expf_exploratory_correction: str = "none_reported_individually"
+    holm_family_baseline_per_family: int = 3
+    composite_baseline_comparison: str = "single_uncorrected"
+    robustness_replicates_r: int = 200
+    robustness_min_distinct_subjects: int = 4
+    robustness_min_successful_replicates: int = 100
+    robustness_ordinal_min_classes: int = 5
+
+
+@dataclass(frozen=True)
+class ProtocolFreezeConfig:
+    """The frozen protocol constants a modelling entrypoint validates (beyond the WST
+    feature guards): the Option-B mask form, the FFT-gate transition, and the 77 GHz
+    in-band QC threshold that Step 0 kept frozen at 0.30."""
+
+    option_b_peak_neighbors: int = 1
+    option_b_mask_taper: bool = True
+    fft_gate_transition_hz: float = 500.0
+    qc77_min_in_band_energy_ratio: float = 0.30
+
+
 @dataclass(frozen=True)
 class Config:
     paths: PathsConfig
@@ -252,6 +496,20 @@ class Config:
     qc77: QC77Config = field(default_factory=QC77Config)
     preprocess77: Preprocess77Config = field(default_factory=Preprocess77Config)
     wst77: WST77Config = field(default_factory=WST77Config)
+    # Milestone 6 (the config-freeze gate). Same additive default_factory pattern: an
+    # existing config loads unchanged; the frozen protocol sections appear at their
+    # owner-approved defaults and are recorded in provenance.
+    search_10ghz: SearchSpace10GHzConfig = field(default_factory=SearchSpace10GHzConfig)
+    search_77ghz: SearchSpace77GHzConfig = field(default_factory=SearchSpace77GHzConfig)
+    model_grid: ModelGridConfig = field(default_factory=ModelGridConfig)
+    baselines: BaselineConfig = field(default_factory=BaselineConfig)
+    exp_b: ExpBConfig = field(default_factory=ExpBConfig)
+    exp_c: ExpCConfig = field(default_factory=ExpCConfig)
+    exp_e: ExpEConfig = field(default_factory=ExpEConfig)
+    exp_f: ExpFConfig = field(default_factory=ExpFConfig)
+    exp_g: ExpGConfig = field(default_factory=ExpGConfig)
+    stats: StatsConfig = field(default_factory=StatsConfig)
+    protocol_freeze: ProtocolFreezeConfig = field(default_factory=ProtocolFreezeConfig)
 
 
 # ---------------------------------------------------------------------- yaml loading
@@ -816,6 +1074,74 @@ def _build_wst77(raw: dict) -> WST77Config:
     )
 
 
+# ---------------------------------------------------------- milestone 6 frozen records
+# Every milestone-6 section is a FROZEN RECORD (Step 0 resolved 2026-07-25): a run YAML
+# may RESTATE a field at its owner-approved default (so a config is a complete record)
+# but may not CHANGE it. protocol_freeze_guard re-checks every value at modelling time;
+# this builder is the load-time half of the same contract. One builder serves all 11
+# sections because, unlike qc/preprocess/wst (which carry live inner-CV axes and
+# pre-declared ablations), nothing in these sections is a knob.
+
+
+def _normalize_frozen(value):
+    """YAML gives lists; frozen defaults are tuples. Normalize recursively so a restated
+    value compares equal to its tuple default (e.g. [[1,2],[0.9,3]] -> ((1,2),(0.9,3)))."""
+    if isinstance(value, list):
+        return tuple(_normalize_frozen(v) for v in value)
+    return value
+
+
+def _frozen_matches(value, default) -> bool:
+    """Type-aware equality for a frozen field. A bool is NOT interchangeable with an int
+    (YAML writes true/false, so `1` for a bool is a typo, and `True == 1` must not slip
+    through); tuples compare elementwise after list->tuple normalization."""
+    value = _normalize_frozen(value)
+    if isinstance(default, bool) or isinstance(value, bool):
+        return isinstance(value, bool) and isinstance(default, bool) and value == default
+    if isinstance(default, tuple):
+        return (
+            isinstance(value, tuple)
+            and len(value) == len(default)
+            and all(_frozen_matches(v, d) for v, d in zip(value, default))
+        )
+    return value == default
+
+
+def _build_frozen_record(raw: dict, name: str, cls):
+    """Build a milestone-6 frozen-record section. Unknown keys and any *changed* value
+    are ConfigErrors; restating a default is allowed. Returns the canonical `cls()`
+    (safe, since every present value was proven equal to its default)."""
+    section = _known_section(raw, name, cls)
+    default = cls()
+    for key, value in section.items():
+        want = getattr(default, key)
+        if not _frozen_matches(value, want):
+            raise ConfigError(
+                f"{name}.{key} is a frozen protocol constant and cannot be changed from "
+                f"{want!r} (got {value!r}) — it is fixed at the milestone-6 config-freeze "
+                "gate (plans/MILESTONE_6_PLAN.md, Step 0). Change the code default and its "
+                "amendment record, not a run YAML."
+            )
+    return default
+
+
+# The milestone-6 section name -> dataclass map, used by load_config and reused by
+# features/protocol_freeze.py so the two never disagree on what a "frozen section" is.
+M6_SECTIONS = {
+    "search_10ghz": SearchSpace10GHzConfig,
+    "search_77ghz": SearchSpace77GHzConfig,
+    "model_grid": ModelGridConfig,
+    "baselines": BaselineConfig,
+    "exp_b": ExpBConfig,
+    "exp_c": ExpCConfig,
+    "exp_e": ExpEConfig,
+    "exp_f": ExpFConfig,
+    "exp_g": ExpGConfig,
+    "stats": StatsConfig,
+    "protocol_freeze": ProtocolFreezeConfig,
+}
+
+
 def load_config(*yaml_paths: str | Path) -> Config:
     """Load, merge and validate one or more YAML files (later files win).
 
@@ -833,6 +1159,7 @@ def load_config(*yaml_paths: str | Path) -> Config:
     known_sections = (
         "paths", "run", "split", "qc", "preprocess", "wst",
         "qc77", "preprocess77", "wst77",
+        *M6_SECTIONS,
     )
     _reject_unknown(merged, known_sections, "config")
 
@@ -848,6 +1175,8 @@ def load_config(*yaml_paths: str | Path) -> Config:
     # Same cross-check for band 2's single gate (always present via defaults).
     _check_qc77_band(qc77, preprocess77)
 
+    m6 = {name: _build_frozen_record(merged, name, cls) for name, cls in M6_SECTIONS.items()}
+
     return Config(
         paths=_build_paths(merged),
         run=_build_run(merged),
@@ -858,6 +1187,17 @@ def load_config(*yaml_paths: str | Path) -> Config:
         qc77=qc77,
         preprocess77=preprocess77,
         wst77=_build_wst77(merged),
+        search_10ghz=m6["search_10ghz"],
+        search_77ghz=m6["search_77ghz"],
+        model_grid=m6["model_grid"],
+        baselines=m6["baselines"],
+        exp_b=m6["exp_b"],
+        exp_c=m6["exp_c"],
+        exp_e=m6["exp_e"],
+        exp_f=m6["exp_f"],
+        exp_g=m6["exp_g"],
+        stats=m6["stats"],
+        protocol_freeze=m6["protocol_freeze"],
     )
 
 

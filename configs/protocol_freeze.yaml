@@ -1,0 +1,10 @@
+# Frozen protocol constants a modelling entrypoint validates via protocol_freeze_guard
+# (beyond the WST feature guards). FROZEN at the milestone-6 config-freeze gate. These are
+# configurable only so a run's YAML is a complete record; a non-default value is rejected.
+# Code: src/dehyd/config.py ProtocolFreezeConfig.
+
+protocol_freeze:
+  option_b_peak_neighbors: 1          # the "+/-1-bin two-sided Hann-tapered mask" form
+  option_b_mask_taper: true
+  fft_gate_transition_hz: 500.0
+  qc77_min_in_band_energy_ratio: 0.30   # Step 0 kept the 77 GHz in-band QC threshold frozen

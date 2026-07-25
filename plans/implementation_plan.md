@@ -470,21 +470,73 @@ tiling, at fs=520834 Hz on the trimmed length N=470:
     showed the fold-to-fold order-2 scale is stable to **< 1 %** (per-subject spread
     ~14 %), so a data-derived ε would be near-leakage-free here — motivating the
     pre-registered third log branch below rather than any change now.
-  - **Log branch — pre-registered inner-CV axis (candidate; confirmed/frozen at M6).**
-    The log axis carries **three** mutually exclusive branches, not two: **(a) log off**;
-    **(b) log on with the frozen ε = 1e-6** (the rule above); **(c) log on with a
-    fold-local, scale-relative *per-order* ε rule** — `ε_o = k · (order-o coefficient
-    scale on the fold's TRAINING frames)` for a small pre-committed `k`, computed
-    train-only and selected on inner-validation like every other axis (never on the
-    outer-test subject), so it is leakage-safe. Rationale: matching ε *to* the order-2
-    scale returns ≈ 1e-6 (today's value); *un-flooring* order-2 needs ε smaller than the
-    scale, which trades flattening for near-zero-noise amplification — a two-sided
-    tradeoff whose sweet spot the inner CV should settle, not a hand-picked constant.
-    **Kept minimal (one extra rule, not an ε grid) and gated** on a cheap
-    order-2-usefulness pre-check (order-{0,1} vs order-{0,1,2} features): if order 2 adds
-    nothing, branch (c) is dropped before M6 so it never widens the N = 16 search space
-    for no reason. Branch (c) is **not** in effect at M4 (ε frozen); it is committed here
-    and decided at M6. *(A-M4-7, 2026-07-23.)*
+  - **Log branch — inner-CV axis (A-M4-7; gating mechanism corrected at M6, A-M6-1 —
+    owner-approved 2026-07-25, see below).** The log axis carries **three**
+    mutually exclusive branches: **(a) log off**; **(b) log on with the frozen
+    ε = 1e-6** (the rule above); **(c) log on with a fold-local, scale-relative
+    *per-order* ε rule** — `ε_o = k · scale_o`, where `scale_o` is a **single fold-level
+    scalar per order**, computed **train-only** as follows: for each training subject
+    (inner-training for inner selection; all outer-training subjects for the final
+    refit), compute that subject's own per-order scale as the **mean over that
+    subject's eligible training sessions** of the existing `_prelog_scale` per-session
+    value (reused as-is — per order: mean over time → mean over that order's paths →
+    mean over channels — one number per session); then `scale_o` = the **median over
+    training subjects** of those per-subject means. This two-stage (within-subject mean,
+    then across-subject median) aggregation is **subject-balanced** — a subject with
+    more eligible sessions does not get more weight than one with fewer — matching the
+    "equal weight per subject" convention already used elsewhere (Exp B's session
+    residualization, Exp G's subject-balanced OOF objective). For a **frozen `k = 0.1`**
+    (10% of the training-fold scale — small enough to un-floor order 2 relative to the
+    frozen ε = 1e-6 default, per the rationale below). **Fallback:** if the aggregate
+    `scale_o` is non-finite or non-positive (a degenerate all-zero/negative training
+    aggregate — not observed in the M4/M5 cohorts, but guarded structurally since
+    `_prelog_scale`'s order-1/2 values are means of non-negative magnitudes and could in
+    principle vanish), `ε_o` falls back to the frozen `log_epsilon = 1e-6` rather than
+    0, so `log(S + 0)` can never fire. **Application:** once `ε_o` is computed from
+    training data only, it is applied identically — as a fixed constant, not
+    recomputed — to every frame's raw scattering tensor in that fold: inner-training,
+    inner-validation, and (after the final refit) the outer-test subject alike. This is
+    exactly the fit-on-train-only pattern already used for every other fitted quantity
+    in the harness (a scaler fit on train, applied unchanged to test) — no coefficient
+    from a validation or outer-test frame is ever read to produce `ε_o`. Only orders 1
+    and 2 receive `ε_o` (order 0 is never logged, per the rule above). Selected on
+    inner-validation like every other axis (never on the outer-test subject) —
+    leakage-safe by construction. Rationale: matching ε *to* the order-2 scale returns
+    ≈ 1e-6 (today's value); *un-flooring* order-2 needs ε smaller than the scale, which
+    trades flattening for near-zero-noise amplification — a two-sided tradeoff whose
+    sweet spot the inner CV should settle, not a hand-picked constant. **Branch (c) is an
+    unconditional inner-CV candidate for BOTH bands** (owner-approved 2026-07-25, A-M6-1)
+    — selected per outer fold by the same inner-CV mechanism as tiling/model family,
+    exactly like every other axis, **never gated by a separate cohort-wide predictive
+    pre-check**. Branch (c) is **not** in effect at M4 (ε frozen); its mechanics
+    (aggregation, `k`, fallback) are specified here for M7 to consume.
+    *(A-M4-7, 2026-07-23; k/scale/fallback/application and the gating correction fixed
+    and owner-approved at A-M6-1, 2026-07-25.)*
+  - **A-M6-1 [APPLIED — owner-approved 2026-07-25] — order-2-usefulness pre-check
+    retracted; leakage conflict found at the M6 gate.** M4 committed
+    to gating branch (c) on "a cheap order-2-usefulness pre-check (order-{0,1} vs
+    order-{0,1,2} features): if order 2 adds nothing, branch (c) is dropped before M6."
+    Milestone-6 planning (Codex review round 1, 2026-07-25) found this pre-check, as
+    specifiable, requires a full-cohort LOSO predictive comparison — every subject
+    serves as an outer-test subject at some point — whose aggregate result then sets a
+    **global** search-space decision applied to the SAME 16 subjects' later Exp A/B/etc.
+    evaluation. That is indistinguishable from "a configuration... chosen by its
+    outer-test scores" (§"LOSO harness"), directly conflicting with CLAUDE.md/ROADMAP §1
+    invariants 2–3, and with §0's own "outer-test subject is touched only for final
+    scoring." It also breaks the precedent set at M5 (A-M5-6): leakage-sensitive
+    protocol decisions there were made from **mechanism/physics** evidence on a single
+    audited file, explicitly *not* from **cohort-wide predictive/survival** evidence —
+    the same standard would apply here. **Codex review round 2 (2026-07-25) correctly
+    flagged that this document is the owner-approved authoritative base, and a task
+    plan cannot silently supersede a previously-approved mechanism (A-M4-7) by
+    unilaterally relabeling it "retracted"** — the same standard already applied to
+    A-M5-1/A-M5-2 (rescoping amendments require owner approval as a prerequisite,
+    *before* implementation, not a narrative applied after the fact). **Status: APPLIED.**
+    The owner reviewed the technical analysis and approved the retraction (2026-07-25,
+    `plans/MILESTONE_6_PLAN.md` Step 0 item 1, decision "a"): branch (c) is now
+    **unconditionally** included in the log axis for both bands, selected per outer fold
+    exactly like every other axis, with no separate cohort-wide gating step. This
+    supersedes the pre-check gating rule quoted above.
 - **Feature families**: (a) pooled statistics — per path, mean and std (**ddof = 0**)
   over the global series, the first half `[0 : n_time//2]`, and the second half
   `[n_time//2 : n_time]`; a segment contributes its **std only if it has ≥ 2 samples**
@@ -577,14 +629,14 @@ subjects** (15 when N_eval=16, otherwise N_eval−1)**:**
 - Selection metric: **session-level MAE** (aggregate to session, mean over inner-val
   subjects) — the same unit as the headline.
 - Search space (bounded, enumerated in config): reduction branch {A,B} × channel
-  {mag, I/Q} × tiling {T1,T2,T3} × **log {off / on+frozen-ε / on+tuned-ε}** ×
+  {mag, I/Q} × tiling {T1,T2,T3} × **log {off / on+frozen-ε / on+tuned-ε}** (all three
+  branches unconditional, both bands — A-M6-1, owner-approved 2026-07-25) ×
   range-gate {1–2 m default, 0.9–3.0 m} × model family × that model's small
   hyperparameter grid. The **log** axis's third branch (`on+tuned-ε` = the fold-local,
-  scale-relative per-order ε rule of §"WST parameterization", A-M4-7) is a
-  **pre-registered candidate confirmed/frozen at M6** and **only if** the
-  order-2-usefulness pre-check clears — otherwise the axis reverts to {off / on+frozen-ε}
-  so no dead option widens the N = 16 search. The space is kept modest for tractability;
-  if needed it is searched in a fixed staged order, but **every** data-dependent choice
+  scale-relative per-order ε rule of §"WST parameterization", A-M4-7/A-M6-1, `k = 0.1`)
+  is selected on inner folds exactly like every other axis — no separate gating step.
+  The space is kept modest for tractability (one axis carries 3 values, both bands); if
+  needed it is searched in a fixed staged order, but **every** data-dependent choice
   (the tuned ε included) is made on inner folds only.
 - Tie-break: lower session-level MAE, then simpler model (fewer effective
   parameters / smaller feature dim), then lower inner-fold variance.
@@ -690,6 +742,13 @@ day, i.e. signal not attributable to the clock.
 - **Exp B has its own inner-CV selection objective** — the **equal-session
   residual-MAE** (mean over S1–S4 of the per-session residual MAE on inner-validation
   subjects), matching the reported aggregate — not Exp A's fluid-loss MAE.
+- **Search space (A-M6-3, 2026-07-25 — clarifies an unstated ambiguity).** Exp B reuses
+  **the identical enumerated search space as Exp A** for its band (reduction × channel ×
+  tiling × log × gate × model family × grid) — it is not a separately-invented model —
+  selected per outer fold via the same staged inner-CV mechanism, but scored on Exp B's
+  own equal-session residual-MAE objective rather than Exp A's fluid-loss MAE. This
+  keeps B a genuine re-purposing of the same modeling machinery under a different
+  target/objective, rather than adding a second bespoke search space to maintain.
 - **Report** out-of-fold radar-vs-baseline performance **separately for S1–S4** and a
   **pre-specified aggregate** = equal-weight mean of the four per-session MAEs (see
   Statistics for how the aggregate CI and the paired test are each defined under
@@ -711,7 +770,23 @@ classifier is not.
   bins with **monotone cutpoints** — the *config* is chosen on inner folds, then the
   **cutpoints are refit on all outer-training subjects only** before the outer
   prediction; **(b)** a proportional-odds / cumulative-link ordinal regressor as a
-  comparison.
+  comparison. **A-M6-5 [APPLIED — owner-approved 2026-07-25]: family (b)'s concrete
+  implementation is a Frank-Hall ordinal decomposition** (K-1 = 4 independent binary
+  `sklearn.linear_model.LogisticRegression` classifiers, each predicting `P(class > k)`,
+  class probabilities recovered by successive differences of the cumulative
+  probabilities), **not** a literal single-model cumulative-link fit. Reason: the
+  natural candidate for a literal proportional-odds/cumulative-link implementation,
+  `statsmodels.miscmodels.ordinal_model.OrderedModel`, was verified at the M6 gate
+  (2026-07-25) to have **no `sample_weight`/`freq_weights` parameter anywhere in its
+  `__init__` or `.fit()` signature** — it inherits from `GenericLikelihoodModel`, a
+  generic MLE optimizer with no observation-weighting mechanism — so it cannot
+  implement the class-weighting requirement below at all. The Frank-Hall decomposition
+  is a genuinely different statistical model (separate per-threshold coefficients
+  rather than one shared slope with ordered cutpoints) but is the owner-approved
+  substitute: it uses `sklearn.linear_model.LogisticRegression` (already in the pinned
+  stack, no new dependency), whose `fit(..., sample_weight=...)` is standard, verified
+  sklearn API, so it satisfies the class-weighting requirement exactly. Family (a) is
+  unaffected by this amendment.
 - **Class weighting** is inverse-frequency computed **per fold on inner-training data
   after QC** (never global, never using the held-out subject).
 - **Fold-viability rules (predefined).** QC can leave a fold missing one of S0–S4,
@@ -776,6 +851,68 @@ at the config-freeze gate below, before any results are viewed):
   the outer-training subjects at that same session s (a 5-level lookup, S0–S4), **not**
   a fitted linear time trend. This is the pure clock/confound reference and matches Exp
   B's session-mean baseline.
+- **77 GHz Exp D (A-M6-2 [APPLIED — owner-approved 2026-07-25], 2026-07-25; corrected
+  2026-07-25 round 3 — the round-2 draft crossed axes and could not execute as written,
+  Codex C6-26).** This is new design content, not an ambiguity resolution of something
+  the main plan already stated — it was reviewed and approved on its physics/engineering
+  merits, including the coarse DC-vs-motion physics contrast below (owner: still worth
+  reporting despite its coarseness). 77 GHz has no complex raw
+  ADC (M2 finding: `framesRadar` is real float64), so "raw, unprocessed" cannot mean a
+  complex chirp-mean signal as at 10 GHz. Two axis-consistency rules constrain every
+  definition below: **(1)** a signal claimed to carry Doppler/motion content must retain
+  the **chirp (slow-time)** axis — averaging it away, as the round-2 draft's raw branch
+  did, leaves nothing for a Doppler FFT to act on; **(2)** per Exp G, **coherent complex
+  averaging across the 16 uncalibrated Rx is forbidden** (phase cancellation) — a
+  pre-WST "matched" input cannot claim Rx fusion, since feature-space fusion (Exp G step
+  8) only exists *after* WST (step 6), not before it.
+  - **(i) Raw 1D-CNN, 77 GHz.** Input = the QC-passed raw real ADC cube, reduced by a
+    plain mean over the **256 fast-time bins** and the **16 Rx** (no MTI, no bandpass,
+    no gate crop, no WST) → one **256-sample real, 1-channel** series indexed by
+    **chirp (slow-time)**, at `fs = PRF ≈ 1953.125 Hz`, per-signal standardized only.
+    This reduces the two axes that carry the least band-appropriate signal (a raw range
+    profile pre-gating; the uncalibrated Rx axis) while retaining the one axis (chirp)
+    the band's whole design rests on. Same architecture as the 10 GHz CNN (channels
+    16/32/64, kernel 7, pool 4) with `in_channels=1`.
+  - **(i-ablation) Matched-preprocessing 1D-CNN, 77 GHz.** Input = the Exp G primary
+    chain's steps 1–5 (per-Rx MTI→bandpass→Hann→range-FFT→gate-crop), at a **single
+    fixed representative Rx (index 0, a deterministic, non-tuned choice — not fused
+    across Rx, since that fusion is post-WST only)**, reduced by a plain mean over that
+    Rx's **27 gate range-bins** (averaging across range bins of the *same* Rx is
+    coherent and unaffected by the cross-Rx phase-cancellation concern) → one
+    **256-sample complex, 2-channel {real, imag}** slow-time series at that one Rx,
+    robust-standardized per channel. Isolates what the Exp G preprocessing chain
+    (not the WST, not Rx fusion) contributes, mirroring the 10 GHz ablation's role
+    without claiming a fusion step that doesn't exist pre-WST.
+  - **(ii) Spectrogram + 2D-CNN, 77 GHz.** Primary = STFT of the (i) raw reduced real
+    slow-time signal (same Hann 64 / hop 16 / nfft 128 as 10 GHz — generic STFT
+    parameters, not band-specific), 1-channel log-magnitude spectrogram. Ablation = STFT
+    of the (i-ablation) complex signal's real and imag parts **separately**, stacked as
+    a **2-channel** log-magnitude spectrogram. Same 2D-CNN architecture as 10 GHz (2 conv
+    blocks 3×3, channels 16/32, 2×2 pool), `in_channels` = 1 (primary) or 2 (ablation).
+  - **(iii) Physics baseline, 77 GHz — Doppler-domain energy ratio (corrected 2026-07-25
+    round 3, Codex C6-33: the original 2 Hz cut was not physically realizable — see
+    below).** The 77 GHz primary signal domain is Doppler (motion), not fast-time range,
+    so the physics baseline mirrors Exp G's Doppler framing rather than 10 GHz's range
+    framing: from the (i) raw reduced real signal (a **256-sample slow-time series at
+    `fs = PRF ≈ 1953.125 Hz`**, per the axis fix above), take a Hann-windowed 256-pt
+    Doppler FFT. **Frequency resolution is `df = PRF/256 ≈ 7.629 Hz`** — a 2 Hz cut (the
+    round-2 proposal) is *not representable*: every non-DC bin already sits at ≥7.629 Hz,
+    so `|f_D| < 2 Hz` and `|f_D| < 7 Hz` select the exact same single bin, and no
+    physiological rate (breathing ≈0.2–0.5 Hz, heart rate ≈1–1.5 Hz) is individually
+    resolvable at this resolution or in this ≈131 ms aperture (256 chirps) — that framing
+    is dropped, not just re-tuned. **Honest redefinition:** split the **non-negative
+    half-spectrum** (bins 0..127) into the **DC bin alone (bin 0, zero-Doppler — a fully
+    static return)** and **bins 1..127 (any resolvable nonzero Doppler shift, at ≥7.629 Hz
+    resolution)** — a coarse static-vs-any-motion split, **not** a rate-specific
+    physiological measure. Scalar feature = `log10((P_dc + ε)/(P_motion + ε))`,
+    `ε = 1e-12·(P_dc + P_motion)`, same finite-output guarantee as 10 GHz. Both bands are
+    nonempty (1 bin, 127 bins) and disjoint by construction (a partition of bins 0..127).
+    **Owner-confirmed (2026-07-25):** despite being a coarser contrast than the 10 GHz
+    physics baseline (which rests on the M3 measurement) — it cannot distinguish
+    breathing from gross movement from any other motion — this DC-vs-any-motion split is
+    still worth reporting as the 77 GHz physics baseline.
+  - **(iv) Session-index-only** is band-agnostic (predicts from the session label alone,
+    touching no radar data) and is **shared verbatim** between bands — not duplicated.
 - **Budget parity**: each learned-baseline family and the WST classical models are
   given the **same inner-CV configuration budget** (≤ K configs each, K fixed in
   config) and the same seed set, so "WST wins" is not an artifact of unequal search.
@@ -872,6 +1009,13 @@ nothing beyond the clock (± covariates), that is reported honestly.
 - **Same radar representation in 3 and 4.** Within each outer fold, models 3 and 4 use
   the **identical selected radar feature set**, so the covariate contrast (4 vs 3) is
   not confounded by a different radar representation.
+- **How "the identical selected radar feature set" is obtained (A-M6-4, 2026-07-25 —
+  clarifies an unstated ambiguity).** Within each outer fold, run Exp A's own
+  reduction/channel/tiling/log/gate selection (train-only, on that fold's training
+  subjects) exactly as Exp A does it, and use **that fold's Exp A-selected feature
+  configuration** — but refit with **ridge** (Exp F's fixed learner) rather than Exp
+  A's own selected model family, since Exp F requires one learner across all four
+  models. This is a feature-representation reuse only, never a model-family reuse.
 - **Contrast status & correction.** **Pre-specified primary family (Holm over 2):**
   radar beyond clock (3 vs 1) and radar beyond clock+covariates (4 vs 2) — the questions
   the study is built to answer. **Exploratory:** the covariate contrasts (2 vs 1,

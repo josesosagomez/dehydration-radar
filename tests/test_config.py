@@ -15,10 +15,22 @@ import yaml
 
 from dehyd.config import (
     REPO_ROOT,
+    BaselineConfig,
     Config,
     ConfigError,
+    ExpBConfig,
+    ExpCConfig,
+    ExpEConfig,
+    ExpFConfig,
+    ExpGConfig,
+    M6_SECTIONS,
+    ModelGridConfig,
     Preprocess77Config,
+    ProtocolFreezeConfig,
     QC77Config,
+    SearchSpace10GHzConfig,
+    SearchSpace77GHzConfig,
+    StatsConfig,
     WST77Config,
     config_to_dict,
     load_config,
@@ -629,6 +641,237 @@ def test_config_to_dict_is_json_serializable(overlay):
     json.dumps(payload)  # must not raise
     assert payload["preprocess"]["butter_order"] == 4
     assert isinstance(payload["paths"]["data_10ghz_dir"], str)
+
+
+# ---------------------------------------------------------------- milestone 6 (freeze)
+# The M6 sections are FROZEN RECORDS: a run YAML may restate a default but not change it,
+# and modelling entrypoints re-validate via protocol_freeze_guard. These tests pin the
+# frozen values (the tripwire that a stale value was left behind if a future amendment
+# changes one), prove restating is allowed and changing is rejected, and prove the two
+# band search spaces cannot express each other's candidates (C6-03).
+
+
+def test_m6_sections_default_on_a_10ghz_config(overlay):
+    """Every M6 section appears at its frozen default even on a plain 10 GHz config."""
+    cfg = load_config(EXP_A, overlay)
+    for name, cls in M6_SECTIONS.items():
+        assert getattr(cfg, name) == cls(), name
+
+
+def test_m6_search_10ghz_frozen_defaults_pinned():
+    """Literal-pinning tripwire for the 10 GHz search space + model grid (T-C6-search)."""
+    s = SearchSpace10GHzConfig()
+    assert s.reduction == ("A", "B")
+    assert s.channel == ("mag", "iq")
+    assert s.tiling == ("T1", "T2", "T3")
+    assert s.log_branches == ("off", "on_frozen_eps", "on_tuned_eps")
+    assert s.range_gate_m == ((1.0, 2.0), (0.9, 3.0))
+    assert s.model_families == ("ridge", "svr", "rf", "gbm", "knn")
+    assert s.budget_k == 12
+    assert (s.stage1_anchor_model, s.stage1_anchor_ridge_alpha, s.tuned_eps_k) == (
+        "ridge", 1.0, 0.1)
+
+
+def test_m6_search_77ghz_fixes_reduction_channel_gate_as_scalars():
+    """77 GHz reduction/channel/gate are FIXED scalars, not candidate sets (C6-03)."""
+    s = SearchSpace77GHzConfig()
+    assert s.reduction == "slow_time_iq_primary" and isinstance(s.reduction, str)
+    assert s.channel == "iq" and isinstance(s.channel, str)
+    assert s.gate_m == (2.0, 4.0)
+    assert s.tiling == ("T1_77", "T2_77", "T3_77")
+    assert s.log_branches == ("off", "on_frozen_eps", "on_tuned_eps")
+
+
+def test_m6_cross_band_candidates_are_structurally_inexpressible():
+    """A 10 GHz-only candidate cannot be named on the 77 GHz space and vice versa (C6-03).
+
+    This is a dataclass-shape guarantee, not a runtime check: the 77 GHz space has no
+    `reduction`/`channel` TUPLE to hold {A, B}/{mag} and no `range_gate_m` axis at all, so
+    the leak the shared-schema draft risked cannot be expressed.
+    """
+    s10, s77 = SearchSpace10GHzConfig(), SearchSpace77GHzConfig()
+    assert isinstance(s10.reduction, tuple) and isinstance(s77.reduction, str)
+    assert isinstance(s10.channel, tuple) and isinstance(s77.channel, str)
+    assert hasattr(s10, "range_gate_m") and not hasattr(s77, "range_gate_m")
+    # 77 GHz has a single fixed gate_m instead of a candidate set.
+    assert hasattr(s77, "gate_m") and not hasattr(s10, "gate_m")
+
+
+def test_m6_frozen_record_rejects_a_changed_value(tmp_path, overlay):
+    bad = write_yaml(tmp_path / "b.yaml", {"search_10ghz": {"budget_k": 8}})
+    with pytest.raises(ConfigError, match="frozen protocol constant"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_m6_frozen_record_allows_restating_a_default(tmp_path, overlay):
+    restate = write_yaml(
+        tmp_path / "r.yaml",
+        {"search_10ghz": {"budget_k": 12, "tuned_eps_k": 0.1}, "stats": {"bootstrap_b": 10000}},
+    )
+    cfg = load_config(EXP_A, overlay, restate)
+    assert cfg.search_10ghz.budget_k == 12 and cfg.stats.bootstrap_b == 10000
+
+
+def test_m6_frozen_record_rejects_unknown_key(tmp_path, overlay):
+    bad = write_yaml(tmp_path / "u.yaml", {"exp_c": {"bogus": 1}})
+    with pytest.raises(ConfigError, match="unknown key"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_m6_frozen_record_rejects_bool_as_int(tmp_path, overlay):
+    """YAML has true/false, so `1` for a frozen bool is a typo, not a restatement."""
+    bad = write_yaml(tmp_path / "bl.yaml", {"exp_b": {"reuse_exp_a_search_space": 1}})
+    with pytest.raises(ConfigError, match="frozen protocol constant"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_m6_frozen_record_rejects_changed_tuple(tmp_path, overlay):
+    bad = write_yaml(tmp_path / "t.yaml", {"search_10ghz": {"tiling": ["T1", "T2"]}})
+    with pytest.raises(ConfigError, match="frozen protocol constant"):
+        load_config(EXP_A, overlay, bad)
+
+
+def test_m6_baseline_both_band_defaults_pinned():
+    """Literal-pin every prediction-affecting BaselineConfig constant, both bands (T-C6-baseline)."""
+    b = BaselineConfig()
+    # Shared architecture / optimizer.
+    assert b.cnn_channels == (16, 32, 64) and b.cnn_kernel == 7 and b.cnn_pool == 4
+    assert b.cnn2d_channels == (16, 32) and b.cnn2d_kernel == 3 and b.cnn2d_pool == 2
+    assert (b.optimizer, b.lr, b.loss) == ("adam", 1e-3, "mse")
+    assert b.adam_betas == (0.9, 0.999)
+    assert (b.batch_size, b.max_epochs) == (16, 200)
+    assert (b.early_stopping_patience, b.early_stopping_min_delta) == (15, 1e-4)
+    assert b.frame_to_session_aggregation == "median"
+    assert b.raw_matched_standardize == "robust_per_channel"
+    assert b.spectrogram_standardize == "train_only_per_frequency_mean_std"
+    assert (b.spectrogram_hann, b.spectrogram_hop, b.spectrogram_nfft) == (64, 16, 128)
+    # 10 GHz physics.
+    assert b.physics_target_range_m_10ghz == (0.9, 1.5)
+    assert b.physics_background_range_m_10ghz == (1.5, 3.0)
+    # 77 GHz raw/matched/spectrogram (A-M6-2): raw keeps the chirp axis, matched is one Rx.
+    assert b.raw_reduction_77ghz == "mean_over_fast_time_and_rx" and b.raw_channels_77ghz == 1
+    assert b.matched_input_77ghz == "chain_steps_1_5_single_rx_range_bin_mean"
+    assert b.matched_reference_rx_index_77ghz == 0 and b.matched_channels_77ghz == 2
+    assert b.spectrogram_primary_channels_77ghz == 1
+    assert b.spectrogram_ablation_channels_77ghz == 2
+    # 77 GHz physics: DC bin vs any resolvable motion (a 2 Hz cutoff is unrepresentable).
+    assert b.physics_static_band_bins_77ghz == (0, 0)
+    assert b.physics_motion_band_bins_77ghz == (1, 127)
+    assert b.physics_prf_hz_77ghz == 1953.125
+
+
+def test_m6_exp_c_records_frank_hall_not_ordered_model():
+    """A-M6-5: family (b) is Frank-Hall, chosen after OrderedModel lacked sample_weight."""
+    c = ExpCConfig()
+    assert c.proportional_odds_impl == "frank_hall_ordinal_decomposition_sklearn_logisticregression"
+    assert c.cutpoint_source == "family_a_regressor_in_sample_predictions_inner_train"
+    assert c.cutpoint_quantiles == (0.2, 0.4, 0.6, 0.8)
+    assert c.class_weight_formula == "inverse_frequency_inner_train"
+    assert c.class_weight_unsupported_families == ("knn",)
+    assert c.proportional_odds_c_grid == (0.1, 1.0, 10.0)
+    assert (c.selection_metric_primary, c.selection_metric_secondary) == ("class_unit_mae", "qwk")
+
+
+def test_m6_sklearn_logistic_regression_supports_sample_weight():
+    """The capability that justifies the Frank-Hall choice (A-M6-5): sklearn's
+    LogisticRegression really does accept per-sample weights, unlike statsmodels'
+    OrderedModel. A cheap smoke fit documents the verified premise as an assertion."""
+    import inspect
+
+    import numpy as np
+    from sklearn.linear_model import LogisticRegression
+
+    assert "sample_weight" in inspect.signature(LogisticRegression.fit).parameters
+    X = np.array([[0.0], [1.0], [2.0], [3.0]])
+    y = np.array([0, 0, 1, 1])
+    w = np.array([1.0, 3.0, 3.0, 1.0])  # the inverse-frequency-style weights Exp C needs
+    LogisticRegression().fit(X, y, sample_weight=w)  # must not raise
+
+
+def test_m6_exp_e_interpretability_config_is_concrete():
+    e = ExpEConfig()
+    assert (e.reduction_10ghz, e.channel_10ghz, e.tiling_10ghz, e.log_10ghz) == (
+        "A", "mag", "T1", "off")
+    assert e.gate_10ghz_m == (1.0, 2.0)
+    assert (e.tiling_77ghz, e.log_77ghz) == ("T1_77", "off")
+    assert (e.model, e.ridge_alpha, e.n_folds) == ("ridge", 1.0, 4)
+    assert e.fold_assignment == "sorted_subject_id_array_split"
+
+
+def test_m6_exp_b_f_g_defaults_pinned():
+    assert ExpBConfig() == ExpBConfig(
+        reuse_exp_a_search_space=True,
+        objective="equal_session_residual_mae",
+        session_specific_variant_enabled=True,
+    )
+    f = ExpFConfig()
+    assert f.radar_representation_rule == "exp_a_selected_feature_config_per_fold"
+    assert f.covariates_primary == ("age", "height", "baseline_mass", "bmi")
+    assert f.covariates_sensitivity == ("age", "height")
+    assert f.target_sensitivity == "signed_kg_change"
+    g = ExpGConfig()
+    assert g.alpha_grid == tuple(round(0.05 * i, 2) for i in range(21))
+    assert g.alpha_grid[0] == 0.0 and g.alpha_grid[-1] == 1.0 and len(g.alpha_grid) == 21
+    assert g.alpha_tie_break == "closest_to_one" and g.seed_pairing is True
+
+
+def test_m6_stats_covers_the_full_protocol():
+    """StatsConfig transcribes §Statistics; pin the fields code will consume (C6-20)."""
+    s = StatsConfig()
+    assert (s.confidence_level, s.bootstrap_b, s.ci_method, s.ci_fallback) == (
+        0.95, 10000, "bca", "percentile")
+    assert s.resample_unit == "subject"
+    assert s.undefined_metric_skip_threshold_pct == 5.0
+    assert s.per_subject_pearson_r_min_sessions == 3
+    assert (s.holm_family_expb_per_session, s.holm_family_expf_primary) == (4, 2)
+    # Exp F's exploratory covariate contrasts get NO invented Holm family (C6-38).
+    assert s.expf_exploratory_correction == "none_reported_individually"
+    assert (s.robustness_replicates_r, s.robustness_min_distinct_subjects) == (200, 4)
+    assert s.robustness_min_successful_replicates == 100 and s.robustness_ordinal_min_classes == 5
+
+
+def test_m6_protocol_freeze_constants_pinned():
+    p = ProtocolFreezeConfig()
+    assert (p.option_b_peak_neighbors, p.option_b_mask_taper) == (1, True)
+    assert p.fft_gate_transition_hz == 500.0
+    assert p.qc77_min_in_band_energy_ratio == 0.30  # Step 0 kept it frozen
+
+
+def test_m6_model_grids_fit_under_budget_k():
+    """Every family's model-hyperparameter combination count is <= budget_k (T-C6-budget)."""
+    g = ModelGridConfig()
+    k = SearchSpace10GHzConfig().budget_k
+    counts = {
+        "ridge": len(g.ridge_alphas),
+        "svr": len(g.svr_c) * len(g.svr_epsilon),
+        "rf": len(g.rf_n_estimators) * len(g.rf_max_depth),
+        "gbm": len(g.gbm_n_estimators) * len(g.gbm_learning_rate) * len(g.gbm_max_depth),
+        "knn": len(g.knn_n_neighbors),
+        "baseline": len(g.baseline_learning_rate) * len(g.baseline_weight_decay),
+    }
+    assert all(c <= k for c in counts.values()), counts
+    assert SearchSpace77GHzConfig().budget_k == k  # both bands share the cap
+
+
+def test_m6_sections_round_trip_through_config_to_dict(overlay):
+    """Every M6 section survives config_to_dict as JSON-serializable data (C6-20)."""
+    import json
+
+    payload = config_to_dict(load_config(EXP_A, overlay))
+    json.dumps(payload)  # must not raise
+    for name, cls in M6_SECTIONS.items():
+        assert payload[name] == config_to_dict(cls()), name
+
+
+def test_m6_committed_config_files_all_load(overlay):
+    """Each committed M6 config file composes cleanly onto the base config."""
+    configs = REPO_ROOT / "configs"
+    for name in (
+        "search_10ghz", "search_77ghz", "baselines", "stats",
+        "exp_b", "exp_c", "exp_e", "exp_f", "exp_g_fusion", "protocol_freeze",
+    ):
+        cfg = load_config(EXP_A, configs / f"{name}.yaml", overlay)
+        assert isinstance(cfg, Config)
 
 
 # -------------------------------------------------------------------------- realdata
