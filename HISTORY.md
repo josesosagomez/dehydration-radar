@@ -4,6 +4,28 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-26 — M7 real-data run venue: the mechanism-only smoke is memory-bound locally → moved to IBEX (added `extract10.sbatch` + `run_exp_a.sbatch` + generic `submit_ibex.sh`).
+
+Committed the M7 code (da7bdce, + gitignore 4f003aa, + tuned-ε caching b6a72c8) and built the
+10 GHz store for the 6 smoke subjects **locally** — the BUILD works fine (~30 s/session). The
+mechanism-only **smoke run**, however, repeatedly reached the staged search and was then killed
+**silently — no Python traceback, no run_log** (finding: an OS-level kill, not a logic error;
+the full test suite incl. the D5 real-store-backed mutation property and T18 all pass, so the
+code is correct). Cause: the 72-combo staged search holds ~24 memory-mapped ~72 MB npz files and
+materialises large logged tensors during the fold-local tuned-ε reconstruction — memory pressure
+on a shared local Windows box (compounded earlier by several stuck python processes from repeated
+attempts, now cleared). Added a tuned-ε/raw reconstruction cache (b6a72c8) that removes redundant
+recompute (D5 still green) but the peak footprint remains too large for the local box.
+
+**Resolution (consistent with the plan, which already routes the 77 GHz store to IBEX):** run the
+heavy real-data work on IBEX. `scripts/ibex/extract10.sbatch` builds the 10 GHz store as an 80-task
+job array (parallel, off the local disk); `scripts/ibex/run_exp_a.sbatch` runs the staged search as
+a single CPU job (32 G / 8 cores, no OOM, no local contention) — `MODE=smoke` for the mechanism
+check, `MODE=full` for the owner-gated full-cohort run; `scripts/ibex/submit_ibex.sh` captures the
+clean commit and refuses a dirty tree. **This is a compute-venue decision, not a code fix.** The
+milestone code is complete, committed, and fully green; the real-data smoke + full run are the
+owner-gated steps, now targeted at IBEX.
+
 ## 2026-07-26 — MILESTONE 7 IMPLEMENTED to the owner checkpoint: the LOSO harness + Exp A. Full suite 682 passed / 16 skipped; T18 GREEN; frozen `test_no_leakage.py` changed only in the pre-registered T18 hunk. Real-data store build + smoke await the owner's clean commit (step 10.5).
 
 M7's code is complete and every test is green. Built test-first on `v1_milestone_7` (from the
