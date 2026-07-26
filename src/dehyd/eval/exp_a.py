@@ -128,6 +128,10 @@ class StoreBackedFeatures:
             for s in sessions
         ]
         self._vec_cache: dict = {}
+        self._prelog_cache: dict = {}
+        self._tuned_cache: dict = {}
+        self._raw_cache_fk = None       # single-entry raw cache (see _raw_frames)
+        self._raw_cache = None
         self._eps_k = (config.search_10ghz if band == "10ghz" else config.search_77ghz).tuned_eps_k
 
     # ---- key helpers per band ----
@@ -165,18 +169,29 @@ class StoreBackedFeatures:
         return self._vec_cache[key]
 
     def _prelog_by_subject(self, fk):
-        out: dict = {}
         pk = self._prelog_key(fk)
-        for s, st in zip(self._sessions, self._stores):
-            out.setdefault(s["subject"], []).append(tuple(st[pk].tolist()))
-        return out
+        if pk not in self._prelog_cache:
+            out: dict = {}
+            for s, st in zip(self._sessions, self._stores):
+                out.setdefault(s["subject"], []).append(tuple(st[pk].tolist()))
+            self._prelog_cache[pk] = out
+        return self._prelog_cache[pk]
+
+    def _raw_frames(self, fk):
+        """Load the raw pre-log tensors + meta order for one feature_key, cached single-entry.
+        Candidate-major execution keeps one feature_key active at a time, so this eliminates
+        the repeated (large) npz reads across a candidate's inner folds while capping memory to
+        one feature_key's worth of raw tensors."""
+        if self._raw_cache_fk != fk:
+            rk, ok = self._raw_key(fk), self._order_key(fk)
+            self._raw_cache = [(st[rk], np.asarray(st[ok])) for st in self._stores]
+            self._raw_cache_fk = fk
+        return self._raw_cache
 
     def _tuned_matrix(self, fk, eps):
-        rk, ok = self._raw_key(fk), self._order_key(fk)
         rows = []
-        for st in self._stores:
-            S = st[rk]  # [N, C, P, t] pre-log
-            meta = {"order": st[ok]}
+        for S, order in self._raw_frames(fk):
+            meta = {"order": order}
             if self.band == "10ghz":
                 logged = apply_order_log(S, meta, self.config.wst, log_on=True, epsilon_by_order=eps)
             else:
@@ -194,10 +209,16 @@ class StoreBackedFeatures:
         if branch in ("off", "frozen"):
             X = self._vec_matrix(fk, branch)
             return FeatureBundle(self.subjects, X, self.y, extra_fits=())
-        # tuned: train-only ε from stored pre-log scales, then reconstruct from raw
-        eps = tuned_epsilons(self._prelog_by_subject(fk), train_subjects, k=self._eps_k,
-                             fallback=self._log_eps_cfg())
-        X = self._tuned_matrix(fk, eps)
+        # tuned: train-only ε from stored pre-log scales, then reconstruct from raw. The
+        # (feature_key, train set) fully determine ε and the reconstructed matrix, so cache
+        # by that key — Stage 2 shares one feature_key across all families/grids/seeds, and
+        # would otherwise recompute the identical reconstruction dozens of times per fold.
+        cache_key = (fk, frozenset(train_subjects))
+        if cache_key not in self._tuned_cache:
+            eps = tuned_epsilons(self._prelog_by_subject(fk), train_subjects, k=self._eps_k,
+                                 fallback=self._log_eps_cfg())
+            self._tuned_cache[cache_key] = (self._tuned_matrix(fk, eps), eps)
+        X, eps = self._tuned_cache[cache_key]
         extra = (("tuned_epsilon", {"epsilon": np.array([eps[1], eps[2]], dtype=float)}),)
         return FeatureBundle(self.subjects, X, self.y, extra_fits=extra)
 
