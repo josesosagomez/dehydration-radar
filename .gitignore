@@ -5,6 +5,11 @@
 /data*/
 logs*/
 
+# A copied-tree revision stamp (git rev-parse HEAD > REVISION), read by provenance when
+# there is no .git — e.g. IBEX, where the private repo is copied, not cloned. Never
+# committed, so it can't dirty a real checkout.
+/REVISION
+
 .venv/
 __pycache__/
 .pytest_cache/

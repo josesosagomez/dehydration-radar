@@ -10,9 +10,11 @@
 # Milestone 7 — build the 10 GHz WST FEATURE STORE as a JOB ARRAY over the 80 (subject,
 # session) cells. The store build works fine locally (~30 s/session), but running it as an
 # array on IBEX parallelises the whole cohort and keeps the ~5 GB off the local disk. Each
-# task builds one session's shard (.npz + .fingerprint.json). Submit via
-# scripts/ibex/submit_extract10.sh so DEHYD_GIT_COMMIT/_BRANCH/_DIRTY are captured on the
-# login node. Validate locally:
+# task builds one session's shard (.npz + .fingerprint.json).
+#   git checkout on IBEX : scripts/ibex/submit_ibex.sh scripts/ibex/extract10.sbatch
+#   COPIED tree (no git) : stamp `git rev-parse HEAD > REVISION` before copying, then
+#                          `sbatch scripts/ibex/extract10.sbatch` directly (provenance reads REVISION).
+# Validate:
 #   uv run python experiments/extract_features.py --config configs/exp_a_regression.yaml --band 10ghz --validate
 
 set -euo pipefail

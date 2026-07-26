@@ -73,13 +73,30 @@ def _env_dirty():
     return None
 
 
-def _git_info() -> dict:
-    """Git revision for provenance, with an env-var fallback for cluster compute nodes.
+def _revision_file_commit():
+    """A commit hash from a `REVISION` file at the repo root, or None.
 
-    On IBEX compute nodes the in-process `git` call returns None (M5's `safe.directory`
-    fix did not take there — git ignores that config outside a protected scope). So each
-    field falls back to DEHYD_GIT_COMMIT / DEHYD_GIT_BRANCH / DEHYD_GIT_DIRTY, which the
-    sbatch submit wrapper captures on the LOGIN node at submit time. A run therefore
+    For environments that are a COPY of the tree rather than a git checkout — e.g. IBEX,
+    where a private repo can't be pulled so the folders are copied over. Create it on the
+    machine that DOES have git before copying:  `git rev-parse HEAD > REVISION`. Its first
+    line is the commit hash. Ignored by git (so it never dirties a real checkout), and only
+    consulted when both live git and the DEHYD_GIT_* env vars gave nothing.
+    """
+    path = Path(__file__).resolve().parents[2] / "REVISION"
+    if path.is_file():
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text.splitlines()[0].strip()
+    return None
+
+
+def _git_info() -> dict:
+    """Git revision for provenance, with fallbacks for environments git can't answer.
+
+    Precedence per field: live `git` -> DEHYD_GIT_* env vars -> (commit only) a `REVISION`
+    file at the repo root. On IBEX compute nodes the in-process `git` call returns None
+    (safe.directory does not take there); and when the tree was COPIED rather than cloned
+    (no .git at all), the env vars or the REVISION file supply the commit. A run therefore
     self-attests its revision even where git itself cannot answer.
     """
     def run(args):
@@ -99,10 +116,10 @@ def _git_info() -> dict:
     status = run(["git", "status", "--porcelain"])
     branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
 
-    # Per-field fallback: use the env var only where the live git call gave nothing, so a
-    # working local checkout always reports its own true state and never the stale env.
+    # Per-field fallback: use a fallback only where the live git call gave nothing, so a
+    # working local checkout always reports its own true state and never a stale value.
     if commit is None:
-        commit = os.environ.get("DEHYD_GIT_COMMIT") or None
+        commit = os.environ.get("DEHYD_GIT_COMMIT") or _revision_file_commit() or None
     if branch is None:
         branch = os.environ.get("DEHYD_GIT_BRANCH") or None
     dirty = None if status is None else bool(status)

@@ -9,9 +9,11 @@
 
 # Milestone 7 — build the 77 GHz WST FEATURE STORE as a JOB ARRAY over the 80 (subject,
 # session) cells. Each task loads its ONE file and (if eligible) writes one per-session
-# store shard (.npz + .fingerprint.json). Submit via scripts/ibex/submit_extract77.sh so
-# DEHYD_GIT_COMMIT/_BRANCH/_DIRTY are captured on the LOGIN node (compute nodes can't answer
-# git). Merge is implicit: each shard is a standalone session file. Validate locally:
+# store shard (.npz + .fingerprint.json). Merge is implicit: each shard is standalone.
+#   git checkout on IBEX : scripts/ibex/submit_ibex.sh scripts/ibex/extract77.sbatch
+#   COPIED tree (no git) : stamp `git rev-parse HEAD > REVISION` before copying, then
+#                          `sbatch scripts/ibex/extract77.sbatch` directly (provenance reads REVISION).
+# Validate:
 #   uv run python experiments/extract_features.py --config configs/exp_a_regression_77ghz.yaml --band 77ghz --validate
 
 set -euo pipefail

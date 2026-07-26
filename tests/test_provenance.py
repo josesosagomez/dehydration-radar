@@ -354,6 +354,37 @@ def test_live_git_is_not_overridden_by_env(setup, monkeypatch):
     assert payload["git"]["commit"] != "0" * 40
 
 
+def test_revision_file_fallback_when_git_and_env_absent(setup, no_live_git, monkeypatch):
+    """A COPIED tree (no .git, no env) attests its commit from a REVISION file."""
+    import dehyd.provenance as prov
+
+    monkeypatch.setattr(prov, "_revision_file_commit", lambda: "cafef00d" * 5)
+    config, manifest, folds = setup
+    out = record_run(config, manifest, folds)
+    payload = load(out)
+    assert payload["git"]["commit"] == "cafef00d" * 5
+    assert out.parent.name.endswith("cafef00d")  # run dir short-rev comes from REVISION
+
+
+def test_revision_file_reader_reads_first_line():
+    """The real _revision_file_commit reads the first line of REVISION at the repo root.
+    REVISION is gitignored, so this temporary file can never dirty the tree; it is removed
+    after (and any pre-existing one restored)."""
+    import dehyd.provenance as prov
+
+    root = Path(prov.__file__).resolve().parents[2]
+    rev = root / "REVISION"
+    backup = rev.read_text(encoding="utf-8") if rev.exists() else None
+    try:
+        rev.write_text("deadbeefdeadbeef\nignored second line\n", encoding="utf-8")
+        assert prov._revision_file_commit() == "deadbeefdeadbeef"
+    finally:
+        if backup is not None:
+            rev.write_text(backup, encoding="utf-8")
+        elif rev.exists():
+            rev.unlink()
+
+
 def test_env_dirty_parsing(monkeypatch):
     from dehyd.provenance import _env_dirty
 
