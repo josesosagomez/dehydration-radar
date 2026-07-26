@@ -4,6 +4,29 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-26 — M7 OWNER CHECKPOINT REACHED: both mechanism-only smokes GREEN on IBEX, freeze intact.
+
+The 10 GHz and 77 GHz Exp A mechanism-only smokes ran to completion on IBEX compute nodes
+(the workload that OOM-killed locally — peak RSS ~3.6 GB against 32 G reserved, so ample
+headroom). Both wrote the expected `run_log_{band}.json` and **nothing else** — no
+metrics/predictions/scatter — confirming the full staged search executed end to end on real
+data with **no outer-fold performance value surfaced**:
+- 10 GHz: `n_folds=6, n_sessions=24, mode=mechanism-only`.
+- 77 GHz: `n_folds=6, n_sessions=29, mode=mechanism-only`.
+
+The owner-gated real-data path was reached only after several IBEX-specific fixes surfaced and
+were resolved: the `REVISION`-file provenance fallback for copied (non-git) trees (5677de9);
+the missing `configs/exp_a_regression_77ghz.yaml` entrypoint (e8145cb); and shard-mode
+`extract_features` QCing only its own file instead of the whole cohort per array task
+(3823611). The store builds ran as IBEX job arrays; the runs as single 32 G CPU jobs.
+
+**Checkpoint status:** M7 code complete + committed; full suite 682 passed / 16 skipped; T18
+green; frozen `test_no_leakage.py` = single T18 hunk; both stores build + validate on real
+data; both mechanism-only smokes complete. **No outer-fold result inspected — the config
+freeze is intact.** The only remaining step is the owner-gated full-cohort run
+(`run_exp_a.sbatch MODE=full`, both bands) which produces the first real numbers and spends
+the freeze; it awaits explicit go-ahead.
+
 ## 2026-07-26 — M7 real-data run venue: the mechanism-only smoke is memory-bound locally → moved to IBEX (added `extract10.sbatch` + `run_exp_a.sbatch` + generic `submit_ibex.sh`).
 
 Committed the M7 code (da7bdce, + gitignore 4f003aa, + tuned-ε caching b6a72c8) and built the
