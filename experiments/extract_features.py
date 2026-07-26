@@ -36,14 +36,25 @@ from dehyd.features import store as S  # noqa: E402
 from dehyd.provenance import _git_info  # noqa: E402
 
 
-def eligible_sessions(config, band: str) -> list[dict]:
-    """One record per eligible session: subject, session_idx, session_name, rel_path, frame_ids."""
+def eligible_sessions(config, band: str, *, subject=None, session=None) -> list[dict]:
+    """One record per eligible session: subject, session_idx, session_name, rel_path, frame_ids.
+
+    In SHARD mode (`subject`/`session` given — one IBEX array task) the manifest is filtered to
+    that cell BEFORE QC, so a task loads and QC-screens ONLY its own file instead of re-running
+    the full-cohort QC over all 80 files. Eligibility of a session depends solely on that
+    session's own frames, so this is correct as well as ~80x cheaper across the array."""
     gt = load_ground_truth(config.paths.weight_xlsx)
     if band == "10ghz":
-        manifest_qc = apply_qc(build_manifest(config.paths, gt), config.paths, config)
+        manifest = build_manifest(config.paths, gt)
     else:
         require_77ghz_dir(config)
-        manifest_qc = apply_qc_77(build_manifest_77(config.paths, gt), config.paths, config)
+        manifest = build_manifest_77(config.paths, gt)
+    if subject is not None:
+        manifest = manifest[manifest["subject"] == subject]
+    if session is not None:
+        manifest = manifest[manifest["session_name"] == session]
+    apply = apply_qc if band == "10ghz" else apply_qc_77
+    manifest_qc = apply(manifest, config.paths, config)
     pop = eligible_frames(manifest_qc)
     records = []
     for (subject, session_idx), group in pop.groupby(["subject", "session_idx"]):
@@ -103,13 +114,9 @@ def main(argv=None) -> int:
 
     config = load_config(*args.config)
     store_dir = config.paths.results_dir
-    sessions = eligible_sessions(config, args.band)
-    if args.subject is not None or args.session is not None:
-        sessions = [
-            s for s in sessions
-            if (args.subject is None or s["subject"] == args.subject)
-            and (args.session is None or s["session_name"] == args.session)
-        ]
+    # Pass the shard filter INTO eligibility so a task QC-loads only its own file(s), not the
+    # whole cohort (a --validate over all sessions still QCs the full cohort once, correctly).
+    sessions = eligible_sessions(config, args.band, subject=args.subject, session=args.session)
 
     if args.validate:
         expected = {(s["subject"], s["session_name"]): _expected_fingerprint(config, args.band, s) for s in sessions}
