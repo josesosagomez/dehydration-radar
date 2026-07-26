@@ -1,0 +1,28 @@
+# Experiment A — fluid-loss (Δm%) regression, session-level nested LOSO, 77 GHz band.
+#
+# The 77 GHz twin of exp_a_regression.yaml: the M5 77 GHz front-end composition
+# (data + data77 + preprocess77 + wst77) plus the milestone-6 frozen 77 GHz search space
+# (search_77ghz.yaml), which the staged search and protocol_freeze_guard consume. Include
+# paths resolve against THIS file's directory; path values inside resolve against the repo
+# root. A per-machine overlay (configs/ibex.yaml) is passed as a later --config.
+include:
+  - data.yaml          # 10 GHz dir + weight_xlsx + results_dir (shared, all required)
+  - data77.yaml        # the 77 GHz data root (required by the 77 GHz entrypoints)
+  - preprocess77.yaml  # qc77 + preprocess77 blocks
+  - wst77.yaml         # wst77 block
+  - search_77ghz.yaml  # the frozen Exp A/WST 77 GHz search space + model grids (milestone 6)
+
+run:
+  seed: 20260721
+  # Five distinct seeds for stochastic models; the inner metric is their mean and each
+  # seed is scored separately at the outer level (never ensembled into one prediction).
+  seed_set: [1, 2, 3, 4, 5]
+  device: cpu
+
+split:
+  n_inner_max: 5        # GroupKFold(min(5, n_train)) over outer-training subjects
+  min_train_subjects: 3 # below this an outer fold is non-selectable, not degenerate
+
+# The 77 GHz search space was frozen at the milestone-6 config-freeze gate (search_77ghz.yaml,
+# included above; src/dehyd/config.py SearchSpace77GHzConfig — reduction/channel/gate are FIXED,
+# only tiling and the log branch are inner-CV axes). Frozen before any outer result was inspected.

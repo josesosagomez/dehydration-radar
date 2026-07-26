@@ -39,7 +39,23 @@ from dehyd.config import (
 
 CONFIGS = REPO_ROOT / "configs"
 EXP_A = CONFIGS / "exp_a_regression.yaml"
+EXP_A_77 = CONFIGS / "exp_a_regression_77ghz.yaml"
 EXP_77 = CONFIGS / "exp_77ghz.yaml"
+
+
+def test_exp_a_entrypoint_configs_exist_and_expose_their_search_space():
+    """Both Exp A entrypoint configs (referenced by run_regression / the sbatch scripts) must
+    exist and wire in their band's frozen search space — catches a missing/renamed config
+    before it fails deep in an IBEX run."""
+    from dehyd.config import load_config
+
+    c10 = load_config(EXP_A)
+    assert c10.search_10ghz.tiling == ("T1", "T2", "T3")
+
+    assert EXP_A_77.is_file(), f"missing 77 GHz Exp A entrypoint config: {EXP_A_77}"
+    c77 = load_config(EXP_A_77)
+    assert c77.search_77ghz.tiling == ("T1_77", "T2_77", "T3_77")
+    assert c77.paths.data_77ghz_dir is not None  # data77.yaml is composed in
 
 
 @pytest.fixture
