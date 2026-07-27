@@ -13,10 +13,14 @@ import pytest
 
 from dehyd.eval.metrics import (
     BootstrapCI,
+    equal_session_residual_mae,
+    holm_adjusted,
     mean_difference_ci,
+    per_session_residual_mae,
     per_subject_pearson_r,
     pooled_pearson_r,
     session_rmse,
+    session_weighted_bootstrap,
     subject_balanced_mae,
     subject_cluster_bootstrap,
     subject_cluster_bootstrap_pooled,
@@ -158,3 +162,133 @@ def test_wilcoxon_matches_scipy_and_handles_all_zero():
 
     s0, p0 = wilcoxon_signed_rank(np.zeros(5))
     assert math.isnan(s0) and math.isnan(p0)
+
+
+# ------------------------------------------------------- Exp B objective (T-M8-objective)
+
+
+def _unequal_eligibility_fixture():
+    """4 subjects with UNEQUAL eligible-session counts (subject 1: sessions 1-4; subject 2:
+    sessions 1,2,4; subjects 3/4: sessions 1,4 only) -- the exact condition under which
+    implementation_plan.md:1208-1217 says the session- and subject-weighted estimands diverge.
+    y_true == 0 everywhere; y_pred set so each session has a constant, distinct residual
+    (session s -> residual s), making every estimand hand-computable."""
+    rows = [
+        (1, 1, 1.0), (2, 1, 1.0), (3, 1, 1.0), (4, 1, 1.0),   # session 1: 4 subjects, err 1
+        (1, 2, 2.0), (2, 2, 2.0),                              # session 2: 2 subjects, err 2
+        (1, 3, 3.0),                                           # session 3: 1 subject,  err 3
+        (1, 4, 4.0), (2, 4, 4.0), (3, 4, 4.0), (4, 4, 4.0),   # session 4: 4 subjects, err 4
+    ]
+    subjects = np.array([r[0] for r in rows])
+    session_idx = np.array([r[1] for r in rows])
+    y_pred = np.array([r[2] for r in rows])
+    y_true = np.zeros(len(rows))
+    return subjects, session_idx, y_true, y_pred
+
+
+def test_per_session_residual_mae_hand_value_and_presence_only():
+    subjects, session_idx, y_true, y_pred = _unequal_eligibility_fixture()
+    per_session = per_session_residual_mae(session_idx, y_true, y_pred)
+    assert per_session == {1: 1.0, 2: 2.0, 3: 3.0, 4: 4.0}
+    # averages only over sessions present in the call -- omit session 3 entirely.
+    mask = session_idx != 3
+    partial = per_session_residual_mae(session_idx[mask], y_true[mask], y_pred[mask])
+    assert set(partial) == {1, 2, 4}
+
+
+def test_equal_session_residual_mae_diverges_from_subject_and_pooled():
+    subjects, session_idx, y_true, y_pred = _unequal_eligibility_fixture()
+    session_weighted = equal_session_residual_mae(subjects, y_true, y_pred, session_idx)
+    assert session_weighted == pytest.approx(2.5)               # mean(1, 2, 3, 4)
+    assert session_weighted != pytest.approx(subject_balanced_mae(subjects, y_true, y_pred))
+    subj_bal = subject_balanced_mae(subjects, y_true, y_pred)
+    assert subj_bal == pytest.approx((2.5 + 7 / 3 + 2.5 + 2.5) / 4)
+    naive_pooled = float(np.abs(y_true - y_pred).mean())
+    assert naive_pooled == pytest.approx(27 / 11)
+    assert session_weighted != pytest.approx(naive_pooled)
+
+
+def test_equal_session_residual_mae_nan_on_empty():
+    assert math.isnan(equal_session_residual_mae([], [], [], []))
+
+
+# ------------------------------------------------------------------- Holm (T-M8-holm)
+
+
+def test_holm_adjusted_hand_computed_family_of_4():
+    p = [0.01, 0.04, 0.03, 0.02]
+    adjusted = holm_adjusted(p, family_size=4)
+    assert adjusted == pytest.approx([0.04, 0.06, 0.06, 0.06])
+
+
+def test_holm_adjusted_step_down_monotonicity_and_input_order():
+    p = [0.03, 0.01, 0.04, 0.02]  # not pre-sorted
+    adjusted = holm_adjusted(p, family_size=4)
+    assert len(adjusted) == 4
+    # walking the p-values in ascending order, adjusted values are non-decreasing.
+    order = sorted(range(4), key=lambda i: p[i])
+    seq = [adjusted[i] for i in order]
+    assert seq == sorted(seq)
+
+
+def test_holm_adjusted_clips_at_one():
+    p = [0.5, 0.6, 0.9, 0.99]
+    adjusted = holm_adjusted(p, family_size=4)
+    assert all(v == pytest.approx(1.0) for v in adjusted)
+
+
+def test_holm_adjusted_nan_occupies_a_slot_but_not_ranked():
+    p = [0.01, float("nan"), 0.03]
+    adjusted = holm_adjusted(p, family_size=4)
+    assert math.isnan(adjusted[1])
+    assert adjusted[0] == pytest.approx(0.04)   # 4 * 0.01
+    assert adjusted[2] == pytest.approx(0.09)   # max(0.04, 3 * 0.03)
+
+
+def test_holm_adjusted_family_size_4_strictly_stronger_than_len_3():
+    p = [0.02, 0.03, 0.04]
+    default_family = holm_adjusted(p)                    # family_size = len(p) = 3
+    pinned_family = holm_adjusted(p, family_size=4)
+    assert all(pf >= df for pf, df in zip(pinned_family, default_family, strict=True))
+    assert any(pf > df for pf, df in zip(pinned_family, default_family, strict=True))
+
+
+# --------------------------------------------------- session-weighted bootstrap (T-M8-bootstrap)
+
+
+def test_session_weighted_bootstrap_deterministic_under_seed():
+    subjects, session_idx, y_true, y_pred = _unequal_eligibility_fixture()
+    a = session_weighted_bootstrap(subjects, session_idx, y_true, y_pred[None, :], b=300, rng_seed=2026)
+    b = session_weighted_bootstrap(subjects, session_idx, y_true, y_pred[None, :], b=300, rng_seed=2026)
+    assert a == b
+
+
+def test_session_weighted_bootstrap_point_provably_differs_from_subject_weighted():
+    subjects, session_idx, y_true, y_pred = _unequal_eligibility_fixture()
+    ci = session_weighted_bootstrap(subjects, session_idx, y_true, y_pred[None, :], b=300, rng_seed=11)
+    assert ci.point == pytest.approx(2.5)
+    assert ci.point != pytest.approx(subject_balanced_mae(subjects, y_true, y_pred))
+
+
+def test_session_weighted_bootstrap_reference_gives_difference_form():
+    subjects, session_idx, y_true, y_pred = _unequal_eligibility_fixture()
+    baseline = np.zeros_like(y_pred)  # session-mean baseline == 0 on the residual scale
+    ci = session_weighted_bootstrap(
+        subjects, session_idx, y_true, y_pred[None, :], y_pred_reference=baseline, b=300, rng_seed=5,
+    )
+    radar_agg = equal_session_residual_mae(subjects, y_true, y_pred, session_idx)
+    baseline_agg = equal_session_residual_mae(subjects, y_true, baseline, session_idx)
+    assert ci.point == pytest.approx(radar_agg - baseline_agg)
+
+
+def test_session_weighted_bootstrap_empty_session_replicate_skipped_and_can_trip_unreliable():
+    """A-M8-2: subject 3 is the ONLY subject holding session 3; with 3 total subjects, a
+    bootstrap resample that never draws subject 3 loses session 3 entirely -- that replicate
+    must be skipped-and-counted, not silently averaged over the surviving 3 sessions."""
+    subjects = np.array([1, 1, 1, 2, 2, 2, 3])
+    session_idx = np.array([1, 2, 4, 1, 2, 4, 3])
+    y_true = np.zeros(7)
+    y_pred = np.array([1.0, 2.0, 4.0, 1.0, 2.0, 4.0, 3.0])
+    ci = session_weighted_bootstrap(subjects, session_idx, y_true, y_pred[None, :], b=300, rng_seed=7)
+    assert ci.n_skipped > 0
+    assert ci.unreliable is True

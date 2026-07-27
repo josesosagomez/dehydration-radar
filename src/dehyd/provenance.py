@@ -139,8 +139,15 @@ def _package_versions() -> dict:
     return versions
 
 
-def _fold_manifest(folds) -> list[dict]:
-    """Each subject's role per fold, in a canonical order."""
+def fold_manifest(folds) -> list[dict]:
+    """Each subject's role per fold, in a canonical order.
+
+    Public (M8): a second legitimate caller (the session-specific variant's
+    `--init-run-group`, which needs a real fold-role manifest per session, not one shared
+    `folds` slot) reuses this exact serialization rather than risking a second, subtly
+    different implementation drifting from this one. Zero behaviour change from the
+    previous, private `_fold_manifest` name.
+    """
     if folds is None:
         return []
     return [
@@ -209,7 +216,7 @@ def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir
             "n_subjects": int(manifest["subject"].nunique()),
             "n_sessions": int(manifest.groupby(["subject", "session_idx"]).ngroups),
         },
-        "folds": _fold_manifest(folds),
+        "folds": fold_manifest(folds),
         "git": git,
         "packages": _package_versions(),
         "device": config.run.device,

@@ -4,6 +4,330 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-28 — M8 step 8 done: `experiments/run_clock_decoupling.py` (CLI) + `scripts/ibex/run_exp_b.sbatch` + `scripts/ibex/run_exp_b_variant.sbatch` + `scripts/ibex/submit_exp_b_variant.sh` — full repo suite green (767 passed, 16 pre-existing skips, `test_no_leakage.py` still `git diff --exit-code`-clean).
+
+Per plan §2.5. `run_clock_decoupling.py` mirrors `run_regression.py`'s primary-path shape exactly
+(`--config` chain, `--band`, `--subset 6subjects` XOR `--full-cohort`, `record_run` with
+`data_dir=require_77ghz_dir(config) if band=="77ghz" else None`) and adds the entirely separate
+`--session-specific` code path with its three mutually-exclusive sub-flags
+(`--init-run-group` / `--session {1,2,3,4} --run-dir PATH` / `--merge-sessions --run-dir PATH`),
+matching §2.5's three documented flows verbatim: `--init-run-group` builds the QC manifest, runs
+`validate_store` before anything else, computes `config_hash`/`folds_by_session` (via the newly-
+public `provenance.fold_manifest`), and makes the ONE `record_run(..., folds=None, data_dir=...,
+extra={...})` call for the whole run-group, printing `run_path.parent` (a directory, C19); a
+`--session` task re-validates the store independently (defense in depth, C17), runs
+`run_exp_b_one_session`, `_assert_mechanism_ok_b`, writes the three per-session CSVs via the
+SAME shared `_write_*_csv` helpers the primary path uses (C18), and writes its shard JSON
+directly (never calling `record_run`, C14); `--merge-sessions` is a thin wrapper over
+`merge_session_specific_reports`. No owner-pause messaging on the primary path's full-cohort
+branch (Step 0 item 2 — single-phase DoD).
+
+`run_exp_b.sbatch` clones `run_exp_a.sbatch` verbatim (16 cores/64G) for the primary path only.
+`run_exp_b_variant.sbatch` dispatches on `STAGE=init|array|merge` at the shell level with **no
+`#SBATCH` resource directives in its header at all** (only `--job-name`) — confirmed the C24
+reasoning (`#SBATCH` is parsed before `STAGE` is ever evaluated) by reading `sbatch`'s own
+documented behaviour, not re-deriving it from scratch. `submit_exp_b_variant.sh` mirrors
+`submit_extract77.sh`/`submit_ibex.sh`'s real git-capture/dirty-tree-refusal idiom (read
+directly from those files, not assumed), chains `sbatch --wait` (init) → `sbatch --array=1-4`
+(array) → `sbatch --dependency=afterany` (merge), and normalizes every `sbatch --parsable`
+return value via `${var%%;*}` before using it in a path or `--dependency` (C25).
+
+**Bug caught by `bash -n`, not by review**: an apostrophe inside a `${VAR:?message}` parameter
+expansion (`"...from step 10's measured..."`) breaks bash's parser even when the whole
+expression sits inside double quotes — a genuine, non-obvious bash quoting quirk, not a typo
+pattern anyone would catch by eye. Fixed by rewording to avoid the apostrophe
+("step-10-measured"); added a dedicated `bash -n` syntax-gate test over all three new shell
+artifacts so this class of bug can never silently ship again.
+
+**Tests**: `test_run_clock_decoupling.py` (15 new — flag validation incl. the new
+`--session-specific` mutual-exclusivity rules; the smoke/full reporting boundary mirroring
+`test_run_regression.py`'s C9/C14 pattern; `--init-run-group` exercised against a REAL
+`provenance.record_run` call — genuine file hashing, genuine `provenance.json` — proving the
+printed value is a directory (C19), `config_hash`/`expected_subjects_by_session`/
+`folds_by_session` live at `provenance["extra"][...]` and nowhere at the top level (C20),
+`folds_by_session` matches `provenance.fold_manifest(nested_loso_splits(...))` for all four
+sessions exactly (C21); a two-distinct-synthetic-roots fixture proves a 77 GHz
+`--init-run-group` hashes from the 77 GHz root and a direct `record_run` call omitting
+`data_dir` fails closed with `FileNotFoundError` against the wrong root (C22); a missing-store
+fixture makes `--init-run-group` exit nonzero for real, unmocked (C23's Python-testable half);
+`--session` never calls `record_run` (C14) and an injected exception in `run_exp_b_one_session`
+propagates uncaught to a nonzero exit; `--merge-sessions` wiring). `test_exp_b_ibex_scripts.py`
+(5 new — C24: the shared variant sbatch's header has zero resource directives, contrasted
+against the primary sbatch which legitimately keeps its own; C25: both job-ID normalizations
+present via regex AND the exact `${var%%;*}` idiom exercised for real against bash on a
+`"12345;ibex"` fixture; a `bash -n` syntax gate over all three shell artifacts). **Full repository
+suite: 767 passed, 16 skipped (pre-existing), in ~13 min — `git diff --exit-code
+tests/test_no_leakage.py` clean.** DoD D1 (full suite green incl. every T-M8-* group) satisfied.
+
+## 2026-07-27 — M8 step 7 done: the session-specific secondary variant (`run_exp_b_one_session`, `run_exp_b_session_specific`, `summarize_variant_session`, `merge_session_specific_reports`, `config_fingerprint`) + `provenance._fold_manifest` → public `fold_manifest` — T-M8-variant green (the eval/exp_b.py side; CLI/sbatch wiring is step 8).
+
+Per plan §2.4's variant section + §1 step 7. `eligible_subjects_for_session(sessions, session)` —
+ONE definition, reused both by `run_exp_b_one_session` (its own nested-LOSO folds) and (at step
+8) `--init-run-group`'s `expected_subjects_by_session`. `config_fingerprint` = sha256 of
+`json.dumps(config_to_dict(config), sort_keys=True)` — the SAME `config_to_dict`
+`provenance.record_run` itself uses, so the hash is guaranteed content-equivalent to
+`provenance.json`'s own "config" field. Refactored `run_exp_b`'s body into a shared
+`_run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_workers)` helper (folds
+over `subjects`, serial or spawn-Pool, canonical reassembly) so `run_exp_b_one_session` — which
+filters `sessions` to ONE session's rows and passes `eligible_subjects_for_session(sessions, s)`
+as the subject pool — reuses the identical execution strategy rather than a second copy; the
+`equal_session_objective` degenerates naturally to plain single-session residual MAE with no
+special-casing, exactly as spec'd, since `SessionResidualFeatures`/`session_means` only ever see
+whatever sessions are present in whatever `sessions` list they're given. `run_exp_b_session_specific`
+is the sequential {1,2,3,4} wrapper — explicitly test-only, never the real IBEX path (C11; the
+real path is four independent array tasks, step 8/10.5). `summarize_variant_session` reuses
+`_oof_matrix`/`_ci_dict`/`_nan_ci_dict` and the SAME named per-session RNG offsets the primary
+path's own per-session breakdown uses (safe: the two summarize calls never combine numbers, so
+reusing an offset value across them is not a collision, just the same seed feeding different
+data) — output has no `wilcoxon_p`/`holm_p` field at all (C16: the frozen protocol defines no
+multiplicity rule for these four independently-fitted secondary models; inventing one would be a
+third undisclosed post-Exp-A completion). `merge_session_specific_reports` reads
+`run_dir/provenance.json`, taking `analysis_commit` from the native `provenance["git"]["commit"]`
+and `config_hash`/`expected_subjects_by_session` from `provenance["extra"][...]` (never the top
+level — `record_run`'s body only ever does `if extra: payload["extra"] = extra`, confirmed by
+re-reading `provenance.py` directly per traps 20/21, not from memory); for each of the four
+possible per-session shard files, a MISSING one is simply absent from `completed_sessions` (not
+an error), while a PRESENT one is fail-closed validated (band/session/run_group_id/
+analysis_commit/config_hash/n_eval_subjects, each checked against the group's own authoritative
+values) and raises `ExpBError` naming the session and field on any mismatch, never silently
+excluded or counted. `provenance.py`'s `_fold_manifest` renamed to public `fold_manifest`
+(docstring-only change beyond the name; one internal call-site update inside `record_run`) —
+`test_provenance.py` (22/22) confirms zero behaviour change.
+
+**Tests** (`T-M8-variant`, `test_exp_b.py`, 12 new tests — the eval/exp_b.py-testable subset;
+the CLI/`--session-specific`/sbatch-orchestration subset waits for step 8):
+`eligible_subjects_for_session` hand-verified on a fixture where subject 5 skips session 3 and
+subject 6 skips session 2; `config_fingerprint` deterministic and sha256-hex-shaped; a
+6-subject fixture with genuinely unequal per-session eligibility proves sessions 2 and 3's
+`nested_loso_splits` fold sets differ from EACH OTHER and from the pooled model's; the real
+sequential wrapper (`run_exp_b_session_specific`) runs end to end on a 4-subject synthetic store,
+returning `{1,2,3,4}` each with correctly session-restricted OOF rows; an injected
+`protocol_freeze_guard` failure inside `run_exp_b_one_session` propagates uncaught as a bare
+`RuntimeError` (C12 — never downgraded to a placeholder); `summarize_variant_session`'s output
+set is exactly `{conditional_exploratory, n_eval, radar_mae, baseline_mae, mean_difference,
+selection_frequency}` — no p-value field anywhere (C16); `merge_session_specific_reports` on a
+directory with 2-of-4 valid shards yields `completed_sessions == [1, 2]` computed purely from
+what's present and valid; five negative-merge fixtures (mismatched `analysis_commit`,
+`config_hash`, a shard's own `session` field disagreeing with its filename, a mismatched
+`run_group_id`, and `n_eval_subjects` disagreeing with the group's `expected_subjects_by_session`)
+each raise `ExpBError` naming the session, never silently excluded or counted. Full
+`test_exp_b.py` (34/34, run + report + variant) green in ~7 min.
+
+## 2026-07-27 — M8 step 6 done: `eval/exp_b.py` report half (`_oof_matrix`, `summarize_exp_b`, `write_exp_b_reports`, `run_and_report_b`, `_assert_mechanism_ok_b`) — T-M8-report green.
+
+Per plan §2.4. `_oof_matrix` concatenates folds with `reason is None` in canonical order
+(subjects, session_idx, residual y_true, per-seed y_pred, baseline zeros), asserting
+(subject, session) pair uniqueness across the whole matrix. `summarize_exp_b` implements A-M8-1
+(primary = `session_weighted_bootstrap` difference CI; subject-weighted complete-case Wilcoxon
+= companion, both always computed) and A-M8-2 (already built into `session_weighted_bootstrap`
+at step 2). **C4 run-level viability**: `primary_viable = all(n_eval_by_session[s] > 0 for s in
+1..4)`, checked BEFORE computing `primary_aggregate` — false sets `primary_aggregate=null` with
+a named `primary_unavailable_reason` rather than a silently-degraded 3-session mean. **C5**:
+per-session `baseline_mae` is a `subject_cluster_bootstrap` CI (same machinery/seed rules as
+`radar_mae`), not a bare float. Empty complete-case set (`n_complete_case=0`) returns
+`_nan_ci_dict()`/NaN `wilcoxon_p` rather than letting `mean_difference_ci`'s `ValueError` on
+zero-length input propagate (trap 13). Holm-4 applied once across the four per-session
+`wilcoxon_p`s via `metrics.holm_adjusted(..., family_size=stats.holm_family_expb_per_session)`.
+`write_exp_b_reports` mirrors `write_exp_a_reports`'s artifact set
+(`metrics_exp_b_{band}.json`/`predictions_b_{band}.csv`/`selection_table_b_{band}.csv`/
+`dropped_sessions_{band}.csv`/`scatter_b_{band}.png`, residual scale) via three extracted
+`_write_*_csv` helpers (so the session-specific variant, step 7, can reuse them unchanged,
+never a second CSV implementation, per C18). `run_and_report_b` mirrors `exp_a.run_and_report`'s
+validate→run→assert→smoke-or-full shape; smoke mode writes only a structural run-log (C9/C14 —
+no metrics/predictions/scatter file, matching Exp A's doctrine) and there is no variant
+parameter anywhere in this call tree (C6/C11 — the variant is invoked through an entirely
+separate call tree, step 7/8, so "smoke never touches the variant" is structural).
+
+**Tests** (`T-M8-report`, `test_exp_b.py`, 8 new tests on hand-built `ExpBFoldResult`s —
+mirroring `test_run_regression.py`'s stubbing pattern rather than the expensive store+search
+path): a 5-subject unequal-S1–S4-coverage fixture (subjects 1/2 complete-case; 3/4/5 not; every
+row's radar residual error == its own session index) hand-verifies per-session `N_eval`
+(`{1:5,2:3,3:2,4:5}`), `n_complete_case=2`, and the session-weighted primary aggregate (2.5)
+provably ≠ the naive subject-balanced comparator (≈2.467) on the same data; Holm-4 output
+matches `metrics.holm_adjusted` called independently with `family_size=4`; per-session
+`baseline_mae` confirmed to be a full CI dict, not a float; a 4-subject fixture where no subject
+covers all 4 sessions (but every session is still covered by someone) yields
+`n_complete_case=0`, NaN `wilcoxon_p`, NaN paired-CI point, **with `primary_viable` still true**
+(isolating the paired-companion NaN path from C4's run-level check); a fixture where session 3
+never appears in ANY fold's rows sets `primary_viable=false`, `primary_aggregate=null`, and a
+reason string naming session 3; `run_and_report_b`'s smoke mode (monkeypatched `run_exp_b`)
+writes only `run_log` — no `metrics_`/`predictions_b_`/`scatter_b_`/`selection_table_b_` file —
+while full mode writes both `metrics` and `scatter`, with `primary_aggregate`/
+`per_session_exploratory` present in the JSON. Full suite (22 tests, run + report halves)
+green in one combined `test_exp_b.py` run (~5 min, synthetic-store-heavy).
+
+## 2026-07-27 — M8 step 5 done: `src/dehyd/eval/exp_b.py` created — the run half (`build_sessions_b`, `evaluable_subjects_b`, `SessionResidualFeatures`, `equal_session_objective`, `ExpBFoldResult`, `_run_single_fold_b`, `run_exp_b`) — plus a real bug caught and fixed in step 3's `session_means`.
+
+Per plan §2.4 (run half) + §5 traps 1/3/5. `build_sessions_b` = `exp_a.build_sessions` filtered to
+`session_idx != 0` (trap 3 — S0 excluded at the session-spine level, never via Exp A's
+`abs(y_true) > 1e-9` heuristic, which is meaningless on a residualized target).
+`evaluable_subjects_b` = the distinct-subjects set of an already-S0-filtered `sessions` list
+(Exp B's own "≥1 eligible S1–S4 session" rule — trap 2 — never Exp A's helper). `SessionResidualFeatures`
+wraps (does not subclass) `exp_a.StoreBackedFeatures` for the X path byte-for-byte; its
+`drop_for(train_subjects)` is cached by `frozenset(train_subjects)` ONLY (never by candidate),
+guaranteeing candidate-independence (trap 4) by construction; `data_for` drops degenerate
+sessions' rows in lockstep across subjects/X/y/session_idx and residualizes on the kept rows,
+emitting `session_means` via `extra_fits` so μ_s is audited at both inner and outer CV levels
+**for free**, through harness.py's existing (unmodified) `_bundle_fits` — no separate
+`fit_session_mean_baseline` call needed in the production path (avoids a redundant second
+`FitRecord` for the identical quantity); a constructor-time check raises `ExpBError` if any
+`session_idx == 0` row reaches it (defense in depth alongside `build_sessions_b`'s filter, per
+trap 3's "assert it in `SessionResidualFeatures.__init__`" instruction). `_run_single_fold_b`
+checks surviving test rows via `provider.drop_for(fold.train_subjects)` BEFORE any fit (trap 1 —
+returns `reason="no_surviving_test_rows"` rather than letting sklearn's zero-row `ValueError`
+propagate) and wraps stage-1/stage-2 candidate scoring in a `try/except SelectionError`,
+re-raising a diagnostic `ExpBError` naming the fold, its dropped sessions, and per-session
+eligible-training-subject counts (trap 5) instead of letting a bare, unhelpful `SelectionError`
+surface when every candidate goes non-finite for a candidate-independent reason. `run_exp_b`
+mirrors `exp_a.run_exp_a`'s fold-parallel spawn-context-Pool structure exactly.
+
+**Bug found by the tests, not by inspection**: `models/baselines.session_means` (step 3) only
+iterated `sorted(set(session_idx[train_rows].tolist()))` — sessions present AMONG the training
+rows — so a session with **zero** eligible training subjects (not just `<2`) never entered the
+loop at all and was silently omitted from both `means` and `dropped`, rather than being
+classified as dropped. Caught by `T-M8-degenerate`'s fixture (`train_subjects` entirely
+excluding the one subject holding session 3): `SessionResidualFeatures.data_for` crashed with
+`KeyError: 3` when a "kept" row (session 3 wasn't in `dropped`, so its mask bit stayed on)
+had no corresponding `means[3]` entry. **Fix**: iterate `sorted(set(session_idx.tolist()))` —
+every session present ANYWHERE in the data, not just among train rows — so a globally-absent-
+from-training session is correctly classified as dropped (0 < `min_train_subjects`). Added a
+dedicated regression test (`test_session_means_zero_eligible_subjects_is_also_dropped`,
+`test_baselines.py`) pinning this exact edge case. Full `test_baselines.py` (12/12) and
+`test_exp_b.py` (14/14 at this point, run half only) green after the fix.
+
+**Tests** (`T-M8-provider`, `T-M8-degenerate`, `T-M8-residual-leak`, `T-M8-outer-mutation`/C2 —
+`test_exp_b.py`, new file, synthetic 10 GHz store mirroring `test_exp_a.py`'s fixture pattern but
+S1–S4 only): X path bytewise identical to `StoreBackedFeatures` on kept rows; `y == raw − μ_s`;
+`session_idx` aligned post-drop; `extra_fits` carries `session_means`; drop set proven
+candidate-independent (`len(provider._drop_cache) == 1` across 5 candidates sharing
+`train_subjects`); outer bundle's `session_means` bytewise == an independently-called
+`fit_session_mean_baseline`'s (single source of truth, C19-style provenance-free direct
+comparison); a degenerate fixture (session 3 held by only one subject) is absent from every
+fold's OOF `test_session_idx`, present in `dropped_sessions_outer`/`_inner`, and leaves μ_1/μ_2/
+μ_4 bytewise unchanged vs. a non-degenerate variant; the T16-pattern residual-leak triad
+(inner-val label mutation leaves that fold's fits, incl. `session_means`, untouched;
+inner-train label mutation DOES move μ_s; held-out label mutation leaves outer_train fits
+untouched); and the full C2 end-to-end outer-mutation property (mutate the held-out subject's
+stored arrays + label; both stages' `inner_scores`/winners, every fitted parameter, and
+outer-training predictions stay bytewise identical; only the held-out prediction moves).
+14/14 green (~4–5 min; synthetic-store-write-heavy, not slow to execute).
+
+## 2026-07-27 — M8 step 4 done: `harness.py`'s ONE structural edit — the `score_fn` hook, `FeatureBundle.session_idx` — the riskiest step in the milestone, isolated in its own commit-worthy diff between two green states.
+
+Per plan §2.3. Added `FeatureBundle.session_idx: np.ndarray | None = None`, appended AFTER
+`extra_fits` with a `None` default so every existing positional construction (`exp_a.py`'s two
+sites, `fixed_feature_provider`, `test_harness.py`'s `_eps_provider`) stays valid unchanged — a
+minimal py-syntax check confirmed the trailing comment block on the dataclass field doesn't
+need special indentation (comments aren't subject to Python's block-indentation rules).
+
+Added `_score(score_fn, bundle, rows, y_pred)` as the ONE scoring choke point: `score_fn=None`
+→ the exact prior call `subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)`;
+a supplied `score_fn` additionally receives `bundle.session_idx[rows]` (or `None` if the bundle
+carries none) — `score_fn(subjects, y_true, y_pred, session_idx) -> float`. Threaded a
+keyword-only `score_fn=None` through `_fit_score_inner`, `_score_candidates_on_fold`,
+`_final_refit`, `run_nested_candidates` — every one of `exp_a.py`'s calls into
+`_score_candidates_on_fold`/`_final_refit` is positional (5 args), so appending `score_fn` after
+`*` needed zero edits there, confirmed by `git diff --exit-code` on `exp_a.py`,
+`tests/reference_procedure.py`, and `tests/test_no_leakage.py` — all clean.
+
+**Verification, not assertion:** re-ran the step-1 pin (`tests/test_m8_pin.py`) immediately after
+this edit — bytewise identical, zero changes to the pin file — plus the full `test_harness.py`
+and `test_no_leakage.py`; all green (101 passed across the harness/exp_a/no_leakage/metrics/
+baselines/run_regression suites, 1 pre-existing skip).
+
+**Tests** (`T-M8-harness-hook`, `test_harness.py`): `score_fn=None` matches omitting it
+bytewise; a deliberately-disagreeing scorer (`-subject_balanced_mae`, exactly reversing the
+ranking) demonstrably changes the selected candidate vs. the default scorer on the same
+fixture — proving the hook has real selection power, not just wiring; a spy `score_fn` on
+`fixed_feature_provider`'s bundles (which carry `session_idx=None`) confirms it receives `None`,
+not a synthesized default or a crash; a row-subset provider (drops one subject's rows, applied
+only on INNER calls — distinguished from the single outer `_final_refit` call by
+`len(train_subjects)` — never on the outer-test call, which would hit the documented,
+expected, harness-level zero-row `predict` crash from trap 1, a different concern) proves masks
+recompute from `bundle.subjects` post-drop and a val subject left with zero surviving rows
+yields an EMPTY (not crashing) `val_predictions` entry, so long as the fold's other val
+subject(s) still have rows (`n_inner_max=2` over 5 outer-training subjects forces every inner
+val group to size >= 2, guaranteeing this).
+
+## 2026-07-27 — M8 step 3 done: `models/baselines.py`'s `session_means`/`fit_session_mean_baseline`/`predict_session_mean`.
+
+Per plan §2.2. `session_means(subjects, session_idx, targets, train_subjects, *,
+min_train_subjects=2)` — the single train-only μ_s computation, shared by the residualizing
+provider (step 5), the Exp B baseline, and the fit audit. Explicitly accumulates over sorted
+sessions and sorted per-session subject membership (list comprehension over `sorted(subj_here)`,
+not a bare `targets[mask].mean()`) so float accumulation is bit-identical serial vs a future
+parallel worker — matching the `session_means`-determinism trap (§5 trap 7) ahead of when it'd
+otherwise bite. A session with `< min_train_subjects` DISTINCT eligible training subjects
+(counted, not rows) is dropped, never imputed — the deliberate contrast with Exp A's O2
+global-mean fallback. `fit_session_mean_baseline` wraps it into a `BaselineFitOutcome` with an
+all-ndarray `FitRecord` (`quantity="session_means"`, params `indices`/`means`/`dropped`).
+`predict_session_mean` raises `KeyError` on a dropped or unknown session index — no fallback,
+by design, since a dropped session's rows should never reach it (an unexpected `KeyError` there
+would itself indicate a drop-set bug upstream).
+
+**Tests** (`T-M8-mu`, `test_baselines.py`): a 5-subject/4-session fixture (targets =
+`10*session + subject`, unique per cell) where subjects 2/3/4 skip session 3 (only subject 1
+eligible, `<2` → dropped) hand-verifies the per-session means, confirms the drop counts distinct
+subjects not rows, confirms mutating the held-out subject's (5, not in `train_subjects`) target
+leaves every kept μ_s bytewise identical, confirms dropping session 3 leaves μ_1/μ_2/μ_4
+bytewise identical to a variant fixture where session 3 is NOT dropped (independence across
+sessions), confirms the `FitRecord`'s three params are all `np.ndarray`, and confirms
+`predict_session_mean` raises `KeyError` on both a dropped index (3) and a wholly unseen one (99).
+
+## 2026-07-27 — M8 step 2 done: `metrics.py`'s Exp B additions (`per_session_residual_mae`, `equal_session_residual_mae`, `holm_adjusted`, `_cluster_bootstrap_over_rows` extraction, `session_weighted_bootstrap`).
+
+Per plan §2.1. Added `per_session_residual_mae` (per-session MAE dict, sessions absent simply
+omitted) and `equal_session_residual_mae` (session-weighted aggregate — mean over sessions
+present, `subjects` accepted-and-unused to match the harness `score_fn(subjects, y_true, y_pred,
+session_idx)` signature, NaN on empty). Extracted `_cluster_bootstrap_over_rows` from
+`subject_cluster_bootstrap_pooled`'s body verbatim (same `rng.integers(0, n, size=n)`-per-
+replicate loop, same jackknife, same `_finalize` call) and rewrote `subject_cluster_bootstrap_
+pooled` as a thin `theta_of_rows` closure over it — **re-asserted the step-1 pin immediately
+after, bit-identical, both `tests/test_m8_pin.py` and the full `tests/test_metrics.py` green with
+zero changes to the pin file.** Added `session_weighted_bootstrap` (A-M8-1's primary CI): builds
+`theta_of_rows` from `equal_session_residual_mae`, pooled/nonlinear seed-collapse (recompute per
+seed then average), `y_pred_reference` gives the paired difference form on identical resampled
+rows. A-M8-2 implemented as a per-replicate pre-check — `set(session_idx[idx]) != expected_
+sessions` (computed once from the full input) short-circuits to NaN before any per-seed work,
+relying on `_cluster_bootstrap_over_rows`'s existing `math.isfinite` skip-and-count, not a new
+mechanism.
+
+Added `holm_adjusted`: step-down over the finite p-values only (sorted ascending, multiplier
+`family_size - rank`), NaN inputs pass through unranked at their original position while still
+counting toward `family_size`'s slot budget, clipped at 1.0, returned in input order.
+
+**Tests** (`T-M8-objective`, `T-M8-holm`, `T-M8-bootstrap`, all in `test_metrics.py`): a 4-subject/
+4-session unequal-eligibility fixture (subject 1 eligible for all 4 sessions, subject 2 for 3,
+subjects 3/4 for 2) with constant per-session residuals (session s → residual s) makes every
+estimand hand-computable — session-weighted 2.5, subject-balanced ≈2.4583, naive pooled ≈2.4545,
+all three pairwise distinct as `implementation_plan.md:1208-1217` predicts. Holm hand-verified
+against the textbook step-down formula on a 4-p family (`[0.01,0.04,0.03,0.02] → [0.04,0.06,0.06,
+0.06]`), NaN-slot and clip-at-1.0 fixtures, and `family_size=4` shown strictly ≥ `family_size=3`
+elementwise on identical p-values. `session_weighted_bootstrap`: deterministic under `rng_seed`;
+point provably ≠ subject-weighted on the same fixture; `y_pred_reference` matches the independently
+-computed `equal_session_residual_mae` difference; a 3-subject/1-subject-holds-session-3 fixture
+(P(miss subject 3 in a resample) = (2/3)³ ≈ 30%) empirically trips both `n_skipped > 0` and
+`unreliable is True` at `b=300`, deterministically for the fixed seed used.
+
+## 2026-07-27 — M8 step 1 done: behaviour pin for `run_nested_candidates`/`subject_cluster_bootstrap_pooled` captured, before any M8 source edit.
+
+Per plan step 1 (`MILESTONE_8_PLAN.md` §1): steps 2 (`metrics.py`'s `_cluster_bootstrap_over_rows`
+extraction) and 4 (`harness.py`'s `score_fn` thread) both claim "no behaviour change to Exp A's
+path" — unverifiable without a byte-for-byte pin captured first. Added `tests/test_m8_pin.py`
+with two fixed fixtures and hard-coded expected values captured by actually running the
+pre-M8 tree (not a same-session tautology): (1) `run_nested_candidates` over a fixed 8-subject/
+4-session/5-feature synthetic `Dataset` (`np.random.default_rng(20260728)`) and a 7-candidate
+multi-family set (ridge×3 alphas, svr, knn, rf, gbm), seeds=(0,1,2) — per fold, pins
+`test_subject`, `selected.candidate_id`, `inner_scores.shape` + sha256, `test_score` (as exact
+`float.hex()`), and `test_predictions` sha256; (2) `subject_cluster_bootstrap_pooled` over a
+fixed 6-subject/2-session/3-seed fixture, pinned twice — once with `session_rmse` (always
+defined, exercises the normal BCa path, `n_skipped=0`) and once with `pooled_pearson_r` on a
+constant `y_true` (every resample's metric is undefined → `n_skipped=500/500`, `unreliable=True`,
+BCa degenerate → percentile fallback, point/low/high all NaN) — the second fixture specifically
+pins the pre-extraction skip-and-count behaviour A-M8-2 later reuses. All three pin assertions
+green against the pre-edit tree. To be re-asserted verbatim (zero edits to this file) after
+step 2 and again after step 4, per the plan's own sequencing.
+
 ## 2026-07-27 — M8 step 0.5 done: A-M8-1/A-M8-2 propagated into `implementation_plan.md`.
 
 Per the M8 plan's own build sequence (step 0.5, forced by review comment C9 — this must land

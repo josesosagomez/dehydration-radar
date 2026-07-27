@@ -21,6 +21,7 @@ from dehyd.eval.harness import (
     require_complete_active,
     run_nested_candidates,
 )
+from dehyd.eval.metrics import subject_balanced_mae
 from dehyd.eval.selection import SelectionError
 
 
@@ -280,6 +281,90 @@ def test_shim_view_passes_engine_arrays_by_reference():
     assert view.final_fits is results[0].final_fits
     assert view.test_predictions is results[0].test_predictions
     assert view.selected_alpha in rp.ALPHA_GRID
+
+
+# ------------------------------------------------------------- score_fn hook (T-M8-harness-hook)
+
+
+def _negated_subject_balanced_mae(subjects, y_true, y_pred, session_idx):
+    """A deliberately-disagreeing scorer: exactly reverses the ranking `subject_balanced_mae`
+    would produce (best <-> worst), so a fixture using it proves the hook has real power over
+    selection, not just that it is wired through."""
+    return -subject_balanced_mae(subjects, y_true, y_pred)
+
+
+def test_score_fn_none_matches_omitting_it():
+    data = make_dataset()
+    cands = ridge_candidates()
+    a = run_nested_candidates(data, cands, score_fn=None)
+    b = run_nested_candidates(data, cands)
+    for ra, rb in zip(a, b, strict=True):
+        assert ra.selected.candidate_id == rb.selected.candidate_id
+        assert ra.inner_scores.tobytes() == rb.inner_scores.tobytes()
+        assert ra.test_score == rb.test_score
+
+
+def test_custom_score_fn_changes_selected_candidate_on_disagreement_fixture():
+    data = make_dataset()
+    cands = ridge_candidates(alphas=(0.1, 1.0, 10.0))
+    default_results = run_nested_candidates(data, cands)
+    inverted_results = run_nested_candidates(data, cands, score_fn=_negated_subject_balanced_mae)
+    default_ids = [r.selected.candidate_id for r in default_results]
+    inverted_ids = [r.selected.candidate_id for r in inverted_results]
+    assert default_ids != inverted_ids  # the hook demonstrably changed selection, not just wiring
+
+
+def test_score_fn_receives_none_session_idx_when_bundle_carries_none():
+    """`fixed_feature_provider`'s bundles carry `session_idx=None`; a scorer that tolerates
+    None must receive exactly that, not a crash or a synthesized default."""
+    data = make_dataset()
+    seen = []
+
+    def spy_score_fn(subjects, y_true, y_pred, session_idx):
+        seen.append(session_idx)
+        return subject_balanced_mae(subjects, y_true, y_pred)
+
+    run_nested_candidates(data, ridge_candidates(alphas=(1.0,)), score_fn=spy_score_fn)
+    assert seen
+    assert all(v is None for v in seen)
+
+
+def test_row_subset_provider_masks_recompute_and_empty_val_predictions_not_crash():
+    """A provider returning a ROW SUBSET (Exp B's degenerate-session drop pattern): masks
+    must recompute from `bundle.subjects` (not the full dataset), and a val subject left with
+    zero surviving rows yields an EMPTY (not crashing) `val_predictions` entry, so long as the
+    fold's other val subjects still have rows.
+
+    The drop is applied only for INNER calls (`train_subjects` smaller than the full outer
+    training set), never for the outer `_final_refit` call -- a provider that ALSO emptied the
+    outer test subject's own rows would hit the documented, expected, harness-level zero-row
+    `predict` crash (plan §5 trap 1), which is a caller's responsibility elsewhere, not what
+    this row-subset-safety property is about."""
+    data = make_dataset(n_subjects=6, sessions=4)
+    dropped_subject = 1
+    full_outer_train_size = len(set(data.subjects.tolist())) - 1
+
+    def provider(candidate, train_subjects):
+        if len(train_subjects) == full_outer_train_size:      # the outer _final_refit call
+            return FeatureBundle(data.subjects, data.features, data.targets, extra_fits=())
+        keep = data.subjects != dropped_subject                # an inner call: apply the drop
+        return FeatureBundle(data.subjects[keep], data.features[keep], data.targets[keep], extra_fits=())
+
+    # n_inner_max=2 over 5 outer-training subjects forces every inner val group to have >= 2
+    # subjects, so dropping one still leaves the fold's other val subject(s) with real rows.
+    results = run_nested_candidates(
+        data, ridge_candidates(alphas=(1.0,)), data_for=provider, n_inner_max=2
+    )
+    assert results
+
+    found_dropped_in_val = False
+    for r in results:
+        for inner in r.inner_results:
+            if dropped_subject in inner.inner_val:
+                found_dropped_in_val = True
+                assert dropped_subject in inner.val_predictions
+                assert len(inner.val_predictions[dropped_subject]) == 0
+    assert found_dropped_in_val
 
 
 @pytest.mark.parametrize("family", ["ridge", "svr", "knn", "rf", "gbm"])

@@ -1,8 +1,11 @@
 """The fit-on-train-only nested-LOSO engine (sklearn path).
 
-ONE generic candidate engine serves both (a) Experiment A's staged search over
-store-backed features and (b) the frozen leakage suite's reference shim (ridge over an
-alpha grid on a fixed Dataset). It:
+ONE generic candidate engine serves (a) Experiment A's staged search over store-backed
+features, (b) the frozen leakage suite's reference shim (ridge over an alpha grid on a
+fixed Dataset), and (c) Experiment B's session-residualized search, via one optional
+keyword-only `score_fn` hook (`None` -> the original, unchanged `subject_balanced_mae`
+scoring; a supplied `score_fn(subjects, y_true, y_pred, session_idx)` overrides it — see
+`_score`). It:
 
   * consumes folds ONLY from `eval/splits.py` (subject-level leakage is structural);
   * routes every tie-break through `eval/selection.py::select_candidate` (never inline);
@@ -88,6 +91,11 @@ class FeatureBundle:
     X: np.ndarray
     y: np.ndarray
     extra_fits: tuple = ()   # ((quantity, {str: np.ndarray}), ...)
+    session_idx: np.ndarray | None = None
+        # Per-row session index, aligned to subjects/X/y. Only objectives that group BY
+        # SESSION (Exp B's equal-session residual MAE) need it. Appended AFTER extra_fits
+        # with a None default so every existing positional construction (exp_a.py,
+        # fixed_feature_provider below, test_harness.py) stays valid unchanged.
 
 
 @dataclass
@@ -219,6 +227,17 @@ def _bundle_fits(bundle: FeatureBundle, role: str, subjects) -> list:
     return [FitRecord(q, role, frozenset(subjects), p) for q, p in bundle.extra_fits]
 
 
+def _score(score_fn, bundle: FeatureBundle, rows, y_pred) -> float:
+    """The one scoring choke point. `score_fn=None` -> the CURRENT, UNCHANGED call to
+    `subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)`. A supplied
+    `score_fn` additionally receives `bundle.session_idx[rows]` (or None if the bundle
+    carries none): `score_fn(subjects, y_true, y_pred, session_idx) -> float`."""
+    if score_fn is None:
+        return subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)
+    session_idx = bundle.session_idx[rows] if bundle.session_idx is not None else None
+    return score_fn(bundle.subjects[rows], bundle.y[rows], y_pred, session_idx)
+
+
 def _fit_once(candidate, X, y, train_rows, seed, before_fit):
     if before_fit is not None:
         before_fit(candidate)
@@ -245,8 +264,9 @@ def _seed_list(candidate, seeds):
     return tuple(seeds) if candidate.family in SEED_SENSITIVE else (seeds[0],)
 
 
-def _fit_score_inner(candidate, bundle, inner, seeds, before_fit) -> tuple:
-    """Fit on inner-train, score inner-val (subject-balanced MAE, mean over seeds)."""
+def _fit_score_inner(candidate, bundle, inner, seeds, before_fit, *, score_fn=None) -> tuple:
+    """Fit on inner-train, score inner-val (`score_fn`, mean over seeds; `None` -> the
+    original subject-balanced MAE, unchanged)."""
     subjects, X, y = bundle.subjects, bundle.X, bundle.y
     train_rows = np.isin(subjects, sorted(inner.train_subjects))
     val_rows = np.isin(subjects, sorted(inner.val_subjects))
@@ -258,7 +278,7 @@ def _fit_score_inner(candidate, bundle, inner, seeds, before_fit) -> tuple:
     for seed in _seed_list(candidate, seeds):
         pipe = _fit_once(candidate, X, y, train_rows, seed, before_fit)
         preds = pipe.predict(X[val_rows])
-        per_seed_scores.append(subject_balanced_mae(subjects[val_rows], y[val_rows], preds))
+        per_seed_scores.append(_score(score_fn, bundle, val_rows, preds))
         if val_preds_first is None:
             val_preds_first = preds
         sfit, mfit = _model_and_scaler_fits(pipe, candidate, "inner_train", inner.train_subjects)
@@ -274,7 +294,7 @@ def _fit_score_inner(candidate, bundle, inner, seeds, before_fit) -> tuple:
     return score, val_predictions, fits
 
 
-def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for) -> StageOutcome:
+def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, score_fn=None) -> StageOutcome:
     n_c, n_f = len(candidates), len(fold.inner_folds)
     inner_scores = np.full((n_c, n_f), np.nan)
     cells: dict = {}
@@ -292,7 +312,9 @@ def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for) -> 
                     float("nan"), {}, [], reason=reason,
                 )
                 continue
-            score, val_predictions, fits = _fit_score_inner(candidate, bundle, inner, seeds, before_fit)
+            score, val_predictions, fits = _fit_score_inner(
+                candidate, bundle, inner, seeds, before_fit, score_fn=score_fn
+            )
             inner_scores[ci, fj] = score
             cells[(ci, fj)] = InnerResult(
                 inner.train_subjects, inner.val_subjects, candidate.candidate_id,
@@ -325,7 +347,7 @@ def select_stage_winner(stage: StageOutcome) -> Candidate:
     return by_id[winner.candidate_id]
 
 
-def _final_refit(candidate, fold, seeds, before_fit, data_for) -> tuple:
+def _final_refit(candidate, fold, seeds, before_fit, data_for, *, score_fn=None) -> tuple:
     """Refit the winner on all outer-training subjects (per seed), predict train + test."""
     bundle = data_for(candidate, fold.train_subjects)
     subjects, X, y = bundle.subjects, bundle.X, bundle.y
@@ -339,7 +361,7 @@ def _final_refit(candidate, fold, seeds, before_fit, data_for) -> tuple:
         pipe = _fit_once(candidate, X, y, train_rows, seed, before_fit)
         train_preds = pipe.predict(X[train_rows])
         test_preds = pipe.predict(X[test_rows])
-        test_score = subject_balanced_mae(subjects[test_rows], y[test_rows], test_preds)
+        test_score = _score(score_fn, bundle, test_rows, test_preds)
         seed_outcomes.append(SeedOutcome(seed, train_preds, test_preds, test_score))
         sfit, mfit = _model_and_scaler_fits(pipe, candidate, "outer_train", fold.train_subjects)
         if scaler_fit is None:
@@ -358,10 +380,14 @@ def run_nested_candidates(
     seeds=(0,),
     before_fit=None,
     data_for=None,
+    score_fn=None,
     **split_kwargs,
 ) -> list[FoldResult]:
     """Single-stage nested LOSO over `candidates`. Folds come only from `splits.py`;
-    non-selectable outer folds contribute nothing. This is the shim's entry point."""
+    non-selectable outer folds contribute nothing. This is the shim's entry point.
+    `score_fn=None` scores with the original `subject_balanced_mae`, unchanged; a supplied
+    `score_fn(subjects, y_true, y_pred, session_idx)` overrides scoring at every fit (see
+    `_score`) without changing fold construction, the tie-break, or anything else."""
     if data_for is None:
         data_for = fixed_feature_provider(dataset)
     folds = nested_loso_splits(dataset.subject_ids(), **split_kwargs)
@@ -371,10 +397,12 @@ def run_nested_candidates(
         for fold in folds:
             if not fold.selectable:
                 continue
-            stage = _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for)
+            stage = _score_candidates_on_fold(
+                candidates, fold, seeds, before_fit, data_for, score_fn=score_fn
+            )
             winner = select_stage_winner(stage)
             final_fits, train_pred, test_pred, test_score, seed_outcomes = _final_refit(
-                winner, fold, seeds, before_fit, data_for
+                winner, fold, seeds, before_fit, data_for, score_fn=score_fn
             )
             results.append(
                 FoldResult(

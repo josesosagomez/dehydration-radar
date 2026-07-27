@@ -211,11 +211,9 @@ def subject_cluster_bootstrap(
     )
 
 
-def subject_cluster_bootstrap_pooled(
+def _cluster_bootstrap_over_rows(
     subjects,
-    y_true,
-    y_pred_by_seed,
-    metric_fn,
+    theta_of_rows,
     *,
     b: int = 10000,
     level: float = 0.95,
@@ -223,30 +221,22 @@ def subject_cluster_bootstrap_pooled(
     method: str = "bca",
     skip_threshold_pct: float = 5.0,
 ) -> BootstrapCI:
-    """Cluster bootstrap of a POOLED metric (RMSE, pooled r) with the pooled seed-collapse.
-
-    `y_pred_by_seed` is (n_seeds, n_sessions); `y_true` is (n_sessions,). Within each
-    resample of SUBJECTS (carrying all of a subject's sessions, with multiplicity) the
-    metric is recomputed **per seed** and averaged across the finite seeds — one value per
-    resample. A resample with no finite seed value is skipped and counted; if that exceeds
-    `skip_threshold_pct` the CI is flagged unreliable. The point estimate is the same
-    seed-averaged metric on the original subjects (each once).
+    """Shared subject-cluster bootstrap machinery, extracted from what was previously
+    `subject_cluster_bootstrap_pooled`'s body: resample SUBJECTS with replacement (b draws
+    of n subjects, all of a subject's rows travel together with multiplicity), evaluate
+    `theta_of_rows(row_index_array)` per resample, jackknife leave-one-subject-out for BCa,
+    percentile fallback, skip-and-count. Internal helper — not exported. RNG draw order
+    (`rng.integers(0, n, size=n)` called once per replicate, `b` replicates in a loop, never
+    vectorised) is preserved bit-for-bit from the pre-extraction implementation.
     """
     subjects = np.asarray(subjects)
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred_by_seed = np.atleast_2d(np.asarray(y_pred_by_seed, dtype=float))
-    n_seeds = y_pred_by_seed.shape[0]
-
     subj_ids = sorted(set(subjects.tolist()))
     rows_by_subject = {s: np.flatnonzero(subjects == s) for s in subj_ids}
     n = len(subj_ids)
 
     def metric_over(chosen_subjects) -> float:
         idx = np.concatenate([rows_by_subject[s] for s in chosen_subjects])
-        yt = y_true[idx]
-        per_seed = [metric_fn(yt, y_pred_by_seed[k, idx]) for k in range(n_seeds)]
-        per_seed = [v for v in per_seed if math.isfinite(v)]
-        return float(np.mean(per_seed)) if per_seed else float("nan")
+        return theta_of_rows(idx)
 
     theta_hat = metric_over(subj_ids)
     rng = np.random.default_rng(rng_seed)
@@ -269,6 +259,104 @@ def subject_cluster_bootstrap_pooled(
     )
 
 
+def subject_cluster_bootstrap_pooled(
+    subjects,
+    y_true,
+    y_pred_by_seed,
+    metric_fn,
+    *,
+    b: int = 10000,
+    level: float = 0.95,
+    rng_seed: int,
+    method: str = "bca",
+    skip_threshold_pct: float = 5.0,
+) -> BootstrapCI:
+    """Cluster bootstrap of a POOLED metric (RMSE, pooled r) with the pooled seed-collapse.
+
+    `y_pred_by_seed` is (n_seeds, n_sessions); `y_true` is (n_sessions,). Within each
+    resample of SUBJECTS (carrying all of a subject's sessions, with multiplicity) the
+    metric is recomputed **per seed** and averaged across the finite seeds — one value per
+    resample. A resample with no finite seed value is skipped and counted; if that exceeds
+    `skip_threshold_pct` the CI is flagged unreliable. The point estimate is the same
+    seed-averaged metric on the original subjects (each once). A thin wrapper over
+    `_cluster_bootstrap_over_rows` — the bootstrap loop itself lives there.
+    """
+    subjects = np.asarray(subjects)
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred_by_seed = np.atleast_2d(np.asarray(y_pred_by_seed, dtype=float))
+    n_seeds = y_pred_by_seed.shape[0]
+
+    def theta_of_rows(idx) -> float:
+        yt = y_true[idx]
+        per_seed = [metric_fn(yt, y_pred_by_seed[k, idx]) for k in range(n_seeds)]
+        per_seed = [v for v in per_seed if math.isfinite(v)]
+        return float(np.mean(per_seed)) if per_seed else float("nan")
+
+    return _cluster_bootstrap_over_rows(
+        subjects, theta_of_rows, b=b, level=level, rng_seed=rng_seed, method=method,
+        skip_threshold_pct=skip_threshold_pct,
+    )
+
+
+def session_weighted_bootstrap(
+    subjects,
+    session_idx,
+    y_true,
+    y_pred_by_seed,
+    *,
+    y_pred_reference=None,
+    b: int = 10000,
+    level: float = 0.95,
+    rng_seed: int,
+    method: str = "bca",
+    skip_threshold_pct: float = 5.0,
+) -> BootstrapCI:
+    """Exp B's PRIMARY CI (A-M8-1): the subject-cluster bootstrap of the session-weighted,
+    equal-weight-per-session aggregate residual MAE (`equal_session_residual_mae`).
+
+    Within each subject-resample, recompute the per-session residual MAEs on the resampled
+    rows and average with EQUAL WEIGHT per session, per seed, then average across seeds ->
+    one scalar per resample (the POOLED/nonlinear seed-collapse rule, since this is an
+    average of averages, not an average of per-subject values). `y_pred_reference` (the
+    session-mean baseline; identically zero on the residual scale by construction), when
+    given, makes the bootstrapped quantity `aggregate(radar) - aggregate(reference)`
+    directly, evaluated on the SAME resampled rows for both, so it is a genuinely paired
+    difference bootstrap, not two independent ones.
+
+    A-M8-2: a resample whose rows do not cover every session present in the FULL input
+    (checked once per resample, before any per-seed work, since session coverage does not
+    depend on `y_pred_by_seed`) is undefined for the four-session aggregate — skipped and
+    counted via the existing NaN/`math.isfinite` machinery in `_cluster_bootstrap_over_rows`,
+    never silently averaged over the surviving sessions.
+    """
+    subjects = np.asarray(subjects)
+    session_idx = np.asarray(session_idx)
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred_by_seed = np.atleast_2d(np.asarray(y_pred_by_seed, dtype=float))
+    n_seeds = y_pred_by_seed.shape[0]
+    y_pred_reference = None if y_pred_reference is None else np.asarray(y_pred_reference, dtype=float)
+    expected_sessions = set(session_idx.tolist())
+
+    def theta_of_rows(idx) -> float:
+        if set(session_idx[idx].tolist()) != expected_sessions:
+            return float("nan")   # A-M8-2: empty-session replicate, skip-and-count
+        sidx = session_idx[idx]
+        yt = y_true[idx]
+        per_seed = []
+        for k in range(n_seeds):
+            agg = equal_session_residual_mae(None, yt, y_pred_by_seed[k, idx], sidx)
+            if y_pred_reference is not None:
+                agg -= equal_session_residual_mae(None, yt, y_pred_reference[idx], sidx)
+            per_seed.append(agg)
+        per_seed = [v for v in per_seed if math.isfinite(v)]
+        return float(np.mean(per_seed)) if per_seed else float("nan")
+
+    return _cluster_bootstrap_over_rows(
+        subjects, theta_of_rows, b=b, level=level, rng_seed=rng_seed, method=method,
+        skip_threshold_pct=skip_threshold_pct,
+    )
+
+
 def mean_difference_ci(
     per_subject_differences, *, b: int = 10000, level: float = 0.95, rng_seed: int, method: str = "bca"
 ) -> BootstrapCI:
@@ -280,6 +368,76 @@ def mean_difference_ci(
     return subject_cluster_bootstrap(
         per_subject_differences, b=b, level=level, rng_seed=rng_seed, method=method
     )
+
+
+# ---------------------------------------------------------------------- Exp B objective
+
+
+def per_session_residual_mae(session_idx, y_true, y_pred) -> dict[int, float]:
+    """{session index: residual MAE over that session's rows}.
+
+    The shared building block of BOTH Exp B's inner-CV objective and its reported
+    per-session breakdown -- one definition, so selection and reporting cannot drift. A
+    session with no rows in this call is simply absent from the returned dict.
+    """
+    session_idx = np.asarray(session_idx)
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    out: dict[int, float] = {}
+    for s in sorted(set(session_idx.tolist())):
+        mask = session_idx == s
+        out[int(s)] = float(np.abs(y_true[mask] - y_pred[mask]).mean())
+    return out
+
+
+def equal_session_residual_mae(subjects, y_true, y_pred, session_idx) -> float:
+    """Exp B's inner-CV selection objective and per-fold aggregate building block.
+
+    The mean of `per_session_residual_mae`'s values, EQUAL WEIGHT PER SESSION over
+    sessions present in THIS call's rows -- deliberately NOT subject-weighted (that is the
+    separate paired-test estimand, computed elsewhere). `subjects` is accepted and unused
+    so the signature matches the harness `score_fn` hook uniformly:
+    `score_fn(subjects, y_true, y_pred, session_idx) -> float`. NaN on empty input.
+
+    RUN-LEVEL VIABILITY: this function silently averages over whatever sessions are
+    present in its arguments -- correct for scoring one fold's rows, where per-fold
+    session drops are expected and already logged. It must NOT be used, uncritically, to
+    compute the run-level primary point estimate: if a session is absent from the GLOBAL
+    out-of-fold matrix, a naive call over the whole matrix would silently report a
+    three-session mean labelled as the four-session primary. `summarize_exp_b` is the sole
+    caller responsible for checking global per-session N_eval > 0 for all of S1-S4 BEFORE
+    treating its output as the primary aggregate.
+    """
+    per_session = per_session_residual_mae(session_idx, y_true, y_pred)
+    if not per_session:
+        return float("nan")
+    return float(np.mean(list(per_session.values())))
+
+
+def holm_adjusted(p_values, *, family_size: int | None = None) -> list[float]:
+    """Holm-Bonferroni step-down adjustment, RETURNED IN INPUT ORDER.
+
+    `family_size` defaults to `len(p_values)` but the caller pins it to
+    `StatsConfig.holm_family_expb_per_session = 4` so a session missing from a given run
+    (a shrunk `len(p_values)`) cannot weaken the pre-registered correction. NaN inputs pass
+    through as NaN at their original position -- they occupy a family-size slot
+    (conservative: the multiplier budget spent on them is not handed to the finite
+    p-values) but are excluded from the step-down ranking of the finite ones.
+    """
+    p_values = [float(p) for p in p_values]
+    m0 = len(p_values) if family_size is None else family_size
+    order = sorted(
+        (i for i in range(len(p_values)) if not math.isnan(p_values[i])),
+        key=lambda i: p_values[i],
+    )
+    adjusted = [float("nan")] * len(p_values)
+    running_max = 0.0
+    for rank, i in enumerate(order):
+        multiplier = m0 - rank
+        val = min(1.0, multiplier * p_values[i])
+        running_max = max(running_max, val)
+        adjusted[i] = running_max
+    return adjusted
 
 
 def wilcoxon_signed_rank(differences) -> tuple[float, float]:
