@@ -4,6 +4,40 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-26 — M7 post-checkpoint: full-cohort runs timed out (4 h) → fold-level parallelism added (bit-identical, ~8-16× faster); still awaiting the full run.
+
+After the checkpoint, the owner launched both `MODE=full` runs; **both hit TIMEOUT at the 4 h
+limit**. They died mid-search, before writing any metrics/scatter — so **no outer-fold result
+was inspected and the config freeze is still intact** (the re-run will be the first real number).
+
+**Why so slow:** the fold-local tuned-ε reconstruction cost scales with sessions × folds, so the
+full run (73/72 sessions × 16 folds) is ~8× the 6-subject smoke search — on the order of 8-16 h
+serial. Not a bug (full suite green, D5 + T18 pass); a genuine compute cost.
+
+**Fix — fold-level parallelism (f36c4fb):** the 16 outer folds are independent and each
+deterministic, so `run_exp_a` was refactored to run each fold in its own worker process
+(`_run_single_fold`, top-level/picklable, builds its own single-threaded store-backed provider),
+serial when `n_workers=1` (test/CI default) or a `multiprocessing` **spawn** Pool when >1; results
+reassembled in test-subject order. A new test asserts **parallel(n_workers=2) == serial
+byte-for-byte**, with the D5 held-out-mutation property still green — so it is faster with
+*identical* results. `run_regression` reads `SLURM_CPUS_PER_TASK`; `run_exp_a.sbatch` now defaults
+to 16 cores / 64 G (12610af), so all 16 folds run in one wave (~a single fold's wall-time).
+Extraction/store code untouched → store data unchanged.
+
+**IBEX operational fixes this session (all committed):** the `REVISION`-file provenance fallback
+for copied non-git trees (5677de9); the missing `configs/exp_a_regression_77ghz.yaml` entrypoint
+(e8145cb); shard-mode `extract_features` QCing only its own file, not the whole cohort per array
+task (3823611); `.gitignore` the regenerable feature store (4f003aa); the tuned-ε reconstruction
+cache (b6a72c8). Stores build as IBEX job arrays (`extract10/77.sbatch`), runs as single CPU jobs
+(`run_exp_a.sbatch`); `submit_ibex.sh` captures the clean commit (git checkout) or use `REVISION`
+(copied tree). **Store-vs-run commit-match (C16) forces a store rebuild after any code change** —
+the recurring friction this session; the store build is a fast parallel array, so it's cheap.
+
+**State:** M7 code complete + all committed (`v1_milestone_7` @ 12610af); full suite green; freeze
+intact. Blocking on the owner: launch the parallel `MODE=full` runs on IBEX (both bands), then
+send the two `metrics_exp_a_{band}.json` so we can sanity-check radar-vs-baseline and write
+SECOND_CHAPTER §6 to close the milestone.
+
 ## 2026-07-26 — M7 OWNER CHECKPOINT REACHED: both mechanism-only smokes GREEN on IBEX, freeze intact.
 
 The 10 GHz and 77 GHz Exp A mechanism-only smokes ran to completion on IBEX compute nodes

@@ -1,133 +1,119 @@
-# HANDOFF — resume point for a new chat (planning milestone 7: the LOSO harness + Exp A)
+# HANDOFF — resume point for a new chat (Milestone 7: LOSO harness + Exp A — code done, full run pending)
 
-_Written 2026-07-25, at **milestone 6 close**. M6 (the config-freeze gate) is fully
-implemented, committed, and tagged. Purpose: let a fresh Claude Code session **plan
-milestone 7 — the LOSO harness + fluid-loss regression (Experiment A)** without re-deriving
-context. **M7 is not yet planned** — no `plans/MILESTONE_7_PLAN.md` exists._
+_Written 2026-07-26. **M7 is code-complete and fully committed**; the only remaining work is the
+owner-gated **full-cohort Exp A run on IBEX** (which spends the config freeze), then reading the
+results and writing SECOND_CHAPTER §6. **The config freeze is INTACT — no outer-fold result has
+been inspected.**_
 
 ## TL;DR
 
-**M6 is DONE.** Branch **`v1_milestone_6`**, head **`357f734`**, annotated tag
-**`config-freeze-v1`** ("the complete A–G protocol… before any outer-fold result was
-inspected"). Full suite **576 passed / 17 skipped**; `test_no_leakage.py` byte-for-byte
-unchanged since M1 (`f3fbade`). Nothing pushed; nothing on `main`. **Next: plan M7** (write
-`plans/MILESTONE_7_PLAN.md` in the M2–M6 template style), then implement on a new
-`v1_milestone_7` branch. **M7 is the first modelling milestone** — it builds `eval/harness.py`
-+ `eval/metrics.py`, runs Exp A on both bands, and makes the torch mutation leg green. This is
-where "no outer-fold result inspected before the freeze" starts to be spent: after M7 produces
-outer results, later design changes are exploratory by definition (per the `config-freeze-v1`
-tag).
+Branch **`v1_milestone_7`**, head **`12610af`** (descends from `config-freeze-v1` = `357f734`).
+Nothing pushed; nothing on `main`. M7 built the fit-on-train-only nested-LOSO harness + Experiment
+A (session-level Δm% regression, both bands, vs the session-index-only baseline). **Full test
+suite green** (682 passed / 16 skipped at code-complete; additive tests since — REVISION fallback,
+77 GHz entrypoint config, fold-parallel equivalence — each re-run green; a fresh full run is
+advisable but nothing indicates breakage). **T18 is green**; `tests/test_no_leakage.py` changed
+only in the one pre-registered T18 hunk (byte-identical elsewhere). Both **mechanism-only smokes
+passed on IBEX** (the owner checkpoint), so the mechanism is proven end-to-end on real data with
+no performance value surfaced. **Next: the owner runs `MODE=full` on IBEX** (now fold-parallel),
+then send the two `metrics_exp_a_{band}.json` back to sanity-check and fill SECOND_CHAPTER §6.
 
 ## Read first (in this order)
 
-1. `CLAUDE.md` / `AGENTS.md` — hard invariants, code style, journal + file-hygiene rules.
-2. `plans/implementation_plan.md` — the source of truth. For M7: **§"LOSO harness, nested-CV
-   protocol, and no-leakage guarantee"** (the whole harness contract — outer/inner loops,
-   evaluability/N_eval, the staged search, seed handling, final refit, the fit-audit
-   artifact, and the `test_no_leakage.py` staging note), **§"Analysis unit — session-level
-   primary"**, **§Experiments A**, and **§Statistics** (the subject-cluster CIs Exp A reports).
-3. `plans/MILESTONE_6_PLAN.md` — what the freeze committed that M7 now consumes (the search
-   spaces, `eval/selection.py`'s tie-break, `protocol_freeze_guard`, the tuned-ε mechanics).
-4. `HISTORY.md` — **the newest entries** (the M6 implementation entry + the M6 Step-0 /
-   review entries). They carry the concrete M6 API M7 wires to.
+1. `CLAUDE.md` / `AGENTS.md` — hard invariants (LOSO subject-level; fit-on-train-only; no
+   test-set tuning; continuous primary target; frozen `test_no_leakage.py`), code style, journals.
+2. `HISTORY.md` — **the newest entries** (post-checkpoint parallelism + IBEX fixes; the checkpoint;
+   the M7 implementation entry). They carry the concrete why.
+3. `plans/MILESTONE_7_PLAN.md` — the reviewed plan (Codex⇄Claude loop closed); its §2 per-file
+   specs + the Step-0b owner decisions O1–O3 are what the code implements.
 
-## What M7 is (implementation_plan.md §Build order step 7)
+## What M7 built (all in `src/dehyd/` unless noted)
 
-**LOSO harness + fluid-loss regression (Exp A), session-level, on BOTH bands.** Build:
-- **`src/dehyd/eval/harness.py`** — the fit-on-train-only runner for sklearn **and** torch;
-  session-level inference; emits a **fit-audit artifact** per fold (every fitted quantity +
-  the subject set it was estimated from). Consumes folds ONLY from `eval/splits.py`.
-- **`src/dehyd/eval/metrics.py`** — regression MAE/RMSE/pooled-r, and the subject-cluster
-  bootstrap CI machinery Exp A reports (the full Exp H stats live at M10, but Exp A's headline
-  CIs are here).
-- **`experiments/run_regression.py`** — the Exp A entrypoint (session-level LOSO, both bands,
-  vs the session-index-only baseline), regenerable figure + metrics JSON + provenance.
+- **`eval/harness.py`** — the ONE generic nested-LOSO engine (sklearn). Folds only from
+  `eval/splits.py`; tie-break only via `eval/selection.py::select_candidate` (inner_fold_variance
+  = `np.std(ddof=0)`, owner O1); fail-closed `active`-completeness guard hook; pre-fit
+  fold-viability (unexpected errors propagate); per-seed outer outcomes; fit-audit incl.
+  `tuned_epsilon`; `tuned_epsilons(...)` train-only. Dataclasses `Dataset/FitRecord/InnerResult/
+  FoldResult`.
+- **`eval/metrics.py`** — `subject_balanced_mae` (M1-compatible, T17's 5.5 pin); own BCa
+  subject-cluster bootstrap (B=10000, percentile fallback, skip/unreliable bookkeeping); Wilcoxon.
+- **`eval/exp_a.py`** — the Exp A composition: `stage1/stage2_candidates`, `StoreBackedFeatures`,
+  `_run_single_fold` (picklable worker), `run_exp_a(config, band, sessions, store_dir, *, seeds,
+  session_index, n_workers)` (serial or `multiprocessing` spawn Pool — **bit-identical**),
+  `build_sessions`, `run_and_report` (validate → run → mechanism-only smoke vs full reporting),
+  `summarize_exp_a`, `write_exp_a_reports` (Agg scatter).
+- **`models/regressors.py`** (5 families + grids ≤ budget_k + per-family auditable fitted state,
+  incl. SVR support vectors + rf/gbm ensemble digest binding init_/lr), **`models/baselines.py`**
+  (session-index-only; O2 global-mean fallback; O3 config-level guard), **`models/torch_fit.py`**
+  (TinyMLP, true early stopping; the T18 target).
+- **`features/store.py`** + **`experiments/extract_features.py`** — per-session `.npz` store +
+  fingerprint (binds QC frame membership + build commit); fail-closed `validate_store` (incl.
+  store/analysis commit-match, C16); both producers refuse a dirty tree. `keep_raw` on both
+  extractions; `wst.apply_order_log(epsilon_by_order=…)`; `pooling.pool_stats_batch`.
+- **`tests/reference_procedure.py`** — rewritten as a thin adapter over `harness.py` (the frozen
+  leakage suite now exercises the real engine). **T18 activated** in `tests/test_no_leakage.py`.
+- **`experiments/run_regression.py`** — the Exp A entrypoint (`--band`, `--subset 6subjects` XOR
+  `--full-cohort`; mechanism-only smoke; reads `SLURM_CPUS_PER_TASK` → fold parallelism).
+- **`scripts/ibex/`** — `extract10.sbatch` / `extract77.sbatch` (store job arrays),
+  `run_exp_a.sbatch` (single CPU job, **defaults 16 cores / 64 G**, `BAND`/`MODE` env),
+  `submit_ibex.sh` (generic submit; captures clean commit, refuses dirty), `submit_extract77.sh`.
+- **`provenance.py`** — `DEHYD_GIT_COMMIT/_BRANCH/_DIRTY` env fallback + a **`REVISION`-file**
+  fallback (for copied non-git IBEX trees). `matplotlib` pinned (scipy stays <1.17).
 
-## The M6 machinery M7 must consume (do NOT re-derive)
+## The owner decisions folded in (Step 0b)
 
-- **Search spaces** `config.search_10ghz` / `search_77ghz` (band-keyed;
-  `SearchSpace{10,77}GHzConfig`) and `config.model_grid` (`ModelGridConfig`, per-family grids
-  each ≤ `budget_k = 12`).
-- **The staged selection algorithm** (MILESTONE_6_PLAN.md §2.1): **Stage 1** searches the
-  feature axes (reduction × channel × tiling × log × gate) with a **fixed ridge anchor**
-  (`stage1_anchor_ridge_alpha = 1.0`), fit on inner-training, **scored on inner-validation**;
-  **Stage 2** searches model family × grid on the Stage-1 winner. Tie-break is
-  **`eval/selection.py`'s `select_candidate`** (lower inner-val MAE → `simplicity_rank`
-  ridge<knn<svr<rf<gbm → `feature_dimension` → `inner_fold_variance`; non-finite filtered).
-  **Use it — do not re-implement the tie-break inline** (C6-30 caught exactly that drift).
-- **`protocol_freeze_guard(config, active=...)`** (`features/protocol_freeze.py`) — the
-  harness MUST call it immediately before any model fit or result write, with the `active`
-  per-fit protocol record populated **from the same enumeration loop that produced the fit**.
-  It composes the 77 GHz feature guard and validates each call-time axis against the whitelist.
-- **The tuned-ε log branch** (`on_tuned_eps`): compute the fold-local `ε_o = k·scale_o`
-  **train-only** (`k = 0.1`; `scale_o` = median-over-training-subjects of the per-subject mean
-  of `extraction._prelog_scale` over that subject's eligible training sessions; non-finite/
-  non-positive → fall back to `log_epsilon = 1e-6`). M5 ships the *application* path
-  (`apply_order_log_77`'s `epsilon_by_order`); M7 computes ε. **This is the one genuinely
-  fitted WST quantity — it must be train-only at every CV level.**
-- **Seed handling** (implementation_plan.md §"Inner loop"): 5 seeds; inner metric = mean over
-  seeds; outer = each seed scored separately, report mean ± sd, **never ensembled**.
+- **O1**: inner-fold-variance = population std `np.std(ddof=0)` (A-M7-2).
+- **O2**: baseline absent-time-index → global training-fold mean.
+- **O3**: K=1 baseline guarded at the config level (`protocol_freeze_guard(config)`), not a per-fit
+  WST `active` record.
+- **A-M7-1**: T18 activation is the one sanctioned edit to the frozen `test_no_leakage.py`.
 
-## The no-leakage rebind — the subtle M7 trap (read carefully)
+## IBEX run state + the workflow
 
-`tests/test_no_leakage.py` is **byte-for-byte frozen since M1** and imports its procedure
-from `tests/reference_procedure.py` (`run_nested_loso`, `fit_audit`, `Dataset`,
-`subject_balanced_mae`, `ALPHA_GRID`). At M1–M6 `reference_procedure.py` IS the procedure
-under test (a sklearn contract). **At M7 the leakage tests must rebind to the real
-`harness.py` WITHOUT editing the frozen test** — i.e. `reference_procedure.py` is rewritten
-to re-export/delegate to `harness.py`, so `harness.py` must satisfy that exact public
-contract. **Caveat:** both `test_no_leakage.py` and `reference_procedure.py` say "**M6**" for
-this rebind and for the torch leg — those comments predate the A-M5-2 renumber and mean the
-**current milestone 7**; the frozen test cannot be edited to fix the stale number, so treat
-"M6" there as "M7". The **torch fit path** enters `harness.py` at M7 and makes **T18** (the
-torch mutation leg, currently the only skipped mandatory test) green — required **before any
-torch result is reported**. The bit-for-bit mutation property must hold on a deterministic
-single-threaded CPU fixture at **both** CV levels.
+- **Stores:** built on IBEX for the smoke (6 subjects). **The FULL run needs the complete store**
+  (73 sessions 10 GHz / 72 sessions 77 GHz) — confirm/build with `extract10/77.sbatch` before
+  `MODE=full`.
+- **Smokes:** both bands PASSED (mechanism-only; `run_log_{band}.json`, no metrics). Checkpoint met.
+- **Full runs:** first attempt TIMED OUT at 4 h (serial ~8-16 h) → **fold parallelism added**;
+  16-core parallel run is ~1 fold's wall-time. **Not yet completed** — this is the pending step.
+- **Copied-tree gotcha:** the user copies folders to IBEX (private repo, no `git pull`), so:
+  create `REVISION` locally (`git rev-parse HEAD > REVISION`), copy it along, and run `.sbatch`
+  **directly** (not `submit_ibex.sh`). Or set `DEHYD_GIT_COMMIT` in the env. The `.venv` must have
+  **matplotlib** (the smokes didn't need it; the full run's scatter does).
+- **Commit-match friction (important):** `validate_store` requires the store's recorded commit ==
+  the run's. **Any code change moves the commit → the store must be rebuilt at the new commit**
+  (fast — parallel array). Sbatch-file-only changes do NOT affect this (commit comes from
+  REVISION/env, not the sbatch). This bit repeatedly; consider it before making code changes.
+
+**Run the full cohort (both bands):**
+```
+BAND=10ghz MODE=full sbatch --export=ALL scripts/ibex/run_exp_a.sbatch
+BAND=77ghz MODE=full sbatch --export=ALL scripts/ibex/run_exp_a.sbatch
+```
+Each writes `metrics_exp_a_{band}.json`, `predictions_{band}.csv`, `selection_table_{band}.csv`,
+`scatter_{band}.png` into `results/runs/<stamp>_<commit>/`. **This spends the freeze.**
+
+## Next step / open items
+
+1. **Owner runs `MODE=full` on IBEX** (both bands, parallel). Confirm complete stores first.
+2. **Read the results** — headline is radar session-balanced MAE vs the session-index baseline
+   (Wilcoxon + CI), selection-frequency table, per-subject r. Sanity-check they're sane.
+3. **Write SECOND_CHAPTER §6 "Results"** — the method/provenance is already written there; only
+   the numbers are pending.
+4. Then M7 DoD D10–D13 are met and the milestone closes. **Exp B (M8)** reuses this exact harness.
+5. **Optional efficiency** (before M8's many reruns): cache eligibility to skip the run-startup
+   full-cohort QC (like M5's survival CSV). Flagged, not done.
 
 ## Hard invariants (never violate — a failing check stops the build)
 
-- **LOSO** at subject level; no frame of a held-out subject in training, any session.
-- **Fit-on-train-only** (sklearn Pipeline AND torch: normalization/class-weights/sampler-
-  weights/early-stop all from inner-train, monitored on inner-val); **no test-set tuning**.
-- **Primary target continuous** (Δm%); session-level headline; per-frame numbers never carry
-  frame-IID CIs.
-- **`tests/test_no_leakage.py` stays byte-for-byte unmodified since M1** — the rebind happens
-  in `reference_procedure.py`/`harness.py`, never in the test.
-- **numpy backs ALL reported features**; torch WST frontend only after the cross-backend test.
-
-## Fixed at M6, NOT reopened at M7 (would need a prior authoritative amendment)
-
-- The order-2 log branch is **unconditional** for both bands (A-M6-1) — no pre-check.
-- 77 GHz Exp D baselines + the DC-vs-any-motion Doppler physics baseline (A-M6-2) — used at
-  **M9** (Exp D), not M7, but frozen now.
-- Exp C's family (b) = **Frank-Hall decomposition** over sklearn LogisticRegression (A-M6-5;
-  `statsmodels.OrderedModel` verified to lack `sample_weight`) — used at **M9**.
-- Budget-parity rule, every §3 constant (budget_k=12, k=0.1, the grids, DL hyperparameters).
-
-## Cohort state (what modelling rests on)
-
-- **10 GHz**: 73/80 sessions eligible, all 16 subjects; `results/wst/wst_diagnostics_10ghz.csv`.
-- **77 GHz**: 72/80 sessions eligible, **8966 analysis frames**, all 16 subjects;
-  `results/wst/wst_diagnostics_77ghz.csv`. Zero flatline cohort-wide.
-- **Exp G matched population = 65 sessions**, all 16 subjects (both bands eligible) — for M10.
-- The **77 GHz feature vectors themselves are not yet extracted** to a persistent store — only
-  the diagnostics CSV exists. Exp A on 77 GHz needs the session-level features; deciding
-  extract-on-the-fly vs a persistent cache (and where it runs — CPU/IBEX) is an M7 design item.
-
-## Environment / IBEX (working, established)
-
-- Env: `uv sync --frozen` (scipy pinned `<1.17`; run pytest via `uv run python -m pytest` —
-  `uv run pytest` hit a transient trampoline error this session). IBEX = CPU batch jobs;
-  `configs/ibex.yaml` is a paths-only overlay; the owner runs IBEX (no ssh from Claude).
-- **Known gap to fix BEFORE M7 re-extracts on the cluster:** `git.commit` records as `None` in
-  provenance on the compute nodes (the `safe.directory` fix didn't take). Resolve in the sbatch
-  env so M7's runs self-attest their revision.
+LOSO at subject level; fit-on-train-only at both CV levels; no test-set tuning; primary target
+continuous Δm%, session-level headline; folds only from `splits.py`; tie-break only via
+`select_candidate`; numpy backs all reported features; `protocol_freeze_guard` before every
+fit/write; `tests/test_no_leakage.py` unchanged except the one T18 hunk.
 
 ## Journal & hygiene
 
-- **HISTORY.md** newest-first, an entry per resolved step (failures kept). **SECOND_CHAPTER.md**
-  — §0–§4 (through 77 GHz front-end) + **§5 "The config freeze"** written; §6 = Exp A, filled
-  at M7. **HANDOFF.md** — update only when asked. Superseded material → `archive/`.
-- Branches `v1_milestone_1..6` local; **`v1_milestone_6` current at `357f734`, tag
-  `config-freeze-v1`**; nothing pushed, nothing on `main`. Commit only when the owner asks.
-  Start M7 on a new `v1_milestone_7` branch.
+**HISTORY.md** newest-first (post-checkpoint entry current). **SECOND_CHAPTER.md** §0–§5 written;
+**§6 method+provenance written, Results pending the full run**. **MILESTONE_7_PLAN.md** reviewed +
+closed. Branches `v1_milestone_1..7` local; `v1_milestone_7` @ `12610af`; nothing pushed, nothing
+on `main`. Commit only when the owner asks. Superseded material → `archive/`.

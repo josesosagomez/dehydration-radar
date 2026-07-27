@@ -836,7 +836,63 @@ weakening the strict single-point guard on the artifact path. The no-leakage tes
 byte-for-byte unchanged, as it must: this milestone adds no cross-validation code for it to
 exercise.
 
-## 6. Fluid-loss regression — Experiment A  *(fill at milestone 7)*
+## 6. Fluid-loss regression — Experiment A  *(method + provenance below; RESULTS pending the full-cohort run)*
+
+The milestone-7 harness and the Experiment-A driver are complete; the method and every design
+choice are settled and recorded here. **The headline numbers are deferred until the owner runs
+the full-cohort `MODE=full` job on IBEX** — that run produces the first outer-fold results and
+spends the config freeze. Fill the "Results" subsection from `metrics_exp_a_{band}.json` once it
+lands.
+
+### Method
+- **The harness (`eval/harness.py`).** One generic nested-LOSO engine used by both the reported
+  Exp A path and the frozen leakage suite. Outer = leave-one-subject-out over the evaluable
+  subjects; inner = subject-grouped `GroupKFold(min(5, n_train))`; selection metric = session-level
+  subject-balanced MAE (`eval/metrics.py::subject_balanced_mae`, the same statistic the leakage
+  suite pins to 5.5). Folds come only from `eval/splits.py`; the tie-break is only
+  `eval/selection.py::select_candidate`; `protocol_freeze_guard(config, active=…)` runs before
+  every fit, with a fail-closed completeness check on the per-fit protocol record.
+- **The staged search (per outer fold).** Stage 1 searches the feature axes at a fixed ridge
+  anchor (α = 1.0) — 10 GHz: reduction{A,B}×channel{mag,iq}×tiling{T1,T2,T3}×log{off,frozen,tuned}×
+  gate{(1,2),(0.9,3)} = 72 combos; 77 GHz: 1×1×3×3×1 = 9. Stage 2 searches model family × grid
+  (each ≤ budget_k = 12) at the Stage-1 winner. Seeds: the 5-seed set; inner metric = mean over
+  seeds; outer = each seed scored separately (mean ± sd, never ensembled).
+- **The tuned-ε branch — the one genuinely fitted WST quantity.** ε_o = 0.1·scale_o for orders
+  1,2, where scale_o = median-over-training-subjects of the per-subject mean of the stored
+  per-session pre-log scale; computed **fold-locally, train-only** (non-finite/non-positive →
+  fallback 1e-6). It is recorded in the fit-audit like any fitted quantity.
+- **The baseline.** Session-index-only (predict Δm% from time of day alone), K = 1, fit on
+  outer-training subjects; the absent-time-index rule is the owner-decided global-training-mean
+  fallback (O2). Reported as the pre-registered primary comparison.
+- **Statistics (`eval/metrics.py`).** Session-level MAE/RMSE, pooled and per-subject predicted-vs-
+  actual r (pooled r additionally on S1–S4), with a self-implemented subject-cluster **BCa**
+  bootstrap (B = 10000, percentile fallback recorded, undefined-metric skip-and-count with the
+  >5% unreliable flag) and the metric-type-aware seed-collapse rules; radar-vs-baseline via
+  Wilcoxon signed-rank + a cluster-bootstrap CI on the per-subject difference. All CIs labeled
+  conditional/exploratory.
+- **Reproducibility + performance.** All numeric work is single-threaded (`threadpool_limits(1)`)
+  and per-machine bit-reproducible. The 16 outer folds are independent, so they run in parallel
+  worker processes (each single-threaded) — proven byte-for-byte identical to the serial run, so
+  parallelism buys speed without touching the numbers.
+
+### Provenance of the choices
+- The whole A–G protocol was **frozen at the milestone-6 config-freeze gate** (tag
+  `config-freeze-v1`) *before* any outer-fold result existed; Exp A consumes that frozen search
+  space + statistics unchanged. Three protocol-gap completions were owner-decided at M7 (Step 0b):
+  the inner-fold-variance estimator = population std (O1, A-M7-2); the baseline absent-index rule
+  = global train mean (O2); the K=1 baseline guard path = config-level (O3).
+- **Feature store.** WST features are extracted once into a per-session store (npz + fingerprint
+  binding the exact QC frame membership + build commit) and validated fail-closed before a run —
+  10 GHz locally / job-array, 77 GHz on IBEX. The tuned-ε branch reconstructs from the stored raw
+  pre-log tensors per fold (why the store keeps them).
+- **Mechanism before results.** The pipeline was proven on both bands with mechanism-only smokes
+  (no performance value surfaced) before the freeze was spent — the deliberate M7 checkpoint.
+
+### Results  *(pending — fill from the full-cohort run)*
+_Awaiting `metrics_exp_a_10ghz.json` / `metrics_exp_a_77ghz.json` from the IBEX `MODE=full` runs:
+session-level MAE/RMSE/r (pooled + per-subject), the subject-cluster CIs, radar-vs-session-index
+baseline (Wilcoxon + CI), and the per-fold selection-frequency table. The key read is whether the
+radar beats the time-of-day baseline given the fasting-clock confound._
 
 ## 7. Clock-decoupling — Experiment B  *(fill at milestone 8)*
 
