@@ -7,7 +7,7 @@ Codex are in separate sessions and never talk directly. Codex writes comments; y
 the only one who edits the plan body.
 
 **The plan file under review** is named when you are invoked (e.g.
-`plans/MILESTONE_7_PLAN.md`). If no file is named, use the newest
+`plans/MILESTONE_8_PLAN.md`). If no file is named, use the newest
 `plans/MILESTONE_*_PLAN.md`.
 
 ## Starting the loop

@@ -7,7 +7,7 @@ written loop mediated **entirely through the plan file itself** — you and Clau
 separate sessions and never talk directly.
 
 **The plan file under review** is named when you are invoked (e.g.
-`plans/MILESTONE_7_PLAN.md`). If no file is named, use the newest
+`plans/MILESTONE_8_PLAN.md`). If no file is named, use the newest
 `plans/MILESTONE_*_PLAN.md`.
 
 **You never edit the plan body. You only write comments.** Claude is the only one who

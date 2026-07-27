@@ -4,6 +4,94 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-27 — M8 step 0.5 done: A-M8-1/A-M8-2 propagated into `implementation_plan.md`.
+
+Per the M8 plan's own build sequence (step 0.5, forced by review comment C9 — this must land
+*before* any other M8 source, so it is already part of the eventual clean-commit lineage and no
+later doc-only commit can invalidate it), added both amendments to the source of truth itself,
+not just the milestone plan: **A-M8-1** rewrites the Exp B Statistics bullet that named the
+equal-session aggregate "the single pre-specified primary test" while a different bullet defined
+the actual test form (Wilcoxon) on a different estimand — now resolved (session-weighted
+aggregate CI = primary, subject-weighted complete-case Wilcoxon = companion), with the
+2026-07-27/post-Exp-A chronology stated inline, not hidden. **A-M8-2** documents the
+previously-unstated empty-session bootstrap-replicate rule (skip-and-count, matching every other
+undefined-metric case in the same section). No other Exp B protocol text changed. Ready for
+implementation to begin at plan step 1.
+
+## 2026-07-27 — M8 plan (Exp B, clock-decoupling) written; Codex⇄Claude review closed — 25/25 comments applied, no debates, nothing deferred.
+
+`plans/MILESTONE_8_PLAN.md` written from `implementation_plan.md`'s frozen §B design
+(residualization, search-space reuse via A-M6-3, both estimands, Holm-4) plus two owner-approved
+completions decided today, **after** M7's full-cohort results were already visible: **A-M8-1**
+(primary = session-weighted aggregate difference CI, subject-weighted complete-case Wilcoxon as a
+companion — resolving a genuine contradiction between `implementation_plan.md:1218-1219` and
+`:1213-1217`) and **A-M8-2** (an empty-session bootstrap replicate is skipped-and-counted, not
+averaged over the survivors). Both completions are disclosed with their real post-Exp-A
+chronology throughout the plan, not folded into "frozen before Exp A" language — a distinction
+the review itself had to force through three separate rounds (C3, C10, C13) before every summary
+claim in the document was actually honest about it.
+
+Full Codex⇄Claude adversarial review loop ran to `REVIEW_COMPLETE`: **25 comments (C1–C25), all
+applied, zero withdrawn, zero debated, zero deferred to owner.** Substantive corrections, grouped:
+- **Protocol integrity** (C2–C4, C16): added an end-to-end synthetic-store outer-mutation
+  property for the real Exp B composition (not just fit-record mutation, which the first draft's
+  leakage test alone would have missed); added a run-level viability check so a globally-missing
+  session can't silently degrade the four-session primary to an unlabelled three-session mean;
+  made the session-specific variant's four p-values descriptive-only rather than quietly inventing
+  an undisclosed *third* post-Exp-A multiplicity completion on top of A-M8-1/A-M8-2.
+- **Reproducibility/provenance** (C1, C7, C9, C14–C15, C17, C19–C22): added a clean-commit +
+  store-rebuild gate before any run; moved the `implementation_plan.md` amendment-propagation to
+  *before* the clean commit so no later doc-only commit invalidates the store's commit-match
+  lineage; gave the session-specific variant's array/merge design `validate_store` enforcement
+  before every fit and fail-closed shard-lineage validation against a run-group's own provenance —
+  and, after two rounds of catching my own from-memory mistakes against `provenance.record_run`'s
+  actual source (wrong return value, missing required argument, an invented field, wrong `extra`
+  nesting), landed on a design verified line-by-line against the real code: correct `extra`
+  nesting, a genuine per-session fold manifest (satisfying `implementation_plan.md:1273-1276`'s
+  every-run requirement), and correct `data_dir` handling for 77 GHz.
+- **Compute/regenerability** (C6, C8, C11–C12, C18, C23–C25): redesigned the variant's execution
+  from a sequential loop into a genuine 4-task SLURM array with real cross-session concurrency;
+  removed all in-process exception-catching in favour of fail-loud propagation (only pre-defined
+  non-evaluability may degrade gracefully — the frozen C6/C21 doctrine, unchanged); gave the
+  variant the same regenerable-from-intermediate-artifacts outputs (predictions/selection-table/
+  dropped-folds CSVs, selection-frequency) every other experiment already produces; fixed two
+  SLURM-mechanics bugs in the submission wrapper (`#SBATCH` resource sizing can't vary by a
+  runtime `STAGE` in one shared file — parsed before the shell ever runs; `sbatch --parsable`'s
+  job-ID output needs normalizing before use in a path or `--dependency`).
+
+No comment was debated — every one was a genuine, applicable catch, several after I had already
+"fixed" a prior round's mistake and needed a second (or third) correction in the same area. Plan
+is ready for implementation pending owner approval; `v1_milestone_8` branches off
+`v1_milestone_7` @ `bda8e45`.
+
+## 2026-07-27 — M7 CLOSES: full-cohort Exp A complete on both bands — radar loses to the session-index-only baseline (negative result, config freeze spent).
+
+Owner ran `MODE=full` on IBEX, both bands, at commit `f36c4fb2` (clean, fold-parallel harness).
+Both completed cleanly — no errors, full cohort (73 sessions/16 subjects 10 GHz; 72 sessions/16
+subjects 77 GHz), 5 seeds — writing `metrics_exp_a_{band}.json` into `results/runs/`. **The
+config freeze is now spent; this is the first real outer-fold result inspected.**
+
+**Headline result: radar-based Exp A regression loses to the trivial session-index-only baseline,
+significantly, in both bands** — not the result the milestone hoped for, but a clean, valid,
+honestly-obtained one (freeze respected right up to this exact moment):
+- 10 GHz: subject-balanced MAE 0.469 [0.409, 0.568]; mean difference (radar − baseline)
+  **+0.200** [0.145, 0.260]; Wilcoxon p=3.05e-5.
+- 77 GHz: subject-balanced MAE 0.495 [0.404, 0.646]; mean difference **+0.216** [0.127, 0.296];
+  Wilcoxon p=7.6e-4.
+- Pooled predicted-vs-actual r centred near zero in both bands (10 GHz: −0.138 [−0.286, 0.075];
+  77 GHz: −0.153 [−0.407, 0.174]) — no reliable linear relationship either.
+- Selection tables show the search wasn't degenerate (knn/svr/gbm mixed across folds, mostly
+  log-tuned features) — this reads as a genuine negative result from a working harness, not a
+  pipeline bug.
+
+Because Exp A's target (raw Δm%) is structurally confounded with time-of-day (the fasting
+protocol), this result alone can't distinguish "no radar signal" from "signal present but
+swamped by the clock" — which is exactly what Experiment B (clock-decoupling,
+session-mean-residualized) was designed, and pre-registered *before* this result was seen, to
+test. Decided (with the owner) to hold off on writing SECOND_CHAPTER §6 until Exp B's result is
+in, so both experiments can be reported together with full context. M8 (Exp B) planned
+immediately after — see the entry above.
+
 ## 2026-07-26 — M7 post-checkpoint: full-cohort runs timed out (4 h) → fold-level parallelism added (bit-identical, ~8-16× faster); still awaiting the full run.
 
 After the checkpoint, the owner launched both `MODE=full` runs; **both hit TIMEOUT at the 4 h

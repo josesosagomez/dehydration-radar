@@ -1,119 +1,133 @@
-# HANDOFF — resume point for a new chat (Milestone 7: LOSO harness + Exp A — code done, full run pending)
+# HANDOFF — resume point for a new chat (Milestone 8: Exp B implementation starts here)
 
-_Written 2026-07-26. **M7 is code-complete and fully committed**; the only remaining work is the
-owner-gated **full-cohort Exp A run on IBEX** (which spends the config freeze), then reading the
-results and writing SECOND_CHAPTER §6. **The config freeze is INTACT — no outer-fold result has
-been inspected.**_
+_Written 2026-07-27. **M8's plan is fully written and reviewed; zero code has been written.**
+This chat's job is to implement `plans/MILESTONE_8_PLAN.md` starting at its step 1 (after the
+one-time setup below)._
 
 ## TL;DR
 
-Branch **`v1_milestone_7`**, head **`12610af`** (descends from `config-freeze-v1` = `357f734`).
-Nothing pushed; nothing on `main`. M7 built the fit-on-train-only nested-LOSO harness + Experiment
-A (session-level Δm% regression, both bands, vs the session-index-only baseline). **Full test
-suite green** (682 passed / 16 skipped at code-complete; additive tests since — REVISION fallback,
-77 GHz entrypoint config, fold-parallel equivalence — each re-run green; a fresh full run is
-advisable but nothing indicates breakage). **T18 is green**; `tests/test_no_leakage.py` changed
-only in the one pre-registered T18 hunk (byte-identical elsewhere). Both **mechanism-only smokes
-passed on IBEX** (the owner checkpoint), so the mechanism is proven end-to-end on real data with
-no performance value surfaced. **Next: the owner runs `MODE=full` on IBEX** (now fold-parallel),
-then send the two `metrics_exp_a_{band}.json` back to sanity-check and fill SECOND_CHAPTER §6.
+M7 closed with a **negative** headline result: full-cohort Exp A (radar-based fluid-loss
+regression) lost to the trivial session-index-only (time-of-day) baseline, significantly, in
+both bands. That result can't distinguish "no radar signal" from "signal present but swamped by
+the fasting-clock confound" — which is exactly what **Experiment B (clock-decoupling,
+session-mean-residualized)** was pre-registered, before Exp A's result was seen, to test.
+
+`plans/MILESTONE_8_PLAN.md` (Exp B) is written and went through a **full Codex⇄Claude adversarial
+review to `REVIEW_COMPLETE`: 25 comments (C1–C25), all applied, zero debated, zero deferred to the
+owner.** The plan is dense (~1450 lines) because the review caught real issues across many
+rounds — read it in full, not skimmed; the resolved-comment log at the bottom explains *why*
+almost every non-obvious design choice is the way it is. **No M8 source code exists yet.**
 
 ## Read first (in this order)
 
-1. `CLAUDE.md` / `AGENTS.md` — hard invariants (LOSO subject-level; fit-on-train-only; no
-   test-set tuning; continuous primary target; frozen `test_no_leakage.py`), code style, journals.
-2. `HISTORY.md` — **the newest entries** (post-checkpoint parallelism + IBEX fixes; the checkpoint;
-   the M7 implementation entry). They carry the concrete why.
-3. `plans/MILESTONE_7_PLAN.md` — the reviewed plan (Codex⇄Claude loop closed); its §2 per-file
-   specs + the Step-0b owner decisions O1–O3 are what the code implements.
+1. `CLAUDE.md` — hard invariants (LOSO subject-level; fit-on-train-only; no test-set tuning;
+   continuous primary target; frozen `test_no_leakage.py`), code style, journal rules.
+2. `HISTORY.md` — the newest three entries (M8 step-0.5 done; M8 plan+review closed; M7's actual
+   Exp A numbers, logged only just now since they'd been sitting unrecorded).
+3. `plans/MILESTONE_8_PLAN.md` — **the plan, in full.** §0 (scope, invariant, owner decisions),
+   §1 (build sequence — follow it in order), §2 (per-file specs — the actual contract to
+   implement), §3 (tests), §4 (DoD), §5 (traps — read before you hit them, not after), §6
+   (amendments), and the **resolved review log** at the very end (C1–C25) for the reasoning
+   behind anything that looks surprising in §0–§6.
+4. `plans/implementation_plan.md` §B and §Statistics — Exp B's frozen core design, now amended
+   (A-M8-1, A-M8-2) to match the plan.
 
-## What M7 built (all in `src/dehyd/` unless noted)
+## One-time setup before step 1 (not yet done — do this first)
 
-- **`eval/harness.py`** — the ONE generic nested-LOSO engine (sklearn). Folds only from
-  `eval/splits.py`; tie-break only via `eval/selection.py::select_candidate` (inner_fold_variance
-  = `np.std(ddof=0)`, owner O1); fail-closed `active`-completeness guard hook; pre-fit
-  fold-viability (unexpected errors propagate); per-seed outer outcomes; fit-audit incl.
-  `tuned_epsilon`; `tuned_epsilons(...)` train-only. Dataclasses `Dataset/FitRecord/InnerResult/
-  FoldResult`.
-- **`eval/metrics.py`** — `subject_balanced_mae` (M1-compatible, T17's 5.5 pin); own BCa
-  subject-cluster bootstrap (B=10000, percentile fallback, skip/unreliable bookkeeping); Wilcoxon.
-- **`eval/exp_a.py`** — the Exp A composition: `stage1/stage2_candidates`, `StoreBackedFeatures`,
-  `_run_single_fold` (picklable worker), `run_exp_a(config, band, sessions, store_dir, *, seeds,
-  session_index, n_workers)` (serial or `multiprocessing` spawn Pool — **bit-identical**),
-  `build_sessions`, `run_and_report` (validate → run → mechanism-only smoke vs full reporting),
-  `summarize_exp_a`, `write_exp_a_reports` (Agg scatter).
-- **`models/regressors.py`** (5 families + grids ≤ budget_k + per-family auditable fitted state,
-  incl. SVR support vectors + rf/gbm ensemble digest binding init_/lr), **`models/baselines.py`**
-  (session-index-only; O2 global-mean fallback; O3 config-level guard), **`models/torch_fit.py`**
-  (TinyMLP, true early stopping; the T18 target).
-- **`features/store.py`** + **`experiments/extract_features.py`** — per-session `.npz` store +
-  fingerprint (binds QC frame membership + build commit); fail-closed `validate_store` (incl.
-  store/analysis commit-match, C16); both producers refuse a dirty tree. `keep_raw` on both
-  extractions; `wst.apply_order_log(epsilon_by_order=…)`; `pooling.pool_stats_batch`.
-- **`tests/reference_procedure.py`** — rewritten as a thin adapter over `harness.py` (the frozen
-  leakage suite now exercises the real engine). **T18 activated** in `tests/test_no_leakage.py`.
-- **`experiments/run_regression.py`** — the Exp A entrypoint (`--band`, `--subset 6subjects` XOR
-  `--full-cohort`; mechanism-only smoke; reads `SLURM_CPUS_PER_TASK` → fold parallelism).
-- **`scripts/ibex/`** — `extract10.sbatch` / `extract77.sbatch` (store job arrays),
-  `run_exp_a.sbatch` (single CPU job, **defaults 16 cores / 64 G**, `BAND`/`MODE` env),
-  `submit_ibex.sh` (generic submit; captures clean commit, refuses dirty), `submit_extract77.sh`.
-- **`provenance.py`** — `DEHYD_GIT_COMMIT/_BRANCH/_DIRTY` env fallback + a **`REVISION`-file**
-  fallback (for copied non-git IBEX trees). `matplotlib` pinned (scipy stays <1.17).
+The working tree currently has **uncommitted changes on `v1_milestone_7`** (still checked out,
+HEAD `bda8e45`): `HISTORY.md`, `plans/implementation_plan.md`, `plans/review_prompt_claude.md`,
+`plans/review_prompt_codex.md` (modified), `plans/MILESTONE_8_PLAN.md` (new, untracked). These
+are all planning/journal edits — no source code. I deliberately did **not** create the
+`v1_milestone_8` branch or commit, since that's a git action the owner should trigger explicitly.
 
-## The owner decisions folded in (Step 0b)
+1. Confirm with the owner, then: `git checkout -b v1_milestone_8` (off `v1_milestone_7` @
+   `bda8e45`, per the plan's own ground rules), commit the planning docs as the baseline (e.g.
+   "M8: plan written and reviewed (REVIEW_COMPLETE, 25/25 applied)").
+2. Then follow `plans/MILESTONE_8_PLAN.md` §1's build sequence starting at **step 1** — step 0
+   (write+review the plan) and step 0.5 (propagate A-M8-1/A-M8-2 into `implementation_plan.md`)
+   are both **already done** in this session's uncommitted changes, about to become that baseline
+   commit.
 
-- **O1**: inner-fold-variance = population std `np.std(ddof=0)` (A-M7-2).
-- **O2**: baseline absent-time-index → global training-fold mean.
-- **O3**: K=1 baseline guarded at the config level (`protocol_freeze_guard(config)`), not a per-fit
-  WST `active` record.
-- **A-M7-1**: T18 activation is the one sanctioned edit to the frozen `test_no_leakage.py`.
+## What M8 (Exp B) builds — one-paragraph shape
 
-## IBEX run state + the workflow
+A residualized-target sibling of Exp A's harness: predict `Δm%(subj, session) − μ_s` (μ_s = the
+train-only session mean) instead of raw `Δm%`, so a good score requires tracking *between-subject*
+fluid-loss variation at a *fixed* clock time, not decoding the clock itself. Reuses Exp A's exact
+search space (A-M6-3) and most of its machinery unchanged; the one harness edit is a pluggable
+`score_fn` (`src/dehyd/eval/harness.py`) so Exp B's `equal_session_residual_mae` objective can
+drive selection without touching Exp A's path. New `src/dehyd/eval/exp_b.py` composes it. A
+frozen four-session-specific-models secondary variant runs last, as a genuine 4-task SLURM array
+(not a sequential loop) with its own run-group provenance and fail-closed shard validation.
 
-- **Stores:** built on IBEX for the smoke (6 subjects). **The FULL run needs the complete store**
-  (73 sessions 10 GHz / 72 sessions 77 GHz) — confirm/build with `extract10/77.sbatch` before
-  `MODE=full`.
-- **Smokes:** both bands PASSED (mechanism-only; `run_log_{band}.json`, no metrics). Checkpoint met.
-- **Full runs:** first attempt TIMED OUT at 4 h (serial ~8-16 h) → **fold parallelism added**;
-  16-core parallel run is ~1 fold's wall-time. **Not yet completed** — this is the pending step.
-- **Copied-tree gotcha:** the user copies folders to IBEX (private repo, no `git pull`), so:
-  create `REVISION` locally (`git rev-parse HEAD > REVISION`), copy it along, and run `.sbatch`
-  **directly** (not `submit_ibex.sh`). Or set `DEHYD_GIT_COMMIT` in the env. The `.venv` must have
-  **matplotlib** (the smokes didn't need it; the full run's scatter does).
-- **Commit-match friction (important):** `validate_store` requires the store's recorded commit ==
-  the run's. **Any code change moves the commit → the store must be rebuilt at the new commit**
-  (fast — parallel array). Sbatch-file-only changes do NOT affect this (commit comes from
-  REVISION/env, not the sbatch). This bit repeatedly; consider it before making code changes.
+## Owner decisions already baked into the plan (do not re-litigate)
 
-**Run the full cohort (both bands):**
-```
-BAND=10ghz MODE=full sbatch --export=ALL scripts/ibex/run_exp_a.sbatch
-BAND=77ghz MODE=full sbatch --export=ALL scripts/ibex/run_exp_a.sbatch
-```
-Each writes `metrics_exp_a_{band}.json`, `predictions_{band}.csv`, `selection_table_{band}.csv`,
-`scatter_{band}.png` into `results/runs/<stamp>_<commit>/`. **This spends the freeze.**
+- **A-M8-1**: primary = session-weighted aggregate difference CI
+  (`aggregate(radar) − aggregate(baseline)`); subject-weighted complete-case Wilcoxon = a
+  companion, never conflated with the primary. Resolves a genuine textual contradiction in
+  `implementation_plan.md`'s frozen Statistics section (now fixed there too, step 0.5).
+- **A-M8-2**: a bootstrap replicate that empties a session is skipped-and-counted, not averaged
+  over the survivors.
+- Both A-M8-1/A-M8-2 were decided **2026-07-27, after Exp A's results were visible** — disclosed
+  with that chronology throughout the plan, not folded into "frozen before Exp A" language. This
+  distinction is load-bearing; don't casually rephrase it back to "frozen before Exp A."
+- **Gating**: single-phase DoD, no owner-checkpoint pause before the full-cohort run — nothing
+  left to blind, since Exp B's *core* design (what runs, what data is used) was frozen before
+  Exp A, and A-M8-1/A-M8-2 are reporting/labelling completions, not data-use choices.
+- **Session-specific variant**: build it, but last (owner decision, Step 0 item 3) — honours the
+  frozen `session_specific_variant_enabled: true` config flag without letting it delay the
+  primary pooled result.
+- **Review**: full Codex⇄Claude loop, now closed. Do not reopen A-M8-1/A-M8-2 or any
+  already-resolved comment without a new, explicit owner decision.
 
-## Next step / open items
+## Traps worth knowing before you start (full list: plan §5, 26 traps)
 
-1. **Owner runs `MODE=full` on IBEX** (both bands, parallel). Confirm complete stores first.
-2. **Read the results** — headline is radar session-balanced MAE vs the session-index baseline
-   (Wilcoxon + CI), selection-frequency table, per-subject r. Sanity-check they're sane.
-3. **Write SECOND_CHAPTER §6 "Results"** — the method/provenance is already written there; only
-   the numbers are pending.
-4. Then M7 DoD D10–D13 are met and the milestone closes. **Exp B (M8)** reuses this exact harness.
-5. **Optional efficiency** (before M8's many reruns): cache eligibility to skip the run-startup
-   full-cohort QC (like M5's survival CSV). Flagged, not done.
+The three most likely to bite early: **(trap 2)** Exp B's evaluable-subject rule (≥1 eligible
+S1–S4 session) is not Exp A's (≥1 eligible session) — reusing Exp A's helper will crash once S0
+rows are filtered. **(trap 3)** S0 must be excluded at the session-spine level, not via Exp A's
+`abs(y_true) > 1e-9` heuristic, which is meaningless on residualized targets. **(traps 20–26)**
+every call into `provenance.record_run` was checked against its *actual* source after getting it
+wrong from memory twice during review — read `src/dehyd/provenance.py` yourself before writing
+the `--init-run-group` code, don't reconstruct its API from this handoff or from memory.
+
+## Next steps, in order
+
+1. **One-time setup** (above): branch, commit the planning baseline.
+2. Plan §1 **step 1**: pin current Exp A/harness behaviour (`inner_scores.tobytes()`, selected
+   candidate, `test_score` on a fixed synthetic-store fixture; `subject_cluster_bootstrap_pooled`'s
+   CI on a fixed fixture) — **before** touching anything, so "no behaviour change to Exp A's
+   path" is provable, not asserted, at steps 2 and 4.
+3. Steps 2–11 per the plan's build sequence table, in order. Each step names its acceptance tests
+   (§3) — keep them green before moving on.
+4. Full-cohort Exp B run, both bands, on IBEX (step 10) — no owner pause needed this time.
+5. Session-specific variant via `scripts/ibex/submit_exp_b_variant.sh` (step 10.5).
+6. HISTORY.md entries per resolved step (continuously, not batched) — a pattern already
+   established across M1–M7 and the M8 planning entries just added.
+7. Only once Exp B's real numbers are in: **write SECOND_CHAPTER.md together for both §6 (Exp A)
+   and §7 (Exp B)** — explicit owner decision (this session) to hold off on §6 alone despite Exp
+   A's numbers already being available, so both experiments get reported with full context
+   at once. Do not write §6 in isolation before Exp B lands.
+
+## Exp A's actual numbers (for §6, once you get there)
+
+10 GHz: subject-balanced MAE 0.469 [0.409, 0.568]; mean difference (radar − baseline) **+0.200**
+[0.145, 0.260], Wilcoxon p=3.05e-5; pooled r −0.138 [−0.286, 0.075]. 77 GHz: MAE 0.495 [0.404,
+0.646]; mean difference **+0.216** [0.127, 0.296], p=7.6e-4; pooled r −0.153 [−0.407, 0.174]. Full
+detail and selection tables: `HISTORY.md`'s "M7 CLOSES" entry and
+`results/runs/20260727T11{14,50}*_f36c4fb2/metrics_exp_a_{10,77}ghz.json`.
 
 ## Hard invariants (never violate — a failing check stops the build)
 
 LOSO at subject level; fit-on-train-only at both CV levels; no test-set tuning; primary target
 continuous Δm%, session-level headline; folds only from `splits.py`; tie-break only via
 `select_candidate`; numpy backs all reported features; `protocol_freeze_guard` before every
-fit/write; `tests/test_no_leakage.py` unchanged except the one T18 hunk.
+fit/write; `tests/test_no_leakage.py` unchanged except its one pre-registered T18 hunk (from M7 —
+**M8 makes zero changes to this file**, per its own §3).
 
 ## Journal & hygiene
 
-**HISTORY.md** newest-first (post-checkpoint entry current). **SECOND_CHAPTER.md** §0–§5 written;
-**§6 method+provenance written, Results pending the full run**. **MILESTONE_7_PLAN.md** reviewed +
-closed. Branches `v1_milestone_1..7` local; `v1_milestone_7` @ `12610af`; nothing pushed, nothing
-on `main`. Commit only when the owner asks. Superseded material → `archive/`.
+**HISTORY.md** newest-first, current through M8's plan/review closure and step 0.5.
+**SECOND_CHAPTER.md** §0–§5 written; §6 (Exp A) and §7 (Exp B) both **deliberately pending** —
+see "Next steps" item 7. **MILESTONE_8_PLAN.md** written, reviewed, `REVIEW_COMPLETE`, not yet
+implemented. **implementation_plan.md** amended (A-M8-1, A-M8-2) to match. Branches
+`v1_milestone_1..7` local; `v1_milestone_8` **not yet created** (see one-time setup). Nothing
+pushed, nothing on `main`. Commit only when the owner asks. Superseded material → `archive/`.

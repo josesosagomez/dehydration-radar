@@ -1210,15 +1210,38 @@ correspondence can be demonstrated.
   - *Aggregate CI (session-weighted):* within each subject-resample, **recompute the
     four per-session residual MAEs and average them with equal weight**; the bootstrap
     is over that session-weighted aggregate. This matches the reported primary aggregate.
+    **Empty-session replicate rule (A-M8-2, 2026-07-27 — completes an unstated edge
+    case; decided during M8 planning, after Exp A's full-cohort results were already
+    visible).** A bootstrap replicate that happens to omit every subject holding a given
+    session's remaining rows is **skipped and counted**, using the same
+    `n_skipped`/`unreliable`/`undefined_metric_skip_threshold_pct=5.0` machinery already
+    used for every other undefined-metric case above — never silently averaged over the
+    surviving three sessions, which would change the estimand mid-bootstrap without
+    recording it. This is not computation-neutral (it can move the CI on the rare
+    replicates where it fires) but is the only treatment consistent with how every other
+    undefined-metric value in this section is handled, not a choice made to favour a
+    particular result.
   - *Paired test (subject-weighted):* the per-subject scalar for Wilcoxon is each
     subject's **mean residual-MAE over its eligible S1–S4 sessions** (radar minus
     baseline); to keep the test's estimand clean this uses **complete cases** (subjects
     with all four S1–S4 sessions eligible), with the complete-case N reported. The two
     are presented as answering two different questions, not conflated.
-  - *Status & correction:* the **equal-session aggregate is the single pre-specified
-    primary test** for Exp B (radar vs baseline). The **four per-session S1–S4 results
-    are exploratory**, reported as a **Holm family of 4** — never elevated to primary by
-    picking the best session. (All Exp B p-values/CIs remain conditional per Statistics.)
+  - *Status & correction (A-M8-1, 2026-07-27 — resolves a genuine contradiction between
+    this bullet and the one above; decided during M8 planning, after Exp A's
+    full-cohort results were already visible).* This bullet's own text named the
+    equal-session aggregate "the single pre-specified primary test," but that aggregate
+    is session-weighted, while the paired-test bullet above defines the actual
+    significance-test form (Wilcoxon) on the subject-weighted, complete-case estimand —
+    the two cannot both be "the test." Resolved: **primary = the bootstrap CI on
+    `aggregate(radar) − aggregate(baseline)`, session-weighted**, matching this bullet's
+    own aggregate definition; **the subject-weighted complete-case Wilcoxon is a
+    companion, answering a different question, never conflated with the primary.** This
+    changes no computation — both quantities were already fully defined above and are
+    always reported together; it only assigns which one is labelled primary in the
+    write-up. The **four per-session S1–S4 results remain exploratory**, reported as a
+    **Holm family of 4** — never elevated to primary by picking the best session. (All
+    Exp B p-values/CIs remain conditional per Statistics.) Full detail:
+    `plans/MILESTONE_8_PLAN.md` §0/§6.
 - **How the "strongest baseline" is chosen — no double-dipping.** Two comparisons,
   both defined in advance:
   - **Pre-registered primary:** radar vs the **session-index-only** baseline (the
