@@ -1,133 +1,127 @@
-# HANDOFF — resume point for a new chat (Milestone 8: Exp B implementation starts here)
+# HANDOFF — resume point for a new chat (Milestone 8: Exp B — code complete, IBEX runs in progress)
 
-_Written 2026-07-27. **M8's plan is fully written and reviewed; zero code has been written.**
-This chat's job is to implement `plans/MILESTONE_8_PLAN.md` starting at its step 1 (after the
-one-time setup below)._
+_Written 2026-07-28. **All of M8's local code (plan steps 1-8) is implemented, tested, and
+committed. Steps 8.6-10.5 (rebuild feature stores, mechanism-only smoke, full-cohort run,
+session-specific variant) are IBEX-cluster-dependent and were handed to the owner to run
+directly — this chat has no ssh access.** Picking this up almost certainly means: check whether
+the owner's IBEX runs have finished and, if so, do step 11 (HISTORY.md entries for 8.6-10.5 from
+the real run logs, then SECOND_CHAPTER.md §6+§7 together — a standing owner decision, not
+optional)._
 
 ## TL;DR
 
-M7 closed with a **negative** headline result: full-cohort Exp A (radar-based fluid-loss
-regression) lost to the trivial session-index-only (time-of-day) baseline, significantly, in
-both bands. That result can't distinguish "no radar signal" from "signal present but swamped by
-the fasting-clock confound" — which is exactly what **Experiment B (clock-decoupling,
-session-mean-residualized)** was pre-registered, before Exp A's result was seen, to test.
+M8 (Exp B, clock-decoupling) plan steps 1-8 are done: the `harness.py` `score_fn` hook,
+`metrics.py`/`baselines.py` additions, the full `eval/exp_b.py` composition (residualizing
+provider, staged search, A-M8-1/A-M8-2 reporting, the session-specific secondary variant), and
+`experiments/run_clock_decoupling.py` + the three `scripts/ibex/*` artifacts. Committed as
+`81cec63` on `v1_milestone8` ("M8 steps 1-8: Exp B (clock-decoupling) implementation complete and
+green"). **Full repo suite: 767 passed, 16 pre-existing skips**, `tests/test_no_leakage.py`
+`git diff --exit-code`-clean.
 
-`plans/MILESTONE_8_PLAN.md` (Exp B) is written and went through a **full Codex⇄Claude adversarial
-review to `REVIEW_COMPLETE`: 25 comments (C1–C25), all applied, zero debated, zero deferred to the
-owner.** The plan is dense (~1450 lines) because the review caught real issues across many
-rounds — read it in full, not skimmed; the resolved-comment log at the bottom explains *why*
-almost every non-obvious design choice is the way it is. **No M8 source code exists yet.**
+Two real bugs were caught by the tests during implementation, both fixed and logged in
+HISTORY.md: `models/baselines.session_means` silently omitted a session from `dropped` when it
+had ZERO (not just <2) eligible training subjects, because it only iterated sessions present
+among the *training* rows; and a bash quoting quirk — an apostrophe inside a `${VAR:?message}`
+parameter expansion breaks bash's parser even within double quotes
+(`scripts/ibex/submit_exp_b_variant.sh`).
+
+**The owner is now running steps 8.6-10.5 on IBEX directly** (rebuild+validate both feature
+stores from commit `81cec63`; mechanism-only smoke both bands; full-cohort Exp B both bands; the
+session-specific variant both bands, via `scripts/ibex/submit_exp_b_variant.sh`). This chat
+stopped here — mid-IBEX-run — specifically to update the journal and prepare this handoff, per
+explicit owner request; it was not asked to wait for the runs to finish.
 
 ## Read first (in this order)
 
-1. `CLAUDE.md` — hard invariants (LOSO subject-level; fit-on-train-only; no test-set tuning;
-   continuous primary target; frozen `test_no_leakage.py`), code style, journal rules.
-2. `HISTORY.md` — the newest three entries (M8 step-0.5 done; M8 plan+review closed; M7's actual
-   Exp A numbers, logged only just now since they'd been sitting unrecorded).
-3. `plans/MILESTONE_8_PLAN.md` — **the plan, in full.** §0 (scope, invariant, owner decisions),
-   §1 (build sequence — follow it in order), §2 (per-file specs — the actual contract to
-   implement), §3 (tests), §4 (DoD), §5 (traps — read before you hit them, not after), §6
-   (amendments), and the **resolved review log** at the very end (C1–C25) for the reasoning
-   behind anything that looks surprising in §0–§6.
-4. `plans/implementation_plan.md` §B and §Statistics — Exp B's frozen core design, now amended
-   (A-M8-1, A-M8-2) to match the plan.
+1. `CLAUDE.md` — hard invariants, code style, journal rules (unchanged from prior milestones).
+2. `HISTORY.md` — the newest ~7 entries (M8 steps 1 through 8.5) for exactly what was built, what
+   broke and why, and the reasoning behind every non-obvious choice. Older M8 planning entries
+   below that only if you need the plan's own pre-implementation reasoning.
+3. `plans/MILESTONE_8_PLAN.md` — the plan (`REVIEW_COMPLETE`, 25/25 review comments applied), if
+   you need to check an implementation detail against its spec. §1's build-sequence table, §2's
+   per-file specs, §4's DoD, and §5's 26 traps are the sections you're most likely to actually
+   need; the resolved-review log (C1-C25) at the end explains *why* almost every non-obvious
+   design choice is the way it is.
+4. This file's "Next steps" below.
 
-## One-time setup before step 1 (not yet done — do this first)
+## What's actually done (implemented AND tested, not just planned)
 
-The working tree currently has **uncommitted changes on `v1_milestone_7`** (still checked out,
-HEAD `bda8e45`): `HISTORY.md`, `plans/implementation_plan.md`, `plans/review_prompt_claude.md`,
-`plans/review_prompt_codex.md` (modified), `plans/MILESTONE_8_PLAN.md` (new, untracked). These
-are all planning/journal edits — no source code. I deliberately did **not** create the
-`v1_milestone_8` branch or commit, since that's a git action the owner should trigger explicitly.
-
-1. Confirm with the owner, then: `git checkout -b v1_milestone_8` (off `v1_milestone_7` @
-   `bda8e45`, per the plan's own ground rules), commit the planning docs as the baseline (e.g.
-   "M8: plan written and reviewed (REVIEW_COMPLETE, 25/25 applied)").
-2. Then follow `plans/MILESTONE_8_PLAN.md` §1's build sequence starting at **step 1** — step 0
-   (write+review the plan) and step 0.5 (propagate A-M8-1/A-M8-2 into `implementation_plan.md`)
-   are both **already done** in this session's uncommitted changes, about to become that baseline
-   commit.
-
-## What M8 (Exp B) builds — one-paragraph shape
-
-A residualized-target sibling of Exp A's harness: predict `Δm%(subj, session) − μ_s` (μ_s = the
-train-only session mean) instead of raw `Δm%`, so a good score requires tracking *between-subject*
-fluid-loss variation at a *fixed* clock time, not decoding the clock itself. Reuses Exp A's exact
-search space (A-M6-3) and most of its machinery unchanged; the one harness edit is a pluggable
-`score_fn` (`src/dehyd/eval/harness.py`) so Exp B's `equal_session_residual_mae` objective can
-drive selection without touching Exp A's path. New `src/dehyd/eval/exp_b.py` composes it. A
-frozen four-session-specific-models secondary variant runs last, as a genuine 4-task SLURM array
-(not a sequential loop) with its own run-group provenance and fail-closed shard validation.
-
-## Owner decisions already baked into the plan (do not re-litigate)
-
-- **A-M8-1**: primary = session-weighted aggregate difference CI
-  (`aggregate(radar) − aggregate(baseline)`); subject-weighted complete-case Wilcoxon = a
-  companion, never conflated with the primary. Resolves a genuine textual contradiction in
-  `implementation_plan.md`'s frozen Statistics section (now fixed there too, step 0.5).
-- **A-M8-2**: a bootstrap replicate that empties a session is skipped-and-counted, not averaged
-  over the survivors.
-- Both A-M8-1/A-M8-2 were decided **2026-07-27, after Exp A's results were visible** — disclosed
-  with that chronology throughout the plan, not folded into "frozen before Exp A" language. This
-  distinction is load-bearing; don't casually rephrase it back to "frozen before Exp A."
-- **Gating**: single-phase DoD, no owner-checkpoint pause before the full-cohort run — nothing
-  left to blind, since Exp B's *core* design (what runs, what data is used) was frozen before
-  Exp A, and A-M8-1/A-M8-2 are reporting/labelling completions, not data-use choices.
-- **Session-specific variant**: build it, but last (owner decision, Step 0 item 3) — honours the
-  frozen `session_specific_variant_enabled: true` config flag without letting it delay the
-  primary pooled result.
-- **Review**: full Codex⇄Claude loop, now closed. Do not reopen A-M8-1/A-M8-2 or any
-  already-resolved comment without a new, explicit owner decision.
-
-## Traps worth knowing before you start (full list: plan §5, 26 traps)
-
-The three most likely to bite early: **(trap 2)** Exp B's evaluable-subject rule (≥1 eligible
-S1–S4 session) is not Exp A's (≥1 eligible session) — reusing Exp A's helper will crash once S0
-rows are filtered. **(trap 3)** S0 must be excluded at the session-spine level, not via Exp A's
-`abs(y_true) > 1e-9` heuristic, which is meaningless on residualized targets. **(traps 20–26)**
-every call into `provenance.record_run` was checked against its *actual* source after getting it
-wrong from memory twice during review — read `src/dehyd/provenance.py` yourself before writing
-the `--init-run-group` code, don't reconstruct its API from this handoff or from memory.
+- `src/dehyd/eval/harness.py`: keyword-only `score_fn`/`FeatureBundle.session_idx` hook, proven
+  bit-identical to pre-M8 behaviour via `tests/test_m8_pin.py` (a pin captured BEFORE any M8
+  edit, re-asserted after both the `metrics.py` and `harness.py` changes).
+- `src/dehyd/eval/metrics.py`: `per_session_residual_mae`, `equal_session_residual_mae`,
+  `holm_adjusted`, `_cluster_bootstrap_over_rows` (extracted from
+  `subject_cluster_bootstrap_pooled`, bit-identical), `session_weighted_bootstrap` (A-M8-1's
+  primary CI, A-M8-2's skip-and-count built in).
+- `src/dehyd/models/baselines.py`: `session_means`/`fit_session_mean_baseline`/
+  `predict_session_mean` — deliberately NO Exp-A-style global-mean fallback; a degenerate session
+  is dropped, never imputed.
+- `src/dehyd/eval/exp_b.py` (new, ~900 lines): the full composition — `build_sessions_b`
+  (S0-excluded), `evaluable_subjects_b`, `SessionResidualFeatures` (wraps
+  `exp_a.StoreBackedFeatures`), `run_exp_b`, `summarize_exp_b` (C4 run-level viability, C5
+  per-session `baseline_mae` as a CI, Holm-4), `write_exp_b_reports`, `run_and_report_b`, and the
+  session-specific variant (`run_exp_b_one_session`, `run_exp_b_session_specific`,
+  `summarize_variant_session`, `merge_session_specific_reports` with fail-closed shard-lineage
+  validation, `config_fingerprint`, `eligible_subjects_for_session`).
+- `src/dehyd/provenance.py`: `_fold_manifest` → public `fold_manifest` (docstring-only change
+  beyond the name; zero behaviour change, confirmed by `test_provenance.py`).
+- `experiments/run_clock_decoupling.py` (new CLI): the primary path (mirrors
+  `run_regression.py`) plus the entirely separate `--session-specific` path with its three
+  sub-flags (`--init-run-group`/`--session S --run-dir`/`--merge-sessions --run-dir`).
+- `scripts/ibex/run_exp_b.sbatch` (primary path, cloned from `run_exp_a.sbatch`),
+  `scripts/ibex/run_exp_b_variant.sbatch` (`STAGE=init|array|merge`, zero `#SBATCH` resource
+  directives — C24), `scripts/ibex/submit_exp_b_variant.sh` (the init→array→merge orchestration
+  wrapper, job-ID normalization — C25).
+- Tests: `test_m8_pin.py`, `test_exp_b.py` (34 tests — run half, report half, variant),
+  `test_run_clock_decoupling.py` (15), `test_exp_b_ibex_scripts.py` (5, incl. a `bash -n` syntax
+  gate over all three new shell artifacts), plus additions to `test_metrics.py`/
+  `test_baselines.py`/`test_harness.py`. All green individually and together with the full
+  pre-existing suite (767 passed, 16 pre-existing skips).
 
 ## Next steps, in order
 
-1. **One-time setup** (above): branch, commit the planning baseline.
-2. Plan §1 **step 1**: pin current Exp A/harness behaviour (`inner_scores.tobytes()`, selected
-   candidate, `test_score` on a fixed synthetic-store fixture; `subject_cluster_bootstrap_pooled`'s
-   CI on a fixed fixture) — **before** touching anything, so "no behaviour change to Exp A's
-   path" is provable, not asserted, at steps 2 and 4.
-3. Steps 2–11 per the plan's build sequence table, in order. Each step names its acceptance tests
-   (§3) — keep them green before moving on.
-4. Full-cohort Exp B run, both bands, on IBEX (step 10) — no owner pause needed this time.
-5. Session-specific variant via `scripts/ibex/submit_exp_b_variant.sh` (step 10.5).
-6. HISTORY.md entries per resolved step (continuously, not batched) — a pattern already
-   established across M1–M7 and the M8 planning entries just added.
-7. Only once Exp B's real numbers are in: **write SECOND_CHAPTER.md together for both §6 (Exp A)
-   and §7 (Exp B)** — explicit owner decision (this session) to hold off on §6 alone despite Exp
-   A's numbers already being available, so both experiments get reported with full context
-   at once. Do not write §6 in isolation before Exp B lands.
+1. **Check whether the owner's IBEX runs (steps 8.6-10.5) have finished.** Ask, or look for new
+   `results/runs/<stamp>_81cec63*/` directories containing `metrics_exp_b_{10,77}ghz.json` and,
+   after the merge stage, `session_specific_{10,77}ghz.json`. If they haven't finished, there is
+   genuinely nothing to do here yet except wait — do not re-derive, estimate, or guess numbers.
+2. Once real results exist: **write per-step HISTORY.md entries for 8.6/9/10/10.5** — store
+   rebuild+validate confirmation, the smoke pass (confirm no performance value surfaced), the
+   actual full-cohort numbers per band (primary aggregate CI, paired Wilcoxon, per-session
+   breakdown, `primary_viable`), and the variant's `completed_sessions`/per-session numbers —
+   continuously as each resolves, per CLAUDE.md, not batched into one entry.
+3. **Then, and only then, write SECOND_CHAPTER.md §6 (Exp A) and §7 (Exp B) TOGETHER.** This is
+   an explicit standing owner decision from M7/M8 (see HISTORY.md's "M7 CLOSES" entry), not
+   optional or reopenable without a new owner decision. §6's method/provenance subsections are
+   already written; only its "Results" subsection and all of §7 are pending — fill both from the
+   real numbers, in one pass. State the A-M8-1/A-M8-2 chronology plainly (both decided
+   2026-07-27, *after* Exp A's full-cohort results were already visible — plan §0/Step 0 item 1,
+   Step 0b, and resolved-review-log entries C3/C10 explain why this distinction is load-bearing
+   and must not be elided or folded into "frozen before Exp A" language).
+4. Do **not** reopen A-M8-1, A-M8-2, or any resolved plan comment (C1-C25) without a new,
+   explicit owner decision — same standing rule as every prior milestone's frozen choices.
+5. If a store `--validate`, a smoke run, or a full/variant run fails on IBEX: read the actual
+   error against `plans/MILESTONE_8_PLAN.md` §5's 26 traps before guessing at a fix. Traps 20-26
+   (the `record_run`/provenance contract) and 17/18 (`validate_store` enforcement) are the most
+   IBEX-orchestration-specific; everything this session's own test suite could exercise for those
+   paths is green, so a failure there most likely means something genuinely IBEX-specific (a
+   stale store, a wrong commit checked out, a resource/time-limit issue) rather than a logic bug.
 
-## Exp A's actual numbers (for §6, once you get there)
-
-10 GHz: subject-balanced MAE 0.469 [0.409, 0.568]; mean difference (radar − baseline) **+0.200**
-[0.145, 0.260], Wilcoxon p=3.05e-5; pooled r −0.138 [−0.286, 0.075]. 77 GHz: MAE 0.495 [0.404,
-0.646]; mean difference **+0.216** [0.127, 0.296], p=7.6e-4; pooled r −0.153 [−0.407, 0.174]. Full
-detail and selection tables: `HISTORY.md`'s "M7 CLOSES" entry and
-`results/runs/20260727T11{14,50}*_f36c4fb2/metrics_exp_a_{10,77}ghz.json`.
-
-## Hard invariants (never violate — a failing check stops the build)
+## Hard invariants (unchanged, never violate)
 
 LOSO at subject level; fit-on-train-only at both CV levels; no test-set tuning; primary target
 continuous Δm%, session-level headline; folds only from `splits.py`; tie-break only via
 `select_candidate`; numpy backs all reported features; `protocol_freeze_guard` before every
-fit/write; `tests/test_no_leakage.py` unchanged except its one pre-registered T18 hunk (from M7 —
-**M8 makes zero changes to this file**, per its own §3).
+fit/write; `tests/test_no_leakage.py` unchanged (confirmed `git diff --exit-code` clean as of
+commit `81cec63`, M8's own step-4 diff included).
 
 ## Journal & hygiene
 
-**HISTORY.md** newest-first, current through M8's plan/review closure and step 0.5.
-**SECOND_CHAPTER.md** §0–§5 written; §6 (Exp A) and §7 (Exp B) both **deliberately pending** —
-see "Next steps" item 7. **MILESTONE_8_PLAN.md** written, reviewed, `REVIEW_COMPLETE`, not yet
-implemented. **implementation_plan.md** amended (A-M8-1, A-M8-2) to match. Branches
-`v1_milestone_1..7` local; `v1_milestone_8` **not yet created** (see one-time setup). Nothing
-pushed, nothing on `main`. Commit only when the owner asks. Superseded material → `archive/`.
+**HISTORY.md** newest-first, current through M8 step 8.5. **SECOND_CHAPTER.md** §0-§5 written,
+§6 method/provenance written, §6 Results + all of §7 deliberately pending (see "Next steps" item
+3 — do not write §6 in isolation). **MILESTONE_8_PLAN.md** `REVIEW_COMPLETE`, plan steps 1-8
+implemented and committed, steps 8.6-11 not yet done (owner-run/IBEX-dependent). Branch
+`v1_milestone8`, HEAD `81cec63` at the time this was written, working tree clean. Whether
+`81cec63` has been pushed to `origin` is not verified from this session — the owner may have
+synced it to IBEX by push, pull, or a copied-tree workflow (`scripts/ibex/README.md`'s
+alternative for repos without git access on the cluster); check before assuming. Commit only when
+the owner asks.

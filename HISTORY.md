@@ -4,6 +4,24 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-28 — M8 step 8.5 done: clean M8 implementation commit on `v1_milestone8`.
+
+Owner confirmed (asked explicitly, per CLAUDE.md's commit policy). Staged and committed all of
+steps 1-8's source/test/journal changes as one commit (`81cec63`, on `v1_milestone8`, working
+tree clean afterward): the `harness.py`/`metrics.py`/`baselines.py`/`provenance.py` diffs, the
+new `eval/exp_b.py`, `experiments/run_clock_decoupling.py`, the three new `scripts/ibex/*`
+artifacts, and all seven new/modified test files (`test_m8_pin.py`, `test_exp_b.py`,
+`test_exp_b_ibex_scripts.py`, `test_run_clock_decoupling.py`, plus the `test_metrics.py`/
+`test_baselines.py`/`test_harness.py` additions). This is the commit `validate_store` will
+require the rebuilt feature stores (step 8.6) to match — no further code changes land before
+that rebuild, per the plan's own commit-match-lineage doctrine (C1).
+
+**Next (owner/IBEX-dependent, not further autonomous coding):** step 8.6 (rebuild + `--validate`
+both feature stores from this commit) and steps 9-10.5 (mechanism-only smokes, full-cohort runs,
+session-specific variant) all need real IBEX cluster access this session does not have (no ssh,
+per `scripts/ibex/README.md`'s own framing: "Claude has no ssh; the owner runs these"). Step 11
+(HISTORY/SECOND_CHAPTER §7) follows once real Exp B numbers exist.
+
 ## 2026-07-28 — M8 step 8 done: `experiments/run_clock_decoupling.py` (CLI) + `scripts/ibex/run_exp_b.sbatch` + `scripts/ibex/run_exp_b_variant.sbatch` + `scripts/ibex/submit_exp_b_variant.sh` — full repo suite green (767 passed, 16 pre-existing skips, `test_no_leakage.py` still `git diff --exit-code`-clean).
 
 Per plan §2.5. `run_clock_decoupling.py` mirrors `run_regression.py`'s primary-path shape exactly
