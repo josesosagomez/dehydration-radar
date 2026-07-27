@@ -1,15 +1,17 @@
 #!/bin/bash
 #SBATCH --job-name=dehyd-exp-a
 #SBATCH --time=04:00:00
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
 #SBATCH --output=logs/exp_a_%j.out
 #SBATCH --error=logs/exp_a_%j.err
 
 # Milestone 7 — run Experiment A (the staged nested-LOSO search) as a single CPU batch job.
-# The staged search + fold-local tuned-ε reconstruction is memory-heavy (many large raw
-# tensors materialised repeatedly); a shared local box can OOM-kill it mid-run. A compute
-# node with 32 G + 8 cores runs it comfortably and does not tie up the workstation.
+# run_regression parallelises the 16 independent outer folds across SLURM_CPUS_PER_TASK worker
+# processes (bit-identical to serial), so 16 cores runs all folds in one wave (~a single fold's
+# wall-time). Each worker holds its own fold's tuned-ε reconstruction in memory (the 77 GHz raw
+# tensors are the big ones), so 16 workers want ~64 G; bump --mem higher if 77 GHz OOMs. Override
+# per submit if a node is smaller, e.g. `sbatch --cpus-per-task=8 --mem=32G ...`.
 #
 # BAND and MODE are passed via env at submit time; the store for BAND must already be built
 # (extract10.sbatch / extract77.sbatch) at THIS commit.
@@ -22,7 +24,9 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 cd "${SLURM_SUBMIT_DIR:-.}"
 mkdir -p logs
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
+# Cosmetic: each worker re-pins to 1 thread (threadpool_limits) for determinism + no
+# oversubscription, so this job-level value is not what governs the math threads.
+export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-16}
 
 BAND=${BAND:-10ghz}
 MODE=${MODE:-smoke}
