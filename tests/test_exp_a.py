@@ -12,7 +12,7 @@ import pytest
 
 from dehyd.config import load_config
 from dehyd.data.sessions import SESSION_NAMES
-from dehyd.eval.exp_a import StoreBackedFeatures, run_exp_a
+from dehyd.eval.exp_a import run_exp_a
 from dehyd.features.pooling import aggregate_session, pool_stats_batch
 from dehyd.features.store import (
     order_key,
@@ -88,10 +88,10 @@ def _mutate_test_subject(store_dir, sessions, subject, seed=99):
         s["delta_m_pct"] = float(rng.normal() * 5 + 5)  # mutate the label too
 
 
-def _run(store_dir, sessions, config):
-    provider = StoreBackedFeatures("10ghz", sessions, store_dir, config)
+def _run(store_dir, sessions, config, n_workers=1):
     session_index = np.array([s["session_idx"] for s in sessions])
-    return run_exp_a(config, "10ghz", provider, seeds=(0,), session_index=session_index)
+    return run_exp_a(config, "10ghz", sessions, store_dir, seeds=(0,),
+                     session_index=session_index, n_workers=n_workers)
 
 
 def _fold(results, subject):
@@ -107,6 +107,27 @@ def test_exp_a_runs_the_staged_search_end_to_end(tmp_path, config):
         assert r.selected_family in ("ridge", "svr", "rf", "gbm", "knn")
         assert len(r.selected_feature_key) == 5  # 10 GHz feature key
         assert r.baseline_predictions.shape == r.test_predictions.shape
+
+
+def test_parallel_folds_are_bit_identical_to_serial(tmp_path, config):
+    """n_workers>1 runs the independent outer folds in parallel worker processes; the result
+    must be byte-for-byte the serial result (folds are independent + deterministic)."""
+    sessions = _make_sessions()
+    _write_store(tmp_path, sessions, config)
+    serial = _run(tmp_path, sessions, config, n_workers=1)
+    parallel = _run(tmp_path, sessions, config, n_workers=2)
+
+    assert [r.test_subject for r in serial] == [r.test_subject for r in parallel]
+    for rs, rp in zip(serial, parallel, strict=True):
+        assert rs.selected_feature_key == rp.selected_feature_key
+        assert rs.selected_family == rp.selected_family
+        assert rs.selected_params == rp.selected_params
+        assert rs.test_predictions.tobytes() == rp.test_predictions.tobytes()
+        assert rs.baseline_predictions.tobytes() == rp.baseline_predictions.tobytes()
+        for fs, fp in zip(rs.final_fits, rp.final_fits, strict=True):
+            assert fs.quantity == fp.quantity
+            for k in fs.params:
+                assert fs.params[k].tobytes() == fp.params[k].tobytes()
 
 
 def test_headline_path_outer_mutation_property(tmp_path, config):

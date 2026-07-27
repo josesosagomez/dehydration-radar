@@ -20,6 +20,7 @@ owner-gated `--full-cohort` run writes metrics / predictions / scatter.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -78,9 +79,12 @@ def main(argv=None) -> int:
     run_dir = run_path.parent
     print(f"provenance: {run_path}")
 
+    # Parallelise the independent outer folds across the node's cores (bit-identical result).
+    n_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))
+    print(f"workers   : {n_workers} (folds run in parallel; result is order-independent)")
     outputs = exp_a.run_and_report(
         config, args.band, sessions, config.paths.results_dir, run_dir,
-        mode=mode, analysis_commit=_git_info()["commit"],
+        mode=mode, analysis_commit=_git_info()["commit"], n_workers=n_workers,
     )
     for name, path in outputs.items():
         print(f"  {name:16s}: {path}")

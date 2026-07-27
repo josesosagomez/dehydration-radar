@@ -239,58 +239,79 @@ class ExpAFoldResult:
     final_fits: list
 
 
-def run_exp_a(config, band, provider: StoreBackedFeatures, *, seeds, session_index) -> list:
-    """Per outer fold: Stage 1 (feature axes at ridge anchor) → Stage 2 (family × grid) → refit;
-    plus the session-index-only baseline. `session_index` is the per-row time index (canonical
-    order), used by the baseline. Guard runs before every fit via `before_fit`."""
+def _run_single_fold(config, band, sessions, store_dir, session_index, fold, seeds) -> ExpAFoldResult:
+    """Run ONE outer fold end to end and return its ExpAFoldResult. Top-level + picklable so it
+    can run in a worker process. Builds its OWN store-backed provider (open npz handles are not
+    shareable across processes) and pins single-threaded math, so a fold's result is bit-identical
+    whether run serially or in parallel — the folds are independent and deterministic."""
+    from threadpoolctl import threadpool_limits
+
     from ..models.baselines import fit_session_index_baseline, predict_session_index
 
-    anchor = (config.search_10ghz if band == "10ghz" else config.search_77ghz).stage1_anchor_ridge_alpha
-    dataset = harness.Dataset(provider.subjects, np.zeros((len(provider.subjects), 1)), provider.y)
-    folds = harness.nested_loso_splits(dataset.subject_ids())
-
-    def before_fit(candidate):
-        active = dict(candidate.active)
-        require_complete_active(active)          # fail-closed completeness (C5)
-        protocol_freeze_guard(config, active=active)
-
-    results = []
-    from threadpoolctl import threadpool_limits
     with threadpool_limits(1):
-        for fold in folds:
-            if not fold.selectable:
-                continue
-            s1 = harness._score_candidates_on_fold(
-                stage1_candidates(config, band, anchor), fold, seeds, before_fit, provider.data_for
-            )
-            w1 = harness.select_stage_winner(s1)
-            s2 = harness._score_candidates_on_fold(
-                stage2_candidates(config, band, w1.feature_key, dict(w1.active)),
-                fold, seeds, before_fit, provider.data_for,
-            )
-            w2 = harness.select_stage_winner(s2)
-            final_fits, _, test_pred, _, seed_outcomes = harness._final_refit(
-                w2, fold, seeds, before_fit, provider.data_for
-            )
+        provider = StoreBackedFeatures(band, sessions, store_dir, config)
+        anchor = (config.search_10ghz if band == "10ghz" else config.search_77ghz).stage1_anchor_ridge_alpha
 
-            # session-index-only baseline (K=1), fit on the same outer-training subjects.
-            base = fit_session_index_baseline(
-                provider.subjects, session_index, provider.y, fold.train_subjects
-            )
-            test_rows = np.isin(provider.subjects, [fold.test_subject])
-            base_pred = predict_session_index(base.model, session_index[test_rows])
+        def before_fit(candidate):
+            active = dict(candidate.active)
+            require_complete_active(active)          # fail-closed completeness (C5)
+            protocol_freeze_guard(config, active=active)
 
-            results.append(ExpAFoldResult(
-                test_subject=fold.test_subject,
-                selected_feature_key=w2.feature_key,
-                selected_family=w2.family,
-                selected_params=w2.params(),
-                test_predictions=test_pred,
-                test_targets=provider.y[test_rows],
-                seed_outcomes=seed_outcomes,
-                baseline_predictions=base_pred,
-                final_fits=final_fits + [base.fit_record],
-            ))
+        s1 = harness._score_candidates_on_fold(
+            stage1_candidates(config, band, anchor), fold, seeds, before_fit, provider.data_for
+        )
+        w1 = harness.select_stage_winner(s1)
+        s2 = harness._score_candidates_on_fold(
+            stage2_candidates(config, band, w1.feature_key, dict(w1.active)),
+            fold, seeds, before_fit, provider.data_for,
+        )
+        w2 = harness.select_stage_winner(s2)
+        final_fits, _, test_pred, _, seed_outcomes = harness._final_refit(
+            w2, fold, seeds, before_fit, provider.data_for
+        )
+
+        # session-index-only baseline (K=1), fit on the same outer-training subjects.
+        base = fit_session_index_baseline(
+            provider.subjects, session_index, provider.y, fold.train_subjects
+        )
+        test_rows = np.isin(provider.subjects, [fold.test_subject])
+        base_pred = predict_session_index(base.model, session_index[test_rows])
+
+        return ExpAFoldResult(
+            test_subject=fold.test_subject,
+            selected_feature_key=w2.feature_key,
+            selected_family=w2.family,
+            selected_params=w2.params(),
+            test_predictions=test_pred,
+            test_targets=provider.y[test_rows],
+            seed_outcomes=seed_outcomes,
+            baseline_predictions=base_pred,
+            final_fits=final_fits + [base.fit_record],
+        )
+
+
+def run_exp_a(config, band, sessions, store_dir, *, seeds, session_index, n_workers=1) -> list:
+    """Per outer fold: Stage 1 (feature axes at ridge anchor) → Stage 2 (family × grid) → refit,
+    plus the session-index-only baseline. The outer folds are independent, so with `n_workers>1`
+    they run in parallel worker processes (each single-threaded) and the results are reassembled
+    in canonical test-subject order — **bit-identical to the serial run**, just faster. Guard runs
+    before every fit inside each fold. Folds come only from `splits.py`."""
+    subjects = sorted({int(s["subject"]) for s in sessions})
+    folds = [f for f in harness.nested_loso_splits(subjects) if f.selectable]
+    tasks = [(config, band, sessions, store_dir, session_index, fold, seeds) for fold in folds]
+
+    if n_workers <= 1 or len(tasks) <= 1:
+        results = [_run_single_fold(*t) for t in tasks]
+    else:
+        import multiprocessing as mp
+
+        # spawn (not fork): a clean worker with no inherited open npz handles or BLAS state, so
+        # behaviour is identical on Linux (IBEX) and elsewhere.
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(processes=min(n_workers, len(tasks))) as pool:
+            results = pool.starmap(_run_single_fold, tasks)
+
+    results.sort(key=lambda r: r.test_subject)   # deterministic order regardless of completion
     return results
 
 
@@ -497,24 +518,25 @@ def expected_fingerprints(config, band, sessions):
     return out
 
 
-def run_and_report(config, band, sessions, store_dir, run_dir, *, mode, analysis_commit) -> dict:
+def run_and_report(config, band, sessions, store_dir, run_dir, *, mode, analysis_commit, n_workers=1) -> dict:
     """Validate the store, run Exp A, and cross the reporting boundary.
 
     `mode="full"` writes every performance artifact; `mode="smoke"` is MECHANISM-ONLY — it
     runs the identical search/scoring path but surfaces NO performance value (no metrics,
     predictions, scatter, or selection table), writing only a structural run-log. In both
-    modes it asserts train/val/test disjointness and full fit-audit coverage. Returns
-    {name: path} for full, or {"run_log": path} for smoke."""
+    modes it asserts train/val/test disjointness and full fit-audit coverage. `n_workers>1`
+    parallelises the independent outer folds (bit-identical result). Returns {name: path} for
+    full, or {"run_log": path} for smoke."""
     import json
     from pathlib import Path
 
     store_mod.validate_store(band, store_dir, expected_fingerprints(config, band, sessions),
                              analysis_commit=analysis_commit)
-    provider = StoreBackedFeatures(band, sessions, store_dir, config)
     session_index = np.array([s["session_idx"] for s in sessions])
-    results = run_exp_a(config, band, provider, seeds=config.run.seed_set, session_index=session_index)
+    results = run_exp_a(config, band, sessions, store_dir, seeds=config.run.seed_set,
+                        session_index=session_index, n_workers=n_workers)
 
-    _assert_mechanism_ok(results, provider, sessions)  # structural, not performance
+    _assert_mechanism_ok(results, sessions)  # structural, not performance
 
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -532,9 +554,9 @@ def run_and_report(config, band, sessions, store_dir, run_dir, *, mode, analysis
     return paths
 
 
-def _assert_mechanism_ok(results, provider, sessions) -> None:
+def _assert_mechanism_ok(results, sessions) -> None:
     """Structural checks that don't reveal performance: fold-role disjointness + audit coverage."""
-    folds = harness.nested_loso_splits(sorted(set(provider.subjects.tolist())))
+    folds = harness.nested_loso_splits(sorted({int(s["subject"]) for s in sessions}))
     for fold in folds:
         if not fold.selectable:
             continue
