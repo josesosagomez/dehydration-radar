@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -278,22 +279,59 @@ def _run_single_fold_b(config, band, sessions, store_dir, fold, seeds) -> ExpBFo
         )
 
 
+_POLL_INTERVAL_S = 1     # how often we check for newly-finished tasks (responsive, not a log cadence)
+_PROGRESS_INTERVAL_S = 60  # minimum spacing between heartbeat lines when nothing has finished yet
+
+
 def _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_workers) -> list[ExpBFoldResult]:
     """Shared fold-parallel execution: build folds over `subjects`, run each independently
     (serially, or via a spawn-context Pool), reassemble in canonical test-subject order. Used
     by BOTH the pooled model (`run_exp_b`) and each session-specific search
-    (`run_exp_b_one_session`) -- one execution strategy, not two."""
+    (`run_exp_b_one_session`) -- one execution strategy, not two.
+
+    Prints a progress line to stdout whenever a fold completes, and at least every
+    _PROGRESS_INTERVAL_S seconds even if none have, so an IBEX job's log shows the process is
+    alive rather than going silent for the whole search. With n_workers roughly equal to the
+    fold count, all folds are dispatched together and tend to FINISH together too -- so a
+    print-on-completion line alone would show nothing until the very end; the timer is what
+    actually distinguishes "still running" from "stuck". Polling itself (_POLL_INTERVAL_S) is
+    kept short so this adds negligible latency on fast (e.g. test) workloads -- only the print
+    cadence is throttled to _PROGRESS_INTERVAL_S."""
     folds = [f for f in harness.nested_loso_splits(subjects) if f.selectable]
     tasks = [(config, band, sessions, store_dir, fold, seeds) for fold in folds]
+    n_total = len(tasks)
+    start = time.monotonic()
 
-    if n_workers <= 1 or len(tasks) <= 1:
-        results = [_run_single_fold_b(*t) for t in tasks]
+    if n_workers <= 1 or n_total <= 1:
+        results = []
+        for task in tasks:
+            results.append(_run_single_fold_b(*task))
+            print(f"[exp_b progress] {len(results)}/{n_total} folds done "
+                  f"(test_subject={results[-1].test_subject}), elapsed={time.monotonic() - start:.0f}s",
+                  flush=True)
     else:
         import multiprocessing as mp
 
         ctx = mp.get_context("spawn")
-        with ctx.Pool(processes=min(n_workers, len(tasks))) as pool:
-            results = pool.starmap(_run_single_fold_b, tasks)
+        n_procs = min(n_workers, n_total)
+        with ctx.Pool(processes=n_procs) as pool:
+            pending = [pool.apply_async(_run_single_fold_b, t) for t in tasks]
+            print(f"[exp_b progress] {n_total} folds dispatched across {n_procs} workers", flush=True)
+            results = []
+            last_print = start
+            while pending:
+                still_pending, newly_done = [], []
+                for r in pending:
+                    (newly_done if r.ready() else still_pending).append(r)
+                pending = still_pending
+                results.extend(r.get() for r in newly_done)   # re-raises a worker's exception, if any (C12)
+                now = time.monotonic()
+                if newly_done or now - last_print >= _PROGRESS_INTERVAL_S:
+                    print(f"[exp_b progress] {len(results)}/{n_total} folds done, "
+                          f"elapsed={now - start:.0f}s", flush=True)
+                    last_print = now
+                if pending:
+                    time.sleep(_POLL_INTERVAL_S)
 
     results.sort(key=lambda r: r.test_subject)
     return results
