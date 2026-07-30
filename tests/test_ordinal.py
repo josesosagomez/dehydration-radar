@@ -18,6 +18,7 @@ implementation fails:
 
 import numpy as np
 import pytest
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import Ridge
 
 from dehyd.config import ExpCConfig
@@ -311,6 +312,16 @@ def test_frank_hall_raises_on_a_single_class_binary_target():
     y2 = two_column_y([0.0, 1.0, 2.0, 3.0], [0, 0, 1, 1])
     with pytest.raises(OrdinalViabilityError, match="k=1"):
         FrankHallOrdinal(1.0).fit(x, y2)
+
+
+def test_frank_hall_convergence_warning_fails_the_fit():
+    """A non-converged binary threshold must stop the ordinal fit, not merely warn and
+    leave approximate coefficients available for a reported result. `max_iter=1`
+    deterministically exhausts lbfgs on this fixture; the frozen production bound remains
+    1000 and is unchanged."""
+    x, y2, _ = _separable_frank_hall_fixture()
+    with pytest.raises(ConvergenceWarning):
+        FrankHallOrdinal(1.0, max_iter=1).fit(x, y2)
 
 
 def test_frank_hall_fits_are_bit_deterministic():

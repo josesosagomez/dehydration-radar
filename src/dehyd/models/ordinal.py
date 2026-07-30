@@ -36,8 +36,11 @@ knn, which sklearn gives no `sample_weight` and which the freeze lists in
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from sklearn.base import BaseEstimator
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 
 # The frozen S0-S4 grid (implementation_plan.md §C). K-1 = 4 Frank-Hall thresholds.
@@ -189,8 +192,9 @@ class FrankHallOrdinal(BaseEstimator):
 
     K-1 = 4 independent binary logistic fits on the targets `1[class > k]`, each carrying
     the same train-only inverse-frequency class weights. `max_iter = 1000` is a solver
-    convergence bound, not a tuned quantity — and it is deliberately NOT wrapped in a
-    warning filter: a ConvergenceWarning from lbfgs surfaces rather than being suppressed.
+    convergence bound, not a tuned quantity. A `ConvergenceWarning` from lbfgs is promoted
+    to an exception: a non-converged threshold fit must stop the run, never contribute
+    coefficients to a reported result.
     """
 
     # The A-M6-5 implementation tag that `ExpCConfig.proportional_odds_impl` names. Written
@@ -217,7 +221,9 @@ class FrankHallOrdinal(BaseEstimator):
                     f"{sorted(set(classes.tolist()))}) — this fold does not cover S0-S4"
                 )
             clf = LogisticRegression(C=self.C, solver="lbfgs", max_iter=self.max_iter)
-            clf.fit(X, binary, sample_weight=self.class_weights_)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", ConvergenceWarning)
+                clf.fit(X, binary, sample_weight=self.class_weights_)
             self.classifiers_.append(clf)
         return self
 
