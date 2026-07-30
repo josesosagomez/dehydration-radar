@@ -4,6 +4,7 @@
 # Raw data: anchored to the repo root, so it never swallows src/dehyd/data/.
 /data*/
 logs*/
+review*/
 
 # A copied-tree revision stamp (git rev-parse HEAD > REVISION), read by provenance when
 # there is no .git — e.g. IBEX, where the private repo is copied, not cloned. Never

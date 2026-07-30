@@ -1,126 +1,150 @@
-# HANDOFF — resume point for a new chat (Milestone 8 CLOSED; Milestone 9 not yet planned)
+# HANDOFF — resume point for a new chat (M9 plan REVIEWED and FINAL; implementation starts now)
 
-_Written 2026-07-30. **Milestone 8 (Exp B, clock-decoupling) is fully complete — plan steps 1-11
-all done, both bands, real IBEX results in hand and written up.** Picking this up almost certainly
-means: start planning Milestone 9 (Experiments C/D — ordinal classification + baselines), the next
-unplanned work. There is one pre-M9 decision already made and recorded that MUST be folded into
-that plan (see "Next steps" item 2) — do not miss it by planning from ROADMAP.md/
-implementation_plan.md alone without reading the note called out below._
+_Written 2026-07-30, closing the M9 plan-review chat. The next chat's job is: **implement
+milestone 9 by following `plans/MILESTONE_9_PLAN.md`**, starting at its step 0.5. The plan is
+the specification — read it in full before touching source, and do not re-litigate its
+decisions. The review loop is DONE (24 comments, all applied, no open threads); there is no
+reviewer to talk to and nothing left to adjudicate._
 
 ## TL;DR
 
-M8 is done. Both Experiment A (fluid-loss regression, full cohort) and Experiment B
-(clock-decoupling, full cohort + session-specific variant) have real, final results, both bands,
-written into `SECOND_CHAPTER.md` §6+§7 and logged step-by-step in `HISTORY.md`. **The headline is
-negative for both experiments, in both bands:** radar does not beat the trivial time-of-day
-(Exp A) or session-mean (Exp B) baselines in this cohort — 10 GHz loses significantly in both
-experiments; 77 GHz loses significantly in Exp A but shows no significant difference either way
-in Exp B (more consistent with "Exp A's loss was mostly the clock confound" for that band
-specifically). This is reported in full as the plan required, not softened.
-
-Along the way, two real IBEX-only operational bugs were found and fixed (git-free
-`submit_exp_b_variant.sh` for the owner's copied-tree — no `.git` — deployment; a progress
-heartbeat added to `_run_folds_parallel` so long jobs' logs don't look hung) — both are in commit
-`e88fd33`. A **separate, not-yet-resolved wrinkle**: that commit doesn't match the feature stores'
-build commit (`30c6d907ca6f293f72db73517dc585bc39ec8e66`), so the *deployed* `src/dehyd/eval/
-exp_b.py` on IBEX right now is deliberately the older, no-heartbeat version (see HISTORY.md's
-2026-07-29 step-10.5 entry for the full reasoning) — the heartbeat feature is real, committed, and
-in the codebase, just not live on IBEX until the stores are next rebuilt at a commit that includes
-it. Nothing to do about this now; it's just a fact worth knowing before assuming what code is
-actually running there.
-
-There's also a **pre-M9 planning decision already made**, not yet acted on: the owner wants an
-additional, deliberately-leaky, exploratory frame-level random-split (k=5) evaluation alongside
-LOSO for every Exp C/D result — see "Next steps" item 2.
-
-**Working tree has uncommitted changes** (`HISTORY.md`, `SECOND_CHAPTER.md`,
-`plans/implementation_plan.md`) — the M8-closing journal entries and the pre-M9 note. **Not
-committed** — commit only on explicit owner request, per standing project rule. (There is also a
-long-standing unrelated deletion, `results/preprocess/preprocess_diagnostics_10ghz.csv`, present
-in git status since before this chat started — not something this session touched; leave it
-alone unless the owner raises it.)
+- **M8 is fully closed.** Negative headline in both experiments, both bands. The authoritative
+  write-up is `SECOND_CHAPTER.md` §6-§7 — never re-derive those numbers from memory.
+- **`plans/MILESTONE_9_PLAN.md` is final** (still untracked). It covers Exp C (ordinal 5-class,
+  both bands), Exp D (raw/matched 1D-CNN, raw/matched spectrogram 2D-CNN, physics power-ratio,
+  session-index + the frozen comparison statistics), store schema v2, and the owner's sanctioned
+  exploratory frame-split (deliberately leaky, never reported). Review block at the end reads
+  `REVIEW-STATUS: REVIEW_COMPLETE`, turn 9, reviewer `NO MORE COMMENTS`.
+- **Every decision is resolved. Nothing is pending.** Step 0 (A-M9-1, frame-split = modal-config
+  refit, CNN = 16-task GPU fold-array), Step 0b (O-M9-1..7), and the review-derived **O-M9-8
+  (owner-approved 2026-07-30 as option 8a)**. The one optional item the owner has NOT authorized:
+  Exp A's radar regressor in the exploratory frame split — excluded by design, do not add it.
+- **All of those were decided AFTER Exp A/B's negative results were visible.** The plan discloses
+  that chronology deliberately (the A-M8-1 discipline). Never fold it into "frozen before
+  results" — not in code comments, not in the journal, not in SECOND_CHAPTER §8.
+- **Step 0.5 has NOT been done.** It is the first action of the next chat: propagate A-M9-1 and
+  O-M9-1..8 into `plans/implementation_plan.md` before any source. The plan's step-0.5 row names
+  the exact destination section for each item.
 
 ## Read first (in this order)
 
-1. `CLAUDE.md` — hard invariants, code style, journal rules (unchanged).
-2. `HISTORY.md` — the newest ~6 entries (2026-07-30's two entries, then M8 steps 10.5/10/9/8.6)
-   for exactly what happened, what broke and why, and the real numbers. Older M8 entries below
-   that only if you need earlier reasoning (e.g. why A-M8-1/A-M8-2 were decided the way they
-   were).
-3. `SECOND_CHAPTER.md` §6 (Exp A) and §7 (Exp B) — the full, final, real-numbers write-up. This is
-   the authoritative account of what M8 (and M7's Exp A) actually found; read it before citing any
-   number from memory.
-4. `plans/implementation_plan.md` — the note right after the Exp D baseline specs (before §E),
-   headed "Owner-requested addition, pre-M9 (decided 2026-07-30)" — the frame-split decision, see
-   below. This is the one thing most likely to get missed if M9 planning starts from ROADMAP.md
-   alone.
-5. This file's "Next steps" below.
+1. `plans/MILESTONE_9_PLAN.md` — the whole thing. §1 is the build order, §2 the per-file specs
+   (signatures are the contract), §3 the test groups, §4 the definition of done, §5 the 20 known
+   traps, §6 the amendments/completions with their chronology.
+2. `CLAUDE.md` — invariants, code style (readable research code, no premature abstraction),
+   journal rules.
+3. HISTORY.md — the two newest entries (the review loop + O-M9-8; and the M9 planning entry).
+   Nothing older unless you need a specific value.
+4. `plans/implementation_plan.md` §C / §D / §Statistics — only the sections you are implementing,
+   as you reach them. The plan cites exact line ranges throughout.
 
-## What's actually done
+## The review changed the plan substantively — do not implement from a stale mental model
 
-- **M8 plan steps 1-11, all complete** (`plans/MILESTONE_8_PLAN.md`, `REVIEW_COMPLETE`). Code
-  committed at `81cec63` (steps 1-8); operational fixes at `e88fd33` (git-free wrapper + progress
-  logging, step 10.5's own detour). Full repo test suite green (767 passed, 16 pre-existing skips)
-  as of `e88fd33`; `tests/test_no_leakage.py` unchanged.
-- **Real IBEX results, both experiments, both bands** — in `results/runs/` locally (synced back
-  via `rsync` from `/ibex/user/floresge/dehy_radar/`) and written up in `SECOND_CHAPTER.md` §6+§7:
-  - Exp A full-cohort: `20260727T111437230187Z_f36c4fb2` (10 GHz), `20260727T115046533408Z_f36c4fb2`
-    (77 GHz).
-  - Exp B mechanism-only smoke: `20260727T224535326693Z_30c6d907` (10 GHz),
-    `20260727T231856775480Z_30c6d907` (77 GHz).
-  - Exp B full-cohort: `20260727T233312448972Z_30c6d907` (10 GHz),
-    `20260728T000714076071Z_30c6d907` (77 GHz).
-  - Exp B session-specific variant (merged, `completed_sessions=[1,2,3,4]` both bands):
-    `20260728T224133954370Z_30c6d907` (10 GHz), `20260729T004647423767Z_30c6d907` (77 GHz).
-  - Three empty `*_nogit` run dirs (provenance.json only, no results) are dead-end artifacts from
-    early failed `init` attempts before the git-free wrapper/REVISION fix — harmless, candidates
-    for `archive/` cleanup per CLAUDE.md file hygiene, not urgent.
-- **HISTORY.md** fully current through M8's close (newest-first: pre-M9 frame-split decision, M8
-  CLOSES, then steps 10.5/10/9/8.6/8.5/... down to M8's start).
+The 24 applied comments are logged in the plan's `### Resolved` section and summarized in
+HISTORY.md. The ones most likely to bite if you skim:
 
-## Next steps, in order
+- **Ordinal viability predicate** is the constant `ORDINAL_CLASSES = (0,1,2,3,4)`, never
+  `set(y[:, 1])` — bundles carry all session rows, so a bundle-relative check would let held-out
+  labels decide which cells get fit.
+- **Ordinal inner-fold aggregation** is `nanmean`/`nanstd` over *evaluable* inner folds, computed
+  in `exp_c`, with `n_evaluable_inner_folds` recorded; the harness's own `np.mean`/`np.std` stay
+  byte-unchanged for Exp A/B.
+- **`assert_exp_c_fit_authorized`** is a real new guard (family id, base-family mapping, grid
+  membership, wrapper constants, Frank-Hall C/impl/max_iter) — the existing
+  `protocol_freeze_guard` validates only keys *present* in `active` and binds nothing about the
+  candidate.
+- **QWK** is undefined only on empty input or zero expected disagreement (O-M9-8 / 8a), and the
+  run must report `n_single_class_truth_val_folds` and `n_qwk_nan`.
+- **Spectrograms** are literal log-magnitude `log(|STFT| + finfo.tiny)`; `SpectrogramNorm` keeps
+  `[C, F]` statistics reduced over frames × time with `scale = where(std == 0, 1.0, std)`; the two
+  *raw* branches bypass robust standardization while both *matched* branches consume the
+  matched-preprocessed signal (10 GHz already standardized in the store, 77 GHz at load).
+- **Composite baseline** splices per-subject seed-averaged metrics, never predictions.
+- **CNN loader contract** is pinned: `replacement=True`, `shuffle=False`, `drop_last=True`,
+  `num_workers=0`, one epoch = `floor(len(train)/16)` steps, per-fit generator.
+- **Frame split** recomputes tuned-ε from raw tensors on training frames only, preserving the
+  frozen subject-balanced hierarchy; it never calls `record_run`, writes through an allowlist, and
+  hashes frame order + fold assignment + the source LOSO artifact.
+- **Shard merge** validates against `expected_test_rows_by_fold` (frame *and* session hashes +
+  seed cross-product), and every Exp D family emits a four-artifact set.
 
-1. **Do not reopen anything M7/M8 already settled** (A-M7-1/2/3, A-M8-1/A-M8-2, any resolved
-   `MILESTONE_7_PLAN.md`/`MILESTONE_8_PLAN.md` review comment, the Exp A/B results themselves)
-   without a new, explicit owner decision — same standing rule as every prior milestone.
-2. **Start Milestone 9 planning (Experiments C/D — ordinal 5-class classification + baselines),
-   and fold in the pre-M9 decision already made:** alongside the required LOSO protocol, also
-   plan for a **5-fold random split over pooled frames** (k=5, ~80/20 per fold, frames from all
-   subjects shuffled together — matching the original paper's frame-as-sample splitting) for
-   every Exp C/D result. This is deliberately leaky and **exploratory-only — never for the thesis
-   or paper, never a headline number** (owner's own words). Three hard constraints when
-   implementing it (already in `plans/implementation_plan.md`'s note): (a) a clearly separate
-   code/output path, own tagged filenames, never merged into the LOSO metrics files; (b) must
-   never touch or weaken `tests/test_no_leakage.py`, `splits.py`'s LOSO machinery, or
-   `config-freeze-v1`; (c) never surfaces in `SECOND_CHAPTER.md`'s actual findings.
-3. Read `ROADMAP.md`'s Exp C/D framing and `plans/implementation_plan.md`'s full C/D spec
-   (ordinal sign convention, Frank-Hall decomposition amendment A-M6-5, fold-viability rules,
-   the three D baselines + budget-parity rule) before drafting `plans/MILESTONE_9_PLAN.md` — this
-   is a large, detailed, already-mostly-specified section; the plan mostly needs to sequence
-   implementation, not invent design.
-4. Follow the same process as M6-M8: draft the plan, run the Codex⇄Claude review loop to
-   closure, then implement — per CLAUDE.md and the owner's established preference (confirmed
-   explicitly at M8 Step 0 item 4).
-5. Commit only when the owner asks — including the currently-uncommitted M8-closing journal
-   changes (`HISTORY.md`, `SECOND_CHAPTER.md`, `plans/implementation_plan.md`), which are still
-   sitting unstaged from this session.
+## Facts verified against source (the plan depends on these; re-verify before contradicting one)
+
+- `protocol_freeze_guard` (`src/dehyd/features/protocol_freeze.py:116-168`) checks only the keys
+  present in `active`, against the frozen five-family whitelist → `ord_b_frank_hall` has no legal
+  `model_family` value → the §2.6 three-check design.
+- `harness.require_complete_active` (`:163-183`) demands *exactly* the band key set, so arm (b)
+  needs exp_c's own `REQUIRED_ACTIVE_KEYS_C`.
+- `harness._score_candidates_on_fold` (`:297-340`) applies the row mask only after `data_for`;
+  `CandidateScore` uses `np.mean`/`np.std` over all inner folds.
+- `_prelog_scale` (`features/extraction.py:76-92`) is a **per-session** median over that session's
+  frames, stored at `store.py:246` — the frame-split leak C10 caught.
+- `preprocess_frame` ends in `to_channels(trimmed, channel, pre.standardize)`
+  (`preprocess/pipeline.py:73`) → the stored 10 GHz `sig__matched_iq` is already
+  robust-standardized.
+- `provenance.record_run` (`:190-239`) always creates `results/runs/<stamp>_<rev>/` and stores only
+  cohort totals — hence the public `build_provenance_payload` extraction and the per-fold census.
+- `torch_fit._normalize_stats` (`:86-91`) uses `where(std == 0, 1.0, std)` — the precedent
+  `SpectrogramNorm` reuses.
+- `tests/test_selection.py:79` asserts exact dict equality on `SIMPLICITY_RANK` → that assertion
+  gets updated (only `tests/test_no_leakage.py` is frozen).
+- `BaselineConfig` (incl. `max_epochs: 200`) is in `M6_SECTIONS` → a smoke config CANNOT override
+  epochs; smokes differ only by subset / `seed_set=[1]` / device.
+- Store commit-match (`store.py::_check_match`) forces both stores rebuilt at the M9 commit
+  regardless — the basis of O-M9-5 and of schema v2 riding along.
+- The `exp_b.py` deployed on IBEX is still the `30c6d907` version (no heartbeat there). Unchanged,
+  nothing to do.
+
+## Working tree / git state at handoff
+
+Branch **`v1_milestone9`**, already created off `v1_milestone8` and checked out; both point at
+`b6e7ba1`, and nothing has been committed on it yet. `SECOND_CHAPTER.md` and
+`plans/implementation_plan.md` are clean (they landed in `c7b6b83`). Uncommitted:
+`plans/MILESTONE_9_PLAN.md` (untracked), `HISTORY.md`, `HANDOFF.md`, `.gitignore` (owner's
+`review*/` line), and the owner's deletion of `plans/review_prompt_{claude,codex}.md` — the owner
+erased those deliberately as redundant; do not restore or archive them. **Commit only on explicit
+owner request** — the next gate is the pre-implementation commit carrying this plan, the journal
+files, and step 0.5's `implementation_plan.md` edits.
+
+## Next steps, in order (plan §1 is authoritative)
+
+1. **Step 0.5** — propagate A-M9-1 + O-M9-1..8 into `plans/implementation_plan.md`, each to the
+   section named in the plan's step-0.5 row (O-M9-3 and O-M9-5 → §Statistics, O-M9-7 → §C, etc.),
+   stating the post-A/B chronology and the computation-affecting label. Then ask the owner for the
+   pre-implementation commit.
+2. **Step 1** — pins: `test_m8_pin.py` re-run plus a new `_viability_reason` / byte-trace pin
+   (step 4 claims byte-neutrality and is unverifiable without them).
+3. **Steps 2-9** — `metrics.py` → `models/ordinal.py` + dispatch + selection → the one
+   `harness.py` edit (own commit, between two green states) → `fold_parallel.py` extraction →
+   `exp_c.py` → `models/cnn.py` + `exp_d.py` torch path → `exp_d.py` remainder → store v2 +
+   entrypoints + sbatch + `frame_split.py`. Tests alongside each spec; a step is not done until
+   its acceptance tests are green. HISTORY.md entry per resolved step, not batched.
+4. **9.5 / 9.6** — owner-triggered clean commit, then rebuild + `--validate` both stores from it.
+5. **10** — local synthetic suite + mechanism-only smokes (Exp C both bands; every Exp D family
+   both bands; one GPU array-task smoke per CNN family, to size `ARRAY_TIME` from measurement).
+6. **11-14** — full-cohort Exp C; Exp A re-run + bit-identity assert (a mismatch STOPS the
+   milestone, escalate — do not compare against the fresh predictions instead); cheap baselines;
+   8 CNN fold-array groups; comparisons; then the 16-run exploratory frame split.
+7. **15** — SECOND_CHAPTER §8 from the real LOSO results, disclosing every A-M9/O-M9 completion
+   with its true chronology. The frame-split appears nowhere in §8.
 
 ## Hard invariants (unchanged, never violate)
 
-LOSO at subject level for every REPORTED result; fit-on-train-only at both CV levels; no
-test-set tuning; primary target continuous Δm%, session-level headline; 5-class S0-S4 is
-secondary, ordinal metrics only; folds only from `splits.py`; tie-break only via
-`select_candidate`; numpy backs all reported features; `protocol_freeze_guard` before every
-fit/write; `tests/test_no_leakage.py` unchanged. The one deliberate, disclosed exception: the
-pre-M9 exploratory frame-split addition above — never a substitute for LOSO, never reported.
+LOSO at subject level for every REPORTED result; fit-on-train-only at both CV levels; no test-set
+tuning; primary target continuous Δm%; ordinal metrics only for the 5-class task; folds only from
+`splits.py`; tie-breaks only via `eval/selection.py`; numpy backs all reported features (GPU is
+authorized ONLY for the Exp D DL baselines, `implementation_plan.md:1326-1329`);
+`protocol_freeze_guard` before every fit/write; `tests/test_no_leakage.py` frozen (`git diff
+--exit-code` is an acceptance step). Bit-identity claims are CPU-scoped — GPU training is not
+bit-deterministic and is covered by per-seed reporting plus CPU-fixture contract tests. The one
+sanctioned exception to the reporting protocol: the exploratory frame-split — in ADDITION to LOSO,
+structurally quarantined, never a substitute, never reported, absent from §8.
 
 ## Journal & hygiene
 
-**HISTORY.md** newest-first, current through M8's close + the pre-M9 decision (2026-07-30).
-**SECOND_CHAPTER.md** §0-§7 all complete and final; §8 (Exp C/D) and §9 (fusion/interpretability/
-statistics) pending their own milestones. **MILESTONE_8_PLAN.md** `REVIEW_COMPLETE`, all 11 steps
-done. No `MILESTONE_9_PLAN.md` exists yet. Branch `v1_milestone8`, HEAD `e88fd33` at the time this
-was written, 3 commits ahead of `origin/v1_milestone8` (not pushed — not verified whether the
-owner has separately synced to IBEX by another route). Working tree has `HISTORY.md`,
-`SECOND_CHAPTER.md`, and `plans/implementation_plan.md` modified but uncommitted (see TL;DR).
-Commit only when the owner asks.
+HISTORY.md is current through the 2026-07-30 review-loop entry (newest-first; the O-M9-8 decision
+is recorded inside it). SECOND_CHAPTER.md §0-§7 complete and final; §8 is written only from real M9
+results. `MILESTONE_8_PLAN.md` and now `MILESTONE_9_PLAN.md` are both REVIEW_COMPLETE. Superseded
+code/results move to `archive/code/` or `archive/results/`, noted in HISTORY — never left in `src/`
+and never silently deleted. This HANDOFF was refreshed on explicit owner request (chat close,
+2026-07-30).

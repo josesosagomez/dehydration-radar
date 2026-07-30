@@ -4,6 +4,288 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 0.5: propagated A-M9-1 and O-M9-1..8 into `plans/implementation_plan.md` (10 annotations, +137 lines, doc-only). Succeeded; no source touched, suite unaffected.
+
+The first M9 implementation step, and deliberately a documentation-only one: the M9 plan puts it
+before every source step (§1 row 0.5) because of the **C9 lesson from M8** — `validate_store`
+requires the store's build commit to equal the analysis commit, so any doc-only commit landing
+*after* the store rebuild invalidates the commit-match at the milestone's end. The doc fix has to
+precede all source.
+
+**What was written.** Ten annotations into `plans/implementation_plan.md`, each at the section
+that actually contains the ambiguity it resolves (the destinations are fixed by the plan's step-0.5
+row so D0 can check for omissions), each stating the post-A/B chronology and its
+computation-affecting label plainly:
+
+| Item | Destination | Computation-affecting |
+|---|---|---|
+| O-M9-1 — selection order + QWK aggregation (first-seed val predictions; NaN-QWK ranks last) | §C, after the ordinal inner-CV objective bullet | yes (decides ties) |
+| Ordinal inner-fold aggregation (C2) — `nanmean`/`nanstd` over evaluable inner folds, `n_evaluable_inner_folds` ≥ 1 | §C, same place | yes (Exp C only; A/B byte-unchanged) |
+| A-M9-1 — family (a) reuses Exp A's frozen space; one shared ridge Stage 1 → two Stage-2 arms | §C, after the two-families bullet | yes |
+| O-M9-2 — Frank-Hall decision rule: floor at 0 → argmax → ties to the lower class | §C, same place | yes |
+| O-M9-7 — `w(c) = n / (K_present · n_c)` (sklearn "balanced", mean weight ≈ 1) | §C, under class weighting | yes |
+| O-M9-8 (8a) — QWK undefined iff empty input or zero expected disagreement; the single-class clause is motivation, not the trigger; (8b) recorded as rejected | §C, annotating the fold-viability bullet (`:793-801`) | yes (tie-breaks + QWK CI skip-and-count) |
+| O-M9-6 — 10 GHz spectrograms are 2-channel (real/imag stacked), primary and ablation | §D (ii) | yes (input tensor, `in_channels`, first conv, fitted norm) |
+| O-M9-4 — physics frame→session = median, then session-level LS fit on training sessions | §D (iii) | yes |
+| O-M9-3 — composite/Holm-3 members are the three primary variants; ablations enter no family | §Statistics (the composite + Secondary #2 bullets) + a cross-reference bullet in §D | yes |
+| O-M9-5 — Exp A re-run at the M9 commit, bit-identity assert vs the M7 artifacts, mismatch stops the milestone | §Statistics, after the per-comparison test bullet | **no** (the assert makes the admitted numbers the M7 numbers) |
+
+**Why the destinations matter, not just the content.** An earlier plan draft declared §Statistics
+"untouched" and would have parked O-M9-3 and O-M9-5 in §D. Both ambiguities actually live in
+§Statistics — O-M9-3 in the composite/Holm family definitions (`:1267-1274` pre-edit), O-M9-5 in
+the comparison-test bullet (`:1275-1281` pre-edit) — so a reader checking the multiplicity rule or
+the pairing source in the place that states them would have found the gap still open. O-M9-3 is
+therefore written in §Statistics with a short cross-reference bullet in §D beside the baseline
+definitions it selects among; O-M9-7 lands in §C (class weighting), not §D.
+
+**Chronology, stated in every annotation.** All ten were decided on 2026-07-30, *after* Exp A's and
+Exp B's full-cohort negative results were visible (O-M9-8 additionally after the review loop
+closed). Nothing is folded into "frozen before results": every bullet carries `owner-approved
+2026-07-30 … decided AFTER Exp A's and Exp B's full-cohort results were already visible`, mirroring
+the A-M8-1/A-M8-2 disclosure wording already in the file. The frozen *behaviour* is never changed —
+O-M9-8 is the one place M9 reads a frozen sentence (the single-class QWK clause) as motivation
+rather than as specification, and it says so in the text, records (8b) as the rejected alternative
+with its arguments, and requires the single-class-truth / NaN-QWK counts to be reported so the
+choice's empirical size is visible rather than assumed negligible.
+
+**Verification.** Doc-only: no `src/`, `experiments/`, `tests/`, or config file touched.
+`git diff --exit-code tests/test_no_leakage.py` clean. Full suite: **764 passed / 3 failed / 16
+skipped in 777 s** — the same 767 collected as the M8 baseline. All three failures are
+**environmental, not caused by this step** (no test reads any file under `plans/`), and each was
+isolated and confirmed:
+- `test_exp_b_ibex_scripts.py::test_all_three_ibex_scripts_parse_with_bash_dash_n` and
+  `::test_percent_percent_semicolon_star_strips_cluster_suffix_in_bash` — `shutil.which("bash")`
+  now resolves to the **WSL launcher stub** (`…\WindowsApps\bash.exe`), which cannot open a
+  Windows path (`/bin/bash: C:Usersjosemsosag…: No such file or directory`, exit 127). Re-running
+  that file with `C:\Program Files\Git\bin` first on `PATH`: **5 passed in 0.25 s**. A PATH-order
+  artifact of this machine, not a script defect.
+- `test_provenance.py::test_git_degrades_to_none_without_env` — a stray, gitignored **`REVISION`
+  file** sits at the repo root (contents `e88fd338…`, written 2026-07-30 16:21, a leftover from
+  the M8 step-10.5 git-free-wrapper work). `record_run` correctly reads it as the no-live-git
+  fallback, so the test's "commit is None" assertion cannot hold. Temporarily renaming the file
+  and re-running: **1 passed**; the file was restored immediately (it is the owner's local
+  artifact, not mine to delete). Worth clearing before the step-9.5 clean commit, since the same
+  file will otherwise stamp local runs with a stale revision.
+
+Known cosmetic consequence, not fixed here: the +137
+lines shift later line numbers, so pre-existing `implementation_plan.md:NNNN` references in
+comments (e.g. `tests/test_metrics.py:173`, `tests/test_exp_b.py:491`, and the M9 plan's own
+`:758-801` / `:1267-1281` citations) now point a few lines high. They are prose citations, not
+assertions; renumbering them would touch frozen-adjacent test files for no scientific gain.
+
+**Advances D0** (the propagation half — the plan-review and owner-decision halves were already
+satisfied). Steps 1+ (pins, `metrics.py`, …) remain untouched.
+
+## 2026-07-30 — M9 plan review loop (Codex ⇄ Claude) run to closure: 24 comments, ALL applied, zero deadlocks, zero deferrals. Reviewer closed with `NO MORE COMMENTS` at turn 9. Plan still gated on two owner decisions (O-M9-8; optional Exp-A frame-split authorization).
+
+Ran the turn-based written review of `plans/MILESTONE_9_PLAN.md` entirely through the plan file
+(`review/PROMPT_codex_review.md` / `PROMPT_claude_review.md`), 4 author turns (2, 4, 6, 8) against
+4 reviewer turns (1, 3, 5, 7), closed at turn 9. **Outcome by state: 24 applied, 0 debated,
+0 withdrawn, 0 deferred.** (C16 was a `question` but produced a plan change, so it is logged
+applied.) Every comment was checked against the actual source before accepting it; nothing was
+rubber-stamped and nothing needed a rebuttal — the reviewer made no wrong call this run.
+
+**The two protocol/leakage findings that changed the science, not just the prose:**
+
+- **C1 (blocking) — the ordinal fold-viability predicate was leakage-sensitive.** The plan had the
+  class-coverage check compare inner-training classes against `set(y[:, 1])`. Because
+  `OrdinalFeatures` mirrors `StoreBackedFeatures`, whose bundles carry **all** session rows (the row
+  mask is applied only after `data_for`, `harness.py:297-322`), that set includes inner-validation
+  *and outer-test* labels — so which cells got fit at all would have depended on held-out labels. It
+  was also weaker than the freeze, which fixes the requirement as all five S0–S4 classes
+  (`implementation_plan.md:793-797`): a class QC removed cohort-wide would silently stop being
+  required. Fixed to the constant `ORDINAL_CLASSES = (0,1,2,3,4)`, plus two tests
+  (non-training-label independence; a globally absent class still blocks).
+- **C10 (blocking) — the exploratory frame split would have fitted ε on the scored rows.** The draft
+  said tuned-ε comes from "the training frames' sessions". But `_prelog_scale`
+  (`extraction.py:76-92`) returns one tuple **per session**, itself a median over *all* of that
+  session's frames, stored per session (`store.py:246`) and consumed by `tuned_epsilons`
+  (`harness.py:186-209`). Under a pooled frame KFold nearly every session straddles the split, so
+  that path fits ε on held-out frames — a *second* leak beyond the subject overlap the owner
+  sanctioned (`:929-931`), and fit-on-train-only governs fitted transforms regardless. Fixed:
+  `frame_split.py` recomputes the pre-log scale from the store's **raw** tensors
+  (`raw_key`/`order_key`) restricted to the fold's training frame rows. Follow-up **C17** then
+  corrected my first fix — I had replaced the frozen subject-balanced hierarchy with a pooled-frame
+  median, an unauthorized post-A/B estimator change; the final rule keeps the frozen
+  session-median → subject-mean → subject-median shape (`:477-500`, whose `:485-489` states
+  subject-balancing as the reason) and narrows **only** the innermost population to training frames.
+  Generalized as new §5 trap 19: any store key that is already a session aggregate is a leakage
+  vector under a frame split even though it is perfectly safe under LOSO.
+
+**Specification gaps closed (each a place where two implementers would have written different code):**
+
+- **C2** — ordinal inner-fold aggregation was undefined. The harness's `np.mean`/`np.std` over all
+  inner folds (`harness.py:329-337`) NaNs *every* candidate when one candidate-independent
+  missing-class cell appears, escalating "one inner fold lost a class" into "this outer fold has no
+  ordinal result" — stricter than the freeze, which does that only when *all* configs are
+  non-evaluable. Now: `nanmean`/`nanstd` over evaluable inner folds inside `exp_c` (Exp A/B
+  aggregation byte-unchanged), `n_evaluable_inner_folds` carried on the score and published per
+  fold, minimum 1 — the frozen text's own threshold, deliberately not a tighter invented constant.
+- **C3** — the family-(b) guard validated nothing about the fit. `_check_active` checks only keys
+  *present* (`protocol_freeze.py:116-136`) and `require_complete_active` only the key set, so an
+  unauthorized family or an off-grid `C` would have reached `.fit()` with every guard green. Added
+  `assert_exp_c_fit_authorized` (family id, base-family/id agreement, grid membership, wrapper
+  constants, Frank-Hall `C`/impl/`max_iter`) with a negative matrix spying on `build_estimator`.
+- **C4 → O-M9-8** — QWK undefinedness. "NaN when either side has a single distinct class" is wrong
+  on the fixed 5-class grid: hand-check and `cohen_kappa_score(weights="quadratic", labels=[0..4])`
+  both give κ = 0 (numerator = denominator = 30/16) for true `[0,1,2,3,4]` vs pred all-0. Only zero
+  expected disagreement is undefined. The frozen *behaviour* (never error, fall back to MAE) is
+  unchanged; the trigger is corrected — recorded as **O-M9-8**, computation-affecting on tie-breaks
+  and on the QWK CI's skip-and-count, with a fail-closed gate (below).
+- **C5** — exploratory scope. The draft ran an **Exp A** modal config, which the owner's sanction
+  ("both Exp C and every Exp D baseline", `:925-928`) does not cover. Removed and CLI-rejected; the
+  matrix is now an explicit 16 runs (both C arms × 2 bands; six D families × 2 bands), and the CNN
+  cross-fold reduction is defined (modal `(lr, wd)`, lowest-fold-id tie-break, budget
+  `int(floor(median))` over the folds that chose the modal pair).
+- **C6 / C21 / C24** — exploratory isolation and provenance. `record_run` unconditionally creates
+  `results/runs/<stamp>_<rev>/` (`provenance.py:190-208`), so having all three entrypoints call it
+  contradicted D11. Now a dedicated `write_exploratory_provenance(config, band, task, unit,
+  manifest, out_dir, *, data_dir)` over a newly extracted **public**
+  `provenance.build_provenance_payload(...)` (byte-neutral for `record_run`), an output
+  **allowlist** rather than a `runs/`-substring refusal, `require_77ghz_dir` for 77 GHz (the M8
+  C19/C22 failure mode), and — since `k_folds` + `random_state` pin only the recipe —
+  `frame_order_sha256`, `fold_assignment_sha256`, the source LOSO artifact's `{run_dir,
+  analysis_commit, config_hash, artifact_rel_path, artifact_sha256}` and the `resolved_config`.
+- **C7 / C14** — shard validation had no reference to validate against. `record_run`'s manifest
+  holds only cohort totals (`provenance.py:214-228`). Added
+  `extra.expected_test_rows_by_fold = {fold: {test_subject, n_session_rows, n_frame_rows,
+  frame_rows_sha256, session_rows_sha256, seed_set}}`; the session hash exists because the frame
+  hash cannot validate a session-level CSV, so a same-count session substitution would otherwise
+  pass. Seed is not part of row identity but is checked as an exact
+  `session_identities × seed_set` cross product.
+- **C11 / C12 / C18 / C19 / C23** — the spectrogram chain. Corrected `log(|STFT|² + 1e-30)` to the
+  frozen literal **log-magnitude** `log(|STFT| + np.finfo(np.float64).tiny)` (the draft was
+  log-power, and `1e-30` was neither the float64 tiny ≈ 2.2e-308 nor a recorded choice); named
+  `SpectrogramNorm`'s axes (statistics per `(channel, frequency)`, shape `[C, F]`, reduced over
+  frames × time) with the reason (real/imag have different per-frequency scales); replaced the
+  `std + tiny` divisor with `np.where(std == 0, 1.0, std)` — the repo's own precedent in
+  `torch_fit.py::_normalize_stats` — since a constant training bin would otherwise amplify a
+  differing test value by ~1e308; and specified the four variants individually after C18 caught a
+  self-contradiction (the stored 10 GHz `sig__matched_iq` is **already** robust-standardized —
+  `preprocess_frame` ends in `to_channels(trimmed, channel, pre.standardize)`,
+  `preprocess/pipeline.py:73` — so the blanket "all four STFT unstandardized arrays" was wrong: raw
+  branches bypass the robust step, matched branches consume the matched-preprocessed signal, 77 GHz
+  standardized at load). C23 then caught that §3's test row still carried the stale blanket claim.
+- **C13** — the composite baseline's seed collapse. "Splice that family's test predictions" is
+  undefined across families with 5 seeds (CNNs) vs 1 (physics). Redefined at the **per-subject
+  metric** level: each family's seed-averaged per-subject session-MAE (`:1193-1199`) spliced by
+  outer fold, deterministic values never replicated into pseudo-observations, no cross-seed
+  prediction averaging (`:644-649` forbids it), serialized as `composite_{band}.csv`.
+- **C15** — no per-family artifact contract existed, so D10 could have been met by a
+  comparison-only summary and §2.10's modal reduction had no guaranteed source. Specified one
+  schema for every family: `predictions_*` (session-level OOF per `(subject, session_idx, seed)`),
+  `metrics_*` (per-subject vector + MAE/RMSE/pooled r with subject-cluster BCa under the frozen
+  metric-type-aware collapse), `selection_*` (per-fold `(lr, wd)`, budget and the counts it is the
+  median of), `per_subject_*` — with merge-time consistency checks gating the comparison stage.
+- **C20** — the minibatch contract was unreproducible. Pinned
+  `WeightedRandomSampler(replacement=True, generator=g)`, `DataLoader(batch_size=16, sampler=...,
+  shuffle=False, drop_last=True, num_workers=0, generator=g)`, **one epoch =
+  `floor(len(train)/16)` optimizer steps**, `MSELoss(reduction="mean")` with no second weighting,
+  a per-fit generator from the named derivation. `drop_last=True` because BatchNorm in train mode is
+  undefined on a 1-row batch (it would raise on any fold with `len(train) % 16 == 1`) and because
+  the dropped remainder is a random tail under replacement sampling. Pinned by a sampled-index
+  trace fixture.
+- **C9** — step 0.5 said "§Statistics untouched" while O-M9-3 resolves an ambiguity that lives
+  there (`:1267-1274`). Step 0.5 now enumerates A-M9-1 and O-M9-1..8 with a destination each, so
+  D0 can verify none was lost.
+- **C8** — O-M9-6 (10 GHz spectrogram channels) was misclassified as not computation-affecting; it
+  fixes the input tensor, `in_channels`, the first conv layer's parameters and the fitted norm
+  state. Reclassified everywhere it is summarized.
+- **C22** (minor) — "`test_selection.py` unchanged and green" is impossible once six ordinal keys
+  are added: `tests/test_selection.py:79` asserts exact dict equality on `SIMPLICITY_RANK`. Claim
+  corrected to "existing five-family ranks and `select_candidate` behaviour pinned"; that one
+  assertion is updated (only `tests/test_no_leakage.py` is frozen against edits).
+
+**Post-closure: O-M9-8 RESOLVED by the owner the same day (2026-07-30) — option (8a).** The two
+options were put to the owner in the closing decision brief and (8a) was chosen: QWK is undefined
+**only** on empty input or zero expected disagreement on the fixed 5×5 grid — matching
+`sklearn.metrics.cohen_kappa_score(..., weights="quadratic", labels=[0,1,2,3,4])` — and *not*
+whenever either side happens to have a single distinct class. Owner's stated reason: reproducibility
+against the reference implementation an examiner would check the numbers against. The rejected
+option (8b) — the literal reading of `:798-800` — is recorded in the plan's §6 with its strongest
+arguments intact (it would have preserved M9's record of never reinterpreting frozen text; a
+single-class validation fold carries no ordinal-agreement information, so averaging its κ = 0
+dilutes the mean; and under (8a) two candidates on such a fold are treated differently — a varying
+predictor scores 0 while a constant one is genuinely undefined and skipped). The fail-closed gate is
+discharged: step 2 may now write `metrics.py`.
+
+**One change I made on my own initiative alongside the decision:** because (8a) admits folds (8b)
+would have skipped, the plan now *measures* the difference rather than assuming it small — §2.6
+reports `n_single_class_truth_val_folds` and `n_qwk_nan` at both CV levels (plus the existing
+bootstrap skip-and-count), with a test fixture built to contain exactly one such fold, so
+SECOND_CHAPTER §8 can state the choice's empirical size. Values unknown until Exp C runs; validation
+folds are subject-level and a subject spans up to five sessions/classes, so single-class validation
+folds are expected to be rare, but that is a prediction, not a measurement.
+
+**Still open (optional, does not block):** whether to authorize **Exp A's radar regressor** in the
+exploratory frame split — deliberately excluded as outside the owner's 2026-07-30 sanction ("both
+Exp C and every Exp D baseline"), available for a one-line authorization. **With O-M9-8 decided, the
+plan is otherwise final and implementation may begin at step 0.5.**
+
+## 2026-07-30 — M9 planning: `plans/MILESTONE_9_PLAN.md` authored (Exp C ordinal + Exp D baselines + the sanctioned frame-split); ALL Step 0/0b owner decisions resolved; review block appended `AWAITING_CODEX`. The review loop itself has NOT started.
+
+Authored the milestone-9 plan per the owner's authoring prompt (author only — no review, no
+implementation), against the real repo state: read `review/CONTEXT.md` + both review prompts,
+`implementation_plan.md` §C (`:758-801`) / §D (`:803-923`) / §Statistics (`:1186-1310`) / the
+frame-split note (`:925-941`), the M8 plan as template, the frozen configs
+(`exp_c.yaml`, `baselines.yaml`, `stats.yaml`, `search_10ghz.yaml`, `search_77ghz.yaml`,
+`M6_SECTIONS` in `config.py`), and the code the milestone touches (`harness.py`, `exp_a.py`,
+`exp_b.py`, `selection.py`, `splits.py`, `metrics.py`, `regressors.py`, `baselines.py`,
+`torch_fit.py`, `store.py`, `protocol_freeze.py`, `pipeline.py`, `pipeline_77.py`,
+`reduce.py`, `extraction.py`, `provenance.py`, the entrypoints and sbatch scripts).
+
+**Owner decisions taken this session (all AFTER Exp A/B's negative full-cohort results were
+visible — chronology recorded in the plan §0/§6 and to be restated in SECOND_CHAPTER §8):**
+
+- **Step 0 (scoping, asked as a 3-question round):**
+  1. **A-M9-1** — Exp C family (a)'s continuous L-regressor **reuses Exp A's frozen per-band
+     staged search space** (mirrors A-M6-3; the freeze never named a space for it). Concretized
+     as ONE shared Stage 1 per outer fold (`ord_a_ridge` anchor, α=1.0, weighted, thresholded,
+     ordinally scored) + two Stage-2 arms: (a) five base families × frozen grids as thresholded
+     ordinal regressors; (b) Frank-Hall × frozen C grid (0.1/1.0/10.0). Reason: the only frozen
+     enumeration in existence; avoids inventing a second search space or a new Stage-1 anchor.
+  2. **Frame-split exploratory = modal-config refit** (no nested search inside the 5 leaky
+     folds): per band, refit the LOSO-modal configuration (and each CNN family's LOSO-selected
+     lr/wd + median epoch budget) on 80%/20% pooled-frame splits, k=5, seed `run.seed+900`.
+     Reason: paper-comparable numbers for private comparison; a full search per leaky fold
+     would burn IBEX time on numbers banned from every report.
+  3. **Exp D CNN full-cohort layout = fold-array GPU jobs** (16 tasks × 1 GPU per family×band,
+     M8's init→array→merge shard machinery + fail-closed lineage checks; wrapper git-free with
+     `REVISION` from day one — the e88fd33 lesson). Reason: a sequential 16-fold job has
+     wall-time ≈ the sum (the C11 mistake).
+- **Step 0b (protocol completions, asked one by one, all recommended options approved):**
+  O-M9-1 ordinal tie-break = MAE → higher mean val QWK (first-seed stored val predictions;
+  NaN-QWK ranks last) → simplicity → feature dim → variance; O-M9-2 Frank-Hall decision =
+  floor negatives at 0 → argmax, ties to lower class; O-M9-3 composite membership = primary
+  variants only {raw 1D-CNN, raw spectrogram, physics} (ablations descriptive only); O-M9-4
+  physics frame→session = median over frames then per-fold session-level 1-D least squares;
+  O-M9-5 radar pairing = re-run Exp A at the M9 commit + **bit-identical assert vs the M7
+  artifacts** (mismatch stops the milestone); O-M9-6 10 GHz spectrograms = 2-channel
+  (complex → real/imag STFT'd separately, the A-M6-2 convention); O-M9-7 class weights
+  w(c) = n/(K_present·n_c) (mean ≈ 1, so frozen regularization grids keep their meaning).
+
+**Design facts verified against source this session (the review will re-check these):**
+`protocol_freeze_guard` whitelists `active.model_family` against the five frozen families →
+`ord_b_frank_hall` has no legal value → the plan's §2.6 feature-axes-only `active` design for
+family (b), compensated by config-level `ExpCConfig` validation (an M6 section the guard
+already checks). `BaselineConfig` (incl. `max_epochs: 200`) is in `M6_SECTIONS` → a smoke
+cannot override epochs; smokes differ by subset/`seed_set=[1]`/device only (all run-level).
+T18 is live against the real `torch_fit.run_torch_nested` (`test_no_leakage.py:436-462`).
+Class-unit MAE is pooled, not subject-balanced (`:766-769` letter + §Statistics `:1199`
+classification). Exp C gets NO baseline comparison — the session-index baseline predicts the
+class perfectly (the class IS the session index); the paper-comparable number lives only in
+the unreported frame split. Store schema v2 (`STORE_VERSION=2`, per-frame signal keys for
+Exp D) rides the rebuild that the commit-match doctrine forces anyway.
+
+**Deliberately NOT done now:** the `implementation_plan.md` propagation of A-M9-1/O-M9-1..7 —
+that is plan step 0.5, scheduled after review closure and before any source, so one commit
+carries plan + doc fix (the M8 C9 doctrine). SECOND_CHAPTER.md untouched (§8 is written from
+M9 results). **State at chat close:** `plans/MILESTONE_9_PLAN.md` untracked; review block
+`REVIEW-STATUS: AWAITING_CODEX`, `REVIEW-TURN: 0`; branch `v1_milestone8` @ `b6e7ba1`;
+`.gitignore` carries the owner's own uncommitted `review*/` ignore line. Next: the owner
+starts the Codex reviewer session and a fresh Claude session with
+`review/PROMPT_claude_review.md` to run the loop to closure.
+
 ## 2026-07-30 — Pre-M9 planning: owner decision to add an exploratory frame-level random-split (k=5) evaluation alongside LOSO for Exp C/D.
 
 Owner asked, for milestone 9 (Exp C/D) only, to also produce a **5-fold random split over pooled

@@ -767,6 +767,31 @@ classifier is not.
   **class-unit MAE** (mean |predicted class − true class|), with **QWK** as the
   secondary tie-break — **not** Exp A's fluid-loss MAE (the generic harness objective
   does not define ordinal selection).
+  - **O-M9-1 [APPLIED — owner-approved 2026-07-30; decided during M9 planning, AFTER Exp A's
+    and Exp B's full-cohort results were already visible] — the full deterministic selection
+    order, and how the secondary is aggregated.** The freeze names the primary (class-unit
+    MAE) and the secondary (QWK) but not the rest of the order, nor how a per-candidate QWK is
+    formed from the inner folds. Resolved: `select_candidate_ordinal` orders by **lower mean
+    inner-val class-unit MAE → higher mean inner-val QWK → lower simplicity rank → lower
+    feature dimension → lower inner-fold variance** (the last three are Exp A's frozen tail,
+    unchanged). The QWK mean is taken over the inner folds where QWK is defined; a candidate
+    whose QWK is defined on no inner fold ranks below any candidate with a finite QWK.
+    Per-candidate QWK is computed from the stored **first-seed** inner-validation predictions,
+    while the primary MAE stays seed-averaged — the deterministic families are identical across
+    seeds anyway, so only rf/gbm are affected, and only in this tie-break.
+    **Computation-affecting**: it decides which config wins whenever the primary MAE ties.
+  - **Ordinal inner-fold aggregation [M9 planning completion, 2026-07-30 — review comment C2;
+    decided AFTER Exp A's and Exp B's full-cohort results were already visible].** The generic
+    harness aggregates inner-fold scores with a plain mean, which turns a single non-evaluable
+    inner cell (a class missing from one inner-training set) into a NaN for *every* candidate,
+    silently promoting "one inner fold lost a class" into "this outer fold has no ordinal
+    result" — stricter than the viability rule below, which does that only when *all* configs
+    are non-evaluable. Resolved: Exp C aggregates with **`nanmean`/`nanstd` over the evaluable
+    inner folds only**, carries **`n_evaluable_inner_folds`** on each candidate score (published
+    in the per-fold selection record), and requires **≥ 1** evaluable inner fold for a candidate
+    to be comparable — the frozen text's own threshold below, deliberately not a tighter
+    invented constant. Exp A's and Exp B's aggregation is byte-unchanged.
+    **Computation-affecting** for Exp C.
 - Two ordinal families: **(a)** threshold the continuous `L` predictor into 5 ordered
   bins with **monotone cutpoints** — the *config* is chosen on inner folds, then the
   **cutpoints are refit on all outer-training subjects only** before the outer
@@ -788,8 +813,41 @@ classifier is not.
   stack, no new dependency), whose `fit(..., sample_weight=...)` is standard, verified
   sklearn API, so it satisfies the class-weighting requirement exactly. Family (a) is
   unaffected by this amendment.
+  - **A-M9-1 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — family (a)'s search space is Exp A's frozen
+    space, reused.** The text above defines family (a) as thresholding "the continuous `L`
+    predictor" but never says what feature/model space that continuous regressor searches.
+    Resolved by mirroring A-M6-3 (Exp B): family (a) reuses the **identical enumerated per-band
+    search space as Exp A** (reduction × channel × tiling × log × gate × model family × frozen
+    grid — `configs/search_10ghz.yaml` / `search_77ghz.yaml`), selected per outer fold by the
+    same staged inner-CV mechanism, but each candidate is fit on `L = −Δm%` under the class
+    weights below and scored by the **ordinal** objective above rather than Exp A's fluid-loss
+    MAE. Concretely: **Stage 1 runs once per outer fold** at the frozen
+    `stage1_anchor_model: ridge` anchor (α = 1.0, weighted, thresholded, scored ordinally), and
+    its winning feature key is shared by **two Stage-2 arms** — arm (a), the five base families
+    × frozen grids as thresholded ordinal regressors (the primary ordinal model), and arm (b),
+    Frank-Hall over the frozen C grid (the "comparison" named above). A second, Frank-Hall
+    Stage-1 anchor would be new unfrozen design and is not introduced. **Computation-affecting.**
+  - **O-M9-2 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — Frank-Hall's class-decision rule.** A-M6-5
+    froze probability *recovery* (successive differences of the cumulative probabilities) but no
+    class-decision rule, and because the four binary classifiers are unlinked those differences
+    can come out negative. Resolved: **floor the recovered probabilities at 0, predict the
+    `argmax`, and break ties toward the lower class.** The documented alternative — the
+    cumulative-threshold rule `class = Σ_k 1[P(class > k) > 0.5]` — was considered and **not**
+    chosen. **Computation-affecting.**
 - **Class weighting** is inverse-frequency computed **per fold on inner-training data
   after QC** (never global, never using the held-out subject).
+  - **O-M9-7 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — the weights' normalization scale.**
+    "Inverse-frequency" fixes the form but not the scale, and the scale interacts with every
+    regularized fit (ridge α, SVR C, logistic C) — a raw `1/n_c` would silently rescale the
+    frozen grids' regularization strengths away from their Exp A meaning. Resolved: for class c
+    with count `n_c` among the `n` inner-training rows, with `K_present` classes present,
+    **`w(c) = n / (K_present · n_c)`** — sklearn's own "balanced" convention, whose mean weight
+    is ≈ 1, so the frozen grids keep the regularization meaning they had in Exp A. The same
+    per-row weights feed the family-(a) fits (except knn, frozen as
+    class-weight-unsupported) and every Frank-Hall binary fit. **Computation-affecting.**
 - **Fold-viability rules (predefined).** QC can leave a fold missing one of S0–S4,
   which makes cutpoints, inverse-frequency weights, or proportional-odds fitting
   undefined, and QWK is undefined on a single-class validation set. A fold/config is
@@ -799,6 +857,32 @@ classifier is not.
   undefined** on a validation set (one class present), selection **falls back to the
   primary class-unit MAE** for that fold rather than erroring. These rules are frozen
   at milestone 6.
+  - **O-M9-8 [APPLIED — owner-approved 2026-07-30 as option (8a); review-derived, decided
+    AFTER Exp A's and Exp B's full-cohort results were already visible and after the M9 review
+    loop closed] — what "QWK is undefined" actually triggers on.** The clause above motivates
+    the MAE fallback with "QWK is undefined on a single-class validation set". That holds when
+    the label set is inferred from the data (a 1×1 matrix gives 0/0), but **not** on the fixed
+    5-class grid this task mandates: with truth all-S0 and a varying predictor the expected
+    disagreement is non-zero and κ is defined (= 0 for an uninformative predictor) —
+    hand-checked and confirmed against
+    `sklearn.metrics.cohen_kappa_score(..., weights="quadratic", labels=[0,1,2,3,4])`.
+    Resolved: implement the frozen *behaviour* exactly (never error; fall back to the primary
+    class-unit MAE whenever QWK is undefined) with the mathematically correct trigger — **QWK
+    is undefined iff the input is empty or the expected disagreement `Σ_ij w_ij E_ij` is exactly
+    0**, which on the fixed grid happens only when both marginals concentrate on the same single
+    class. The single-class clause above is therefore read as *motivation*, not as the operative
+    condition. **Computation-affecting** on the secondary tie-break and on the QWK CI's
+    skip-and-count, since folds the looser reading would have skipped now contribute a defined
+    value; the count of single-class-truth validation folds and of NaN QWK values is reported
+    alongside the metric so the choice's empirical size is visible rather than assumed
+    negligible. **Rejected alternative (8b):** undefined ⟺ the above **or** either side has a
+    single distinct class — i.e. this bullet read on its face, with such folds skipped by both
+    the MAE fallback and the CI's skip-and-count. Its arguments are recorded because the chapter
+    must state what was rejected and why: it never reinterprets the freeze; a single-class fold
+    carries no ordinal-agreement information, so averaging its κ = 0 dilutes the mean; and under
+    (8a) two candidates on such a fold are treated differently (a varying predictor scores 0
+    while a constant one is genuinely undefined). The owner chose (8a) for reproducibility
+    against the reference implementation an examiner would check the numbers against.
 
 **D — Baselines (fair by construction).** All baselines share **identical** outer
 folds, inner subject-validation, QC-passed population, session weighting/aggregation,
@@ -823,6 +907,17 @@ at the config-freeze gate below, before any results are viewed):
   16, nfft 128**, log-magnitude, per-frequency mean/std normalization fit
   **train-only**. 2D-CNN: 2 conv blocks (3×3, channels 16/32, 2×2 pool) → global
   average pool → FC → 1 scalar. Same optimizer / refit rule as (i).
+  - **O-M9-6 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — the 10 GHz spectrogram's channel count.** The
+    STFT constants above are frozen, but the channel convention is not stated and the 10 GHz
+    beat signal is complex. Resolved by applying A-M6-2's own convention for complex inputs (the
+    77 GHz ablation below): **real and imag parts are STFT'd separately and stacked — 2-channel
+    log-magnitude spectrograms for both the 10 GHz primary (raw complex beat) and the 10 GHz
+    ablation (matched complex I/Q)**, i.e. `in_channels = 2` for both. The 77 GHz definitions
+    are unchanged (1-channel primary, 2-channel ablation). **Computation-affecting** — the
+    channel convention fixes the input tensor itself, hence `in_channels`, the first conv
+    layer's parameter count, the fitted per-frequency normalization state (kept per channel),
+    and therefore the predictions.
 - **(iii) Physics range-power baseline** (signal-domain, correctly labeled). In FMCW
   the beat-frequency axis maps to **range**, not to the 10 GHz RF/dielectric band, so
   this is a **target-range vs farther-range (background) energy ratio**, not a
@@ -847,6 +942,16 @@ at the config-freeze gate below, before any results are viewed):
   with **no claim** that it separates the GHz dielectric spectrum or localizes hydration
   within tissue. The scalar → Δm% mapping is a **per-fold linear fit** (inside each
   outer-training fold, never global).
+  - **O-M9-4 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — the frame→session step for the physics
+    scalar.** The per-frame scalar and the per-fold linear fit are frozen, but not how per-frame
+    values become the session-level analysis unit the fit and the reports use. Resolved:
+    per-frame scalar → **session value = the median over that session's QC-passed frames** (the
+    same frozen `frame_to_session_aggregation: median` that (i) applies "identically to every
+    CNN baseline", extended to the physics scalar) → a one-dimensional least-squares fit
+    (slope + intercept) on the outer-**training sessions** → predict the test sessions. The fit
+    is session-level, matching the analysis unit. Applies to the 77 GHz physics baseline (iii)
+    below identically. **Computation-affecting.**
 - **(iv) Session-index-only** baseline — frozen as the **categorical train-subject
   session mean**: predict `Δm%` for a held-out subject's session s as the mean `Δm%` of
   the outer-training subjects at that same session s (a 5-level lookup, S0–S4), **not**
@@ -914,6 +1019,14 @@ at the config-freeze gate below, before any results are viewed):
     still worth reporting as the 77 GHz physics baseline.
   - **(iv) Session-index-only** is band-agnostic (predicts from the session label alone,
     touching no radar data) and is **shared verbatim** between bands — not duplicated.
+- **Composite-baseline membership (O-M9-3) — cross-reference.** Which of the baselines above
+  are members of the composite learned-baseline procedure and of the per-family Holm family is
+  resolved in **Statistics**, under "How the 'strongest baseline' is chosen": the members are
+  the three **primary** variants only — (i) raw 1D-CNN, (ii) raw spectrogram 2D-CNN, (iii)
+  physics. The (i-ablation) / (ii-ablation) matched-preprocessing variants (and their 77 GHz
+  counterparts) are reported **as ablations** and enter no comparison family.
+  Owner-approved 2026-07-30, decided AFTER Exp A's and Exp B's full-cohort results were already
+  visible; **computation-affecting**.
 - **Budget parity**: each learned-baseline family and the WST classical models are
   given the **same inner-CV configuration budget** (≤ K configs each, K fixed in
   config) and the same seed set, so "WST wins" is not an artifact of unequal search.
@@ -1273,9 +1386,33 @@ correspondence can be demonstrated.
     — CNN, spectrogram, physics — a **Holm family of exactly 3 comparisons**, all
     labeled exploratory. (The session-index primary is outside this family.) No family
     is chosen by its outer-test score.
+  - **O-M9-3 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — which variants are members of these two
+    families.** The two bullets above name the learned families "CNN / spectrogram / physics"
+    without saying whether Exp D's matched-preprocessing ablations are members. Resolved: the
+    members of **both** the composite procedure and the Holm-3 per-family family are the three
+    **primary** variants only — raw 1D-CNN, raw spectrogram 2D-CNN, physics. The
+    matched-preprocessing ablations (Exp D (i-ablation), (ii-ablation), and their 77 GHz
+    counterparts) are reported **as ablations** and enter no comparison family, so the Holm
+    family size stays exactly 3 and the composite never selects an ablation.
+    **Computation-affecting** — it fixes the composite's candidate set inside every outer fold
+    and the multiplicity denominator. Cross-referenced in Exp D above.
   - Test for each comparison: per-subject metric differences over the N_eval
     subjects, **Wilcoxon signed-rank** plus a cluster-bootstrap CI on the mean
     difference (effective N reported).
+  - **O-M9-5 [APPLIED — owner-approved 2026-07-30; decided AFTER Exp A's and Exp B's
+    full-cohort results were already visible] — which radar artifacts the comparisons are
+    paired against.** Every comparison above pairs baseline predictions with Exp A's radar
+    predictions on identical folds, but the frozen text does not say which run supplies the
+    radar side once Exp A has already been run at an earlier commit and the feature stores have
+    since been rebuilt. Resolved: **re-run Exp A at the milestone-9 commit against the rebuilt
+    stores** (`experiments/run_regression.py`, unchanged code) and **assert its predictions are
+    bit-identical to the M7 artifacts** (`results/runs/*_f36c4fb2/predictions_{band}.csv`)
+    before any comparison is computed; the re-run's artifacts are then the comparison input,
+    with unified M9 provenance. A mismatch **stops the milestone** — it would mean the store
+    rebuild or the code drifted — rather than silently comparing against one version or the
+    other. **Not computation-affecting**: the numbers it admits are, by that very assertion,
+    the M7 numbers.
 - **Selection hygiene**: the reported model is the nested-CV winner selected on inner
   folds; outer-test scores are used once for reporting and never to re-select. These
   rules are fixed now even though execution is milestone H.
