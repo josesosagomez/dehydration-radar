@@ -129,11 +129,11 @@ it):
 
 - After finishing your turn, watch the plan file for the `Status:` line to flip back to
   `AWAITING_CLAUDE` (or to `REVIEW_COMPLETE`). Use a passive file-watch/monitor facility
-  if your harness provides one; otherwise check on a modest interval (~60 s). If you
+  if your harness provides one; otherwise check on a modest interval (~90 s). If you
   cannot wait passively, say so and ask the owner to nudge you when Codex has written.
 - **Never write to the file when it is not your turn.** Immediately before writing,
   re-read the full review block once more so you never clobber a concurrent edit.
-- If the status has not changed after ~30 minutes, stop and tell the owner the loop
+- If the status has not changed after ~20 minutes, stop and tell the owner the loop
   appears stalled rather than polling forever.
 
 ## Conduct

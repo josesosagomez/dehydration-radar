@@ -141,11 +141,11 @@ When `Status: AWAITING_CODEX`:
 
 ## Polling protocol
 
-- After finishing your turn, poll the plan file (e.g. a shell loop, `sleep 60` between
+- After finishing your turn, poll the plan file (e.g. a shell loop, `sleep 90` between
   checks) until the `Status:` line flips back to `AWAITING_CODEX`, then take your turn.
 - **Never write to the file when it is not your turn.** Immediately before writing,
   re-read the file once more to make sure the state is what you think it is.
-- If the status has not changed after ~30 minutes of polling, stop and tell the owner
+- If the status has not changed after ~20 minutes of polling, stop and tell the owner
   the loop appears stalled rather than looping forever.
 
 ## Conduct
