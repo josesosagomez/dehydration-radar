@@ -6,6 +6,11 @@ exclusion, before_fit-once-per-fit + active-completeness fail-closed, KNN fold-v
 per-seed outer outcomes, tuned-ε-style train-only extra fits, and the per-family held-out
 mutation property. The frozen-suite rebind (step 5) and the store-backed end-to-end
 mutation (step 10) live in their own files.
+
+T-M9-harness (milestone 9 step 4) appends the ordinal half of `_viability_reason`: the
+2-column-y class-coverage rule (`implementation_plan.md:793-801`), its C1 independence
+property, the knn check's re-keying on the PARAMETER name (so `ord_a_knn` is covered), and
+the `_score` fail-fast on a 2-column y with the default scorer.
 """
 
 import numpy as np
@@ -21,8 +26,9 @@ from dehyd.eval.harness import (
     require_complete_active,
     run_nested_candidates,
 )
-from dehyd.eval.metrics import subject_balanced_mae
+from dehyd.eval.metrics import class_unit_mae, subject_balanced_mae
 from dehyd.eval.selection import SelectionError
+from dehyd.eval.splits import nested_loso_splits
 
 
 def make_dataset(n_subjects=6, sessions=4, n_features=5, seed=20260721):
@@ -387,3 +393,246 @@ def test_held_out_mutation_leaves_everything_pre_scoring_identical(family):
             assert fb.params[k].tobytes() == fm.params[k].tobytes()
     # only the held-out subject's prediction may move (features were mutated).
     assert rb.test_predictions.tobytes() != rm.test_predictions.tobytes()
+
+
+# ------------------------------------------- ordinal fold viability (T-M9-harness, M9 step 4)
+#
+# The frozen Exp C rule (`implementation_plan.md:793-801`): a configuration whose
+# INNER-TRAINING set lacks any of the five S0-S4 classes is non-evaluable and is recorded,
+# not fit. Two wrong implementations these fixtures are built to fail:
+#
+#   (W1) requiring `set(bundle.y[:, 1])` (a data-derived set) instead of the constant
+#        {0, 1, 2, 3, 4). `OrdinalFeatures` mirrors `StoreBackedFeatures`, whose bundles
+#        carry ALL session rows — inner-validation and outer-test included — so (W1) makes
+#        which cells are fit at all a function of held-out labels, and silently stops
+#        requiring a class that QC removed cohort-wide.
+#   (W2) checking coverage over all bundle rows rather than the training rows only, which
+#        is the same leak with the opposite sign.
+
+
+ORDINAL_CANDIDATES = [
+    Candidate("ord_a_ridge_a1", "ord_a_ridge", (("alpha", 1.0),)),
+    Candidate("ord_b_fh_C1", "ord_b_frank_hall", (("C", 1.0),)),
+]
+
+
+def _ordinal_class_mae(subjects, y_true, y_pred, session_idx):
+    """Exp C's frozen inner objective in the shape the harness hook expects: the class-unit
+    MAE between the truth column `y[:, 1]` and the estimators' class predictions."""
+    return class_unit_mae(y_true[:, 1], y_pred)
+
+
+def _ordinal_dataset(classes_by_subject, *, n_features=3, seed=20260731):
+    """A 2-column-y Dataset: `y[:, 0] = L` (continuous), `y[:, 1] = class` (session index).
+
+    `classes_by_subject` maps subject id -> the class labels that subject contributes, one
+    row each, so a fixture can make a class rare (present in a single subject) or absent
+    from the whole cohort. `L` rises with the class so the thresholded regressor is not
+    degenerate.
+    """
+    rng = np.random.default_rng(seed)
+    subjects, feats, targets = [], [], []
+    for subject in sorted(classes_by_subject):
+        for klass in classes_by_subject[subject]:
+            x = rng.normal(size=n_features)
+            subjects.append(subject)
+            feats.append(x)
+            targets.append((float(klass) + 0.1 * float(x[0]), float(klass)))
+    return Dataset(
+        np.array(subjects), np.array(feats, dtype=float), np.array(targets, dtype=float)
+    )
+
+
+ALL_CLASSES = {s: (0, 1, 2, 3, 4) for s in range(1, 7)}          # 6 subjects x 5 rows
+CLASS_4_ONLY_IN_SUBJECT_6 = {**{s: (0, 1, 2, 3) for s in range(1, 6)}, 6: (0, 1, 2, 3, 4)}
+CLASS_3_ABSENT_EVERYWHERE = {s: (0, 1, 2, 4) for s in range(1, 7)}
+CLASSES_3_AND_4_ABSENT = {s: (0, 1, 2) for s in range(1, 7)}
+
+
+def _one_fold_cells(dataset, candidates, *, test_subject=1, data_for=None):
+    """`(StageOutcome, reason map)` for ONE outer fold, via `_score_candidates_on_fold`.
+
+    Deliberately not `run_nested_candidates`: the missing-class fixtures below produce folds
+    where NO candidate is evaluable, and `select_candidate` raises there by design (the
+    frozen "the fold contributes no score" path). What these tests are about is the viability
+    decision that happens strictly before selection.
+    """
+    fold = next(
+        f for f in nested_loso_splits(dataset.subject_ids()) if f.test_subject == test_subject
+    )
+    provider = data_for if data_for is not None else harness.fixed_feature_provider(dataset)
+    stage = harness._score_candidates_on_fold(
+        candidates, fold, (0,), None, provider, score_fn=_ordinal_class_mae
+    )
+    reasons = tuple(
+        (ir.candidate_id, tuple(sorted(ir.inner_val)), ir.reason) for ir in stage.inner_results
+    )
+    return stage, reasons
+
+
+def test_two_column_y_runs_through_the_whole_engine_when_every_class_is_covered():
+    """The baseline: with all five classes in every inner-training set nothing is marked
+    non-evaluable, and a 2-column y flows through fit -> predict -> score -> select -> refit."""
+    results = run_nested_candidates(
+        _ordinal_dataset(ALL_CLASSES), ORDINAL_CANDIDATES, score_fn=_ordinal_class_mae
+    )
+    assert len(results) == 6
+    for r in results:
+        assert all(ir.reason is None for ir in r.inner_results)
+        assert np.isfinite(r.inner_scores).all()
+        assert r.selected.family in ("ord_a_ridge", "ord_b_frank_hall")
+        # predictions are class indices on the frozen grid
+        assert set(np.unique(r.test_predictions)).issubset(set(range(5)))
+
+
+def test_missing_class_in_one_inner_train_marks_exactly_those_cells():
+    """Class 4 lives only in subject 6, so on the test-subject-1 fold exactly the inner fold
+    that holds subject 6 OUT has an inner-training set missing a class.
+
+    Hand-derived: outer-training subjects are {2,3,4,5,6}; GroupKFold(min(5, 5)) holds out
+    one subject per inner fold, so 1 of the 5 inner folds is affected and 4 are not. This
+    also fails against (W2): a coverage check over all bundle rows sees subject 6's class-4
+    rows sitting in the inner-VALIDATION block and returns None.
+    """
+    stage, reasons = _one_fold_cells(
+        _ordinal_dataset(CLASS_4_ONLY_IN_SUBJECT_6), ORDINAL_CANDIDATES
+    )
+    blocked = {(cid, val) for cid, val, reason in reasons if reason is not None}
+    assert {val for _, val in blocked} == {(6,)}
+    # candidate-independent by construction: the rule reads rows, never the candidate
+    assert {cid for cid, _ in blocked} == {"ord_a_ridge_a1", "ord_b_fh_C1"}
+    assert all(
+        reason == "ordinal_missing_class_4_in_inner_train"
+        for _, val, reason in reasons
+        if val == (6,)
+    )
+    for inner in stage.inner_results:
+        if inner.reason is None:
+            assert inner.fits and np.isfinite(inner.score)
+        else:
+            # recorded, never fit: no FitRecords, no predictions, NaN in the score matrix
+            assert inner.fits == [] and inner.val_predictions == {} and np.isnan(inner.score)
+    assert np.isnan(stage.inner_scores).sum() == len(ORDINAL_CANDIDATES)
+    # Without the check, `ord_b_frank_hall` would raise OrdinalViabilityError on this cell
+    # (its 1[class > 3] binary target is single-class) instead of being recorded as skipped.
+
+
+def test_globally_absent_class_still_blocks_every_cell():
+    """C1(ii): class 3 appears NOWHERE in the bundle, and every cell is still blocked.
+
+    This is the direct (W1) discriminator: a `set(bundle.y[:, 1])`-relative predicate finds
+    the required set to be {0, 1, 2, 4}, sees every inner-training set cover it, and returns
+    None for all ten cells — i.e. it silently stops requiring a class the cohort lost.
+    """
+    stage, reasons = _one_fold_cells(
+        _ordinal_dataset(CLASS_3_ABSENT_EVERYWHERE), ORDINAL_CANDIDATES
+    )
+    assert all(reason == "ordinal_missing_class_3_in_inner_train" for _, _, reason in reasons)
+    assert np.isnan(stage.inner_scores).all()
+
+
+def test_several_missing_classes_are_all_named_lowest_first():
+    """Both absent classes appear in the reason, ascending — the `{c}` slot is the whole
+    missing set, so the single-class case stays exactly `ordinal_missing_class_3_...`."""
+    _, reasons = _one_fold_cells(_ordinal_dataset(CLASSES_3_AND_4_ABSENT), ORDINAL_CANDIDATES)
+    assert all(reason == "ordinal_missing_class_3_4_in_inner_train" for _, _, reason in reasons)
+
+
+def _collapse_to_class_0(classes):
+    """Deletes classes 1-4 from the rows it touches (the (W1) discriminator)."""
+    return np.zeros_like(classes)
+
+
+def _shift_classes_by_two(classes):
+    """A pure permutation of the label set: no class is created or destroyed."""
+    return (classes + 2.0) % 5.0
+
+
+def _non_training_class_mutator(dataset, rewrite):
+    """A provider that rewrites the CLASS COLUMN of every row outside the fit's OWN training
+    subjects — exactly the inner-validation and outer-test rows, recomputed per fit.
+
+    Same subjects, same X, same `L` column: only `y[:, 1]` moves, and only on rows the fit is
+    forbidden to learn from.
+    """
+
+    def provider(candidate, train_subjects):
+        y = dataset.targets.copy()
+        held_out = ~np.isin(dataset.subjects, sorted(train_subjects))
+        y[held_out, 1] = rewrite(y[held_out, 1])
+        return FeatureBundle(dataset.subjects, dataset.features, y, extra_fits=())
+
+    return provider
+
+
+@pytest.mark.parametrize("rewrite", [_collapse_to_class_0, _shift_classes_by_two])
+def test_viability_decisions_ignore_non_training_class_labels(rewrite):
+    """C1(i): the coverage predicate is a pure function of the inner-TRAINING rows.
+
+    Rewriting every inner-validation and outer-test class label — including a rewrite that
+    deletes class 4 from the bundle entirely — leaves the reason strings and the whole
+    viability decision map bytewise identical. Under (W1) the collapse case flips the
+    subject-6 cells from `ordinal_missing_class_4_in_inner_train` to None, because the
+    data-derived required set shrinks to {0, 1, 2, 3}.
+    """
+    dataset = _ordinal_dataset(CLASS_4_ONLY_IN_SUBJECT_6)
+    base_stage, base_reasons = _one_fold_cells(dataset, ORDINAL_CANDIDATES)
+    mutated_stage, mutated_reasons = _one_fold_cells(
+        dataset, ORDINAL_CANDIDATES, data_for=_non_training_class_mutator(dataset, rewrite)
+    )
+
+    assert mutated_reasons == base_reasons
+    assert (
+        np.isnan(mutated_stage.inner_scores).tobytes()
+        == np.isnan(base_stage.inner_scores).tobytes()
+    )
+    # ...and the fixture is live: held-out labels moved, so the SCORES computed against them
+    # genuinely changed. Without this the invariance above could hold vacuously.
+    assert not np.array_equal(
+        mutated_stage.inner_scores, base_stage.inner_scores, equal_nan=True
+    )
+
+
+def test_knn_row_count_check_is_keyed_on_the_parameter_not_the_family():
+    """`ord_a_knn` carries the identical `n_neighbors` grid inside the thresholding wrapper,
+    so one rule must cover both families and produce the same reason string.
+
+    Hand-derived row count: 6 subjects x 5 classes, outer-training 5 subjects, GroupKFold(5)
+    holds one out -> every inner-training set is 4 subjects x 5 rows = 20. The k = 20 / k = 21
+    pair pins the comparison as strict `>`, exactly as `test_m9_pin.py` pins it for `knn`.
+    """
+    dataset = _ordinal_dataset(ALL_CLASSES)
+    candidates = [
+        Candidate("ord_a_knn_k20", "ord_a_knn", (("n_neighbors", 20),)),
+        Candidate("ord_a_knn_k21", "ord_a_knn", (("n_neighbors", 21),)),
+        Candidate("ord_a_knn_huge", "ord_a_knn", (("n_neighbors", 999),)),
+    ]
+    _, reasons = _one_fold_cells(dataset, candidates)
+    expected = {
+        "ord_a_knn_k20": None,
+        "ord_a_knn_k21": "knn_n_neighbors_21_gt_train_rows_20",
+        "ord_a_knn_huge": "knn_n_neighbors_999_gt_train_rows_20",
+    }
+    for cid, _, reason in reasons:
+        assert reason == expected[cid]
+
+
+# --------------------------------------------- 2-column y meets the default scorer (trap 1)
+
+
+def test_default_score_fn_fails_fast_on_two_column_y():
+    """`subject_balanced_mae` is defined on a 1-D target. Fed a 2-column y it does not
+    reliably crash: `y_true[rows] - y_pred[rows]` broadcasts whenever a subject happens to
+    contribute exactly 2 rows, returning a meaningless (2, 2) error block and a plausible
+    float. The fail-fast check turns that silent wrong number into a named error."""
+    dataset = _ordinal_dataset({1: (0, 1), 2: (2, 3)})
+    bundle = FeatureBundle(dataset.subjects, dataset.features, dataset.targets, extra_fits=())
+    rows = np.ones(dataset.subjects.shape, dtype=bool)
+    with pytest.raises(HarnessError, match="1-D"):
+        harness._score(None, bundle, rows, np.zeros(int(rows.sum())))
+
+
+def test_two_column_y_without_score_fn_raises_through_the_engine():
+    """The same fail-fast, reached the way a caller would actually reach it."""
+    with pytest.raises(HarnessError, match="1-D"):
+        run_nested_candidates(_ordinal_dataset(ALL_CLASSES), ORDINAL_CANDIDATES)

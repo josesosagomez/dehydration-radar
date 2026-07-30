@@ -4,6 +4,87 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 4: `harness._viability_reason` generalized + the `_score` fail-fast. Succeeded.
+
+Per plan step 4 (`MILESTONE_9_PLAN.md` §2.4, T-M9-harness) — the milestone's **one structural edit
+to the shared engine**, taken alone between two green states. Nothing from steps 5+ (no
+`fold_parallel.py`, no `exp_c.py`). Total diff: 3 hunks in `src/dehyd/eval/harness.py` (plus its
+module docstring) and a new test group in `tests/test_harness.py`.
+
+**(a) The knn row-count check, re-keyed on the parameter.** `candidate.family == "knn"` →
+`"n_neighbors" in candidate.params()`. Forced by Exp C: `ord_a_knn` carries the identical
+`n_neighbors` grid *inside* the thresholding wrapper, so a family-name key would let a candidate
+with k > n_train_rows reach `.fit()` and blow up instead of being recorded as non-evaluable. The
+reason string, and the strict `>` boundary (k == n_train_rows is viable), are untouched — pinned
+by `test_m9_pin.py`'s hand-derived `knn_k8`/`knn_k9` pair on 8 inner-training rows.
+
+**(b) The ordinal class-coverage check.** Fires **iff `bundle.y.ndim == 2`**, so every 1-D-y path
+(Exp A, Exp B, the frozen shim) never enters it. The required class set is the **constant**
+`ORDINAL_CLASSES = tuple(range(N_CLASSES)) = (0, 1, 2, 3, 4)` — `N_CLASSES` imported from
+`models/ordinal.py` so the frozen 5 has one definition. Reason string:
+`ordinal_missing_class_{c}_in_inner_train`, where `{c}` is the whole missing set joined by `_`
+ascending, so one missing class reads `ordinal_missing_class_3_in_inner_train` and two read
+`ordinal_missing_class_3_4_in_inner_train` (the §2.4 wording "lowest missing class named; lists
+all of them when several are absent" — the ascending join satisfies both halves at once; this is
+the one formatting call the spec left to the implementation).
+
+**Why the constant and not `set(bundle.y[:, 1])` — the C1 point, restated because it is the whole
+reason this edit is called risky.** `OrdinalFeatures` will mirror `StoreBackedFeatures`, whose
+bundles carry **all** session rows; the row mask is applied afterwards, in
+`_score_candidates_on_fold`. A bundle-derived required set therefore reads inner-validation *and*
+outer-test labels, which would make **which cells are fit at all** a function of held-out data —
+control-flow leakage, the kind the fit-audit cannot see. It is also a weaker rule than the frozen
+one (`:793-797`), since it silently stops requiring a class QC removed cohort-wide. Class labels
+are read with `np.rint(...).astype(int)`, matching `ordinal._split_target`, so a 3 arriving as
+2.9999999 in the float column cannot read as class 2 in one place and class 3 in the other.
+
+**(c) `_score`'s fail-fast.** `score_fn=None` + `bundle.y.ndim != 1` → `HarnessError`. Not a
+defensive nicety: `subject_balanced_mae` fed a 2-column `y_true` against a 1-D `y_pred` does **not**
+reliably crash — `y_true[rows] - y_pred[rows]` broadcasts `(m, 2)` against `(m,)` whenever a subject
+contributes exactly m = 2 rows, returning a meaningless `(2, 2)` error block and a plausible float.
+That is §5 trap 1 in its worst form (silent wrong number, not an exception), so the check is
+explicit. `HarnessError` rather than a bare `assert`: the module's typed error for a malformed call,
+and `assert` would vanish under `python -O`.
+
+**Verification — what each new test rules out, checked by running the wrong implementations.**
+Four wrong variants were coded up in a scratch harness and every one is rejected by the test
+designed for it: (W1) required set = `set(bundle.y[:, 1])` → fails
+`test_globally_absent_class_still_blocks_every_cell` (a cohort with no class 3 anywhere: W1 returns
+None for all ten cells) and the collapse case of the C1 mutation test; (W2) coverage checked over
+*all* bundle rows instead of the training rows → fails
+`test_missing_class_in_one_inner_train_marks_exactly_those_cells` (class 4 lives only in subject 6,
+so on the test-subject-1 fold W2 sees it sitting in the inner-**validation** block and passes the
+cell) and both C1 cases; (W3) knn keyed on the family name → fails the `ord_a_knn` k = 20/21/999
+test; (W4) no `_score` fail-fast → fails the engine-level 2-column-y test. The C1 mutation test
+also asserts the fixture is **live** (held-out labels moved, so the scores computed against them
+genuinely changed) — without that, invariance could hold vacuously.
+
+**Fixture arithmetic, hand-derived not captured.** 6 subjects; outer-training 5; `GroupKFold(min(5,
+5))` holds out one subject per inner fold. All-classes fixture: 5 rows/subject → inner-training
+4 × 5 = 20 rows, hence `knn_n_neighbors_21_gt_train_rows_20`. Rare-class fixture: subjects 1-5 carry
+classes (0,1,2,3), subject 6 carries (0,1,2,3,4) → exactly 1 of the 5 inner folds is blocked, 4 are
+not. The blocked cells also demonstrate *why* the check exists: without it `ord_b_frank_hall`'s
+`1[class > 3]` binary target is single-class there and `OrdinalViabilityError` (step 3's defense in
+depth) fires instead of the cell being recorded as skipped.
+
+**Aggregation deliberately NOT touched.** `_score_candidates_on_fold` still builds `CandidateScore`
+with plain `np.mean`/`np.std` over **all** inner folds. Exp C's evaluable-folds-only
+`nanmean`/`nanstd` reduction is step 6's job, in `exp_c.py` — putting it here would move Exp A's and
+Exp B's numbers, which is exactly what the step-1 pin forbids (§5 trap 3 names this as the sharper
+trap; the fix belongs in `exp_c.py`, not the harness).
+
+**Suite.** +9 tests in `tests/test_harness.py` (29 → 38). Full suite: **861 passed, 16 skipped, 1
+pre-existing failure** (`test_provenance.py::test_git_degrades_to_none_without_env`, the stale local
+`REVISION`-file issue diagnosed at step 1 — unrelated, no harness code in its path).
+`tests/test_m9_pin.py`'s full `run_nested_candidates` byte trace and its viability-reason pin are
+**bitwise intact**, as is `tests/test_m8_pin.py`; `git diff --exit-code tests/test_no_leakage.py`
+clean. That is the D2 evidence for the step-4 half.
+
+**Next:** step 5 — extract `eval/fold_parallel.py` from `exp_b._run_folds_parallel` and have exp_b
+delegate, re-asserting the existing serial-vs-parallel bit-identity test.
+
+---
+
 ## 2026-07-30 — M9 step 3: `models/ordinal.py` + `regressors.py` ordinal dispatch + `selection.py` ordinal tie-break. Succeeded.
 
 Per plan step 3 (`MILESTONE_9_PLAN.md` §2.2/§2.3, T-M9-ordinal + T-M9-selection): the two frozen

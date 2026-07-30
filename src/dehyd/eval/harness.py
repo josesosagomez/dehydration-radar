@@ -5,7 +5,9 @@ features, (b) the frozen leakage suite's reference shim (ridge over an alpha gri
 fixed Dataset), and (c) Experiment B's session-residualized search, via one optional
 keyword-only `score_fn` hook (`None` -> the original, unchanged `subject_balanced_mae`
 scoring; a supplied `score_fn(subjects, y_true, y_pred, session_idx)` overrides it — see
-`_score`). It:
+`_score`). Milestone 9 adds (d) Experiment C's ordinal search on the same engine: its
+estimators read a 2-column `y = [L, class]` and its non-evaluable cells are marked through
+the existing `_viability_reason` mechanism (see there). It:
 
   * consumes folds ONLY from `eval/splits.py` (subject-level leakage is structural);
   * routes every tie-break through `eval/selection.py::select_candidate` (never inline);
@@ -34,6 +36,7 @@ from threadpoolctl import threadpool_limits
 from .metrics import subject_balanced_mae
 from .selection import CandidateScore, select_candidate
 from .splits import nested_loso_splits
+from ..models.ordinal import N_CLASSES
 from ..models.regressors import SEED_SENSITIVE, SIMPLICITY_RANK, build_estimator, fitted_state_params
 
 # The exact set of `active` protocol keys the guard requires per band (C5). The guard
@@ -42,6 +45,10 @@ REQUIRED_ACTIVE_KEYS = {
     "10ghz": frozenset({"band", "reduction", "channel", "tiling", "log_branch", "range_gate_m", "model_family"}),
     "77ghz": frozenset({"band", "reduction", "channel", "gate_m", "tiling", "log_branch", "model_family"}),
 }
+
+# The classes an Exp C inner-training set must cover, as a CONSTANT (S0-S4). See
+# `_viability_reason` for why this may never be replaced by a data-derived class set.
+ORDINAL_CLASSES = tuple(range(N_CLASSES))   # (0, 1, 2, 3, 4)
 
 
 class HarnessError(ValueError):
@@ -209,14 +216,47 @@ def tuned_epsilons(prelog_by_subject, train_subjects, *, k: float = 0.1, fallbac
     return eps
 
 
-def _viability_reason(candidate: Candidate, n_train_rows: int) -> str | None:
+def _viability_reason(candidate: Candidate, bundle: FeatureBundle, train_rows) -> str | None:
     """Explicit, enumerated PRE-FIT viability predicates (C6/C21). Returns a reason code
-    if the candidate cannot be fit on a fold of this size, else None. NOT a catch-all: any
-    unexpected fit/predict exception is left to propagate loudly."""
-    if candidate.family == "knn":
-        k = candidate.params()["n_neighbors"]
+    if the candidate cannot be fit on these training rows, else None. NOT a catch-all: any
+    unexpected fit/predict exception is left to propagate loudly.
+
+    (a) KNN's k against the training row count, keyed on the PARAMETER name rather than the
+        family name, so `knn` and Experiment C's `ord_a_knn` — which carries the identical
+        `n_neighbors` grid inside the thresholding wrapper — are one rule with one reason
+        string. The comparison stays strictly `>` (k == n_train_rows is viable).
+
+    (b) Experiment C's frozen fold-viability rule (`implementation_plan.md:793-801`): with a
+        2-column ordinal y (`y[:, 1]` = the S0-S4 class), the training rows must cover all
+        five classes. The required set is the CONSTANT `ORDINAL_CLASSES`, never
+        `set(bundle.y[:, 1])`, for two independent reasons:
+
+          (i) the frozen rule is "its inner-training set lacks any of the 5 classes"; a
+              bundle-relative predicate would silently stop requiring a class that QC had
+              removed cohort-wide, which is a weaker rule than the frozen one;
+          (ii) `OrdinalFeatures` mirrors `StoreBackedFeatures`, whose bundles carry ALL
+              session rows (the row mask is applied afterwards, in
+              `_score_candidates_on_fold`), so `set(bundle.y[:, 1])` would include
+              inner-validation and outer-test labels — making which cells are fit at all a
+              function of held-out labels.
+
+        Against the constant, the predicate is a pure function of the training rows. It is
+        therefore candidate-independent by construction, but is still evaluated and recorded
+        per cell, matching "such configs are skipped in ordinal selection (recorded)".
+    """
+    n_train_rows = int(np.count_nonzero(train_rows))
+    params = candidate.params()
+    if "n_neighbors" in params:
+        k = params["n_neighbors"]
         if k > n_train_rows:
             return f"knn_n_neighbors_{k}_gt_train_rows_{n_train_rows}"
+    if bundle.y.ndim == 2:
+        # Round, don't truncate: the class rides in a float column (`ordinal._split_target`
+        # uses the same rint), so a 3 that arrived as 2.9999999 must not read as class 2.
+        present = set(np.rint(bundle.y[train_rows, 1]).astype(int).tolist())
+        missing = [c for c in ORDINAL_CLASSES if c not in present]
+        if missing:
+            return "ordinal_missing_class_" + "_".join(str(c) for c in missing) + "_in_inner_train"
     return None
 
 
@@ -233,6 +273,16 @@ def _score(score_fn, bundle: FeatureBundle, rows, y_pred) -> float:
     `score_fn` additionally receives `bundle.session_idx[rows]` (or None if the bundle
     carries none): `score_fn(subjects, y_true, y_pred, session_idx) -> float`."""
     if score_fn is None:
+        if bundle.y.ndim != 1:
+            # Fail-fast (M9 step 4, plan §5 trap 1). `subject_balanced_mae` is defined on a
+            # 1-D target; fed Exp C's 2-column [L, class] y it does not reliably crash —
+            # `y_true[rows] - y_pred[rows]` broadcasts for any subject contributing exactly
+            # 2 rows and returns a plausible-looking, meaningless float.
+            raise HarnessError(
+                "score_fn=None scores with subject_balanced_mae, which is defined on a 1-D "
+                f"target, but this bundle's y has shape {bundle.y.shape}. A 2-column ordinal "
+                "y must be scored by an explicit score_fn (Exp C always supplies one)."
+            )
         return subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)
     session_idx = bundle.session_idx[rows] if bundle.session_idx is not None else None
     return score_fn(bundle.subjects[rows], bundle.y[rows], y_pred, session_idx)
@@ -304,8 +354,8 @@ def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, 
         for fj, inner in enumerate(fold.inner_folds):
             bundle = data_for(candidate, inner.train_subjects)
             feature_dims[ci] = int(bundle.X.shape[1])
-            n_train_rows = int(np.isin(bundle.subjects, sorted(inner.train_subjects)).sum())
-            reason = _viability_reason(candidate, n_train_rows)
+            train_rows = np.isin(bundle.subjects, sorted(inner.train_subjects))
+            reason = _viability_reason(candidate, bundle, train_rows)
             if reason is not None:
                 cells[(ci, fj)] = InnerResult(
                     inner.train_subjects, inner.val_subjects, candidate.candidate_id,
