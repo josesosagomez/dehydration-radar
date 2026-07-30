@@ -4,6 +4,80 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 1: pre-edit behaviour pin (`tests/test_m9_pin.py`) captured — full `run_nested_candidates` byte-trace + `_viability_reason`'s outputs. Succeeded; test-only, no source touched.
+
+Per plan step 1 (`MILESTONE_9_PLAN.md` §1): steps 3 and 4 both claim byte-neutrality for every
+existing path — step 3 factors `_bare_model` out of `regressors.build_estimator` (the five
+existing families' estimators and fitted state must not move), step 4 generalizes
+`harness._viability_reason` and rewrites its one call site in `_score_candidates_on_fold` (every
+1-D-y path must be bytewise unchanged). Neither claim is checkable without a trace captured
+*before* the edits, so nothing else was touched today.
+
+**Why a second pin file when `test_m8_pin.py` already exists.** The M8 pin captures only the
+*outer summary* of a `FoldResult`: selected candidate id, `inner_scores` sha256, `test_score`,
+`test_predictions` sha256. That is blind to exactly the two step-3/step-4 surfaces. Demonstrated,
+not assumed — two simulated regressions were run against the pre-M9 tree:
+(1) `fitted_state_params("ridge", …)` losing its `intercept_` key (a plausible `_bare_model`
+refactor slip: predictions are untouched, only the audit record changes) and (2) the knn
+viability reason string renamed to `"knn_unusable"`. **Both left every M8-pinned quantity
+bit-identical** (the M8 pin passes) **and both moved the new trace.** Without this file, step 3
+could silently gut the fit-audit's evidence and step 4 could silently rename a reason code, with
+a green suite.
+
+**What the trace covers.** One sha256 per outer fold over a canonical byte encoding (type-tagged,
+floats as `float.hex()` so NaN and every mantissa bit survive, sets sorted, dicts key-sorted) of
+the *complete* `FoldResult`: `test_subject`, `train_subjects`, the selected `Candidate`'s full
+identity, `inner_scores`, every `InnerResult` (inner train/val subject sets, seed-averaged score,
+first-seed `val_predictions`, `reason`, and every `FitRecord`'s quantity/role/subject set/fitted
+parameter arrays), every `final_fits` record, `train_predictions`, `test_predictions`,
+`test_score`, and every `SeedOutcome`.
+
+**Fixtures and values.**
+- *Trace fixture:* deliberately the M8 pin's dataset verbatim — same generator, 8 subjects × 4
+  sessions × 5 features, `np.random.default_rng(20260728)`, `seeds=(0, 1, 2)` — so a failure here
+  while the M8 pin still passes localizes the drift to what the trace adds. Candidates are all
+  five existing families (`ridge α=1.0`, `svr C=1.0/ε=0.1`, `knn k=5`, `rf 50/depth 3`,
+  `gbm 50/lr 0.1/depth 2` — step 3's whole byte-neutrality surface) plus `knn k=999`, so the
+  viability path's reason strings sit inside the trace too. The 8 per-fold digests are captured
+  literals, verified reproducible across three independent runs of the pre-M9 tree before being
+  written in.
+- *Viability fixture:* 6 subjects × 2 sessions, chosen so every inner-training row count is
+  hand-derivable: 5 outer-training subjects → `GroupKFold(min(5, 5))` → 5 inner folds each holding
+  out one subject → **4 subjects × 2 sessions = 8 inner-training rows** in every cell. The expected
+  strings are therefore *hand-derived from the arithmetic*, not read back from the code:
+  `knn k=8` → viable (`None`), `knn k=9` → `knn_n_neighbors_9_gt_train_rows_8`, `knn k=999` →
+  `knn_n_neighbors_999_gt_train_rows_8`, ridge → `None`. The k=8/k=9 pair pins the predicate as
+  strict `>`; a `>=` implementation marks `knn k=8` non-evaluable and fails.
+
+**The one judgement call: `_viability_reason` is pinned *through the engine*, never by a direct
+call.** Step 4 changes its signature from `(candidate, n_train_rows)` to
+`(candidate, bundle, train_rows)`, so a direct-call pin would have to be edited at exactly the
+moment it is supposed to serve as evidence — and D2 requires the step-1 pins to be bytewise intact
+*after* the harness edit. The reason strings are observed where the engine consumes them
+(`InnerResult.reason`, plus the NaN pattern in `inner_scores` and the empty `fits`/
+`val_predictions` on a non-evaluable cell), which is the observable that matters and is
+signature-independent. Recorded here because it is a deviation from the literal wording of step 1
+("capturing `_viability_reason`'s current outputs") in favour of what D2 requires.
+
+**Suite.** `uv run python -m pytest` → **769 passed, 16 skipped** — the M8 baseline (767/16) plus
+this file's 2 tests, exactly as the plan predicted. `git diff --exit-code tests/test_no_leakage.py`
+clean.
+
+**One pre-existing local failure, diagnosed and NOT fixed here (out of step scope).** The first
+full run reported `tests/test_provenance.py::test_git_degrades_to_none_without_env` failing:
+`payload["git"]["commit"]` came back as `e88fd338…` (the M8 commit) instead of `None`. Cause: a
+leftover, git-ignored `REVISION` file at the repo root — an artifact of the M8 step-10.5 git-free
+wrapper work — which `provenance._revision_file_commit()` reads as its last-resort fallback. The
+test's `no_live_git` fixture stubs out live git and deletes the `DEHYD_GIT_*` env vars but does not
+neutralize the `REVISION` fallback, so the stale file answers. Confirmed as the sole cause and as
+pre-existing: the failure reproduces with `tests/test_m9_pin.py` stashed away, and
+`tests/test_provenance.py` goes **22 passed** when `REVISION` is moved aside (it was moved back
+immediately — the file is the owner's, gitignored, and touching it is not step 1's business). Two
+real options for later: delete the stale local `REVISION`, or harden the fixture to
+monkeypatch `_revision_file_commit` — the latter is arguably the right fix since the test claims
+"neither a live git nor the env vars" but does not actually isolate the third fallback. Flagged for
+the owner; not actioned.
+
 ## 2026-07-30 — M9 step 0.5: propagated A-M9-1 and O-M9-1..8 into `plans/implementation_plan.md` (10 annotations, +137 lines, doc-only). Succeeded; no source touched, suite unaffected.
 
 The first M9 implementation step, and deliberately a documentation-only one: the M9 plan puts it
