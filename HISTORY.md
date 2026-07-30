@@ -4,6 +4,53 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 2: `metrics.py` — the four Exp C ordinal pure functions. Succeeded.
+
+Per plan step 2 (`MILESTONE_9_PLAN.md` §2.1, T-M9-metrics): `class_unit_mae`, `adjacent_accuracy`,
+`quadratic_weighted_kappa`, `confusion_counts` added to `src/dehyd/eval/metrics.py`. No
+dependencies on the harness or the ordinal estimators (steps 3+); pure functions over
+already-computed class predictions.
+
+**`class_unit_mae`/`adjacent_accuracy`.** Pooled (not subject-balanced) mean `|pred-true|` /
+fraction within 1 class, matching `:766-769`'s "mean |predicted class - true class|" and the
+pooled/nonlinear classification at `:1199-1204`. NaN on empty. Test guards the pooled choice on
+the frozen T17 fixture reused in class-space (subjects [1×5,2×2], pooled=25/7 ≠ subject-balanced
+5.5) so a future refactor cannot silently route Exp C's objective through Exp A's
+`subject_balanced_mae`.
+
+**`confusion_counts`.** 5×5 (parametrized `n_classes`) integer counts, rows=true, via
+`np.add.at(counts, (yt, yp), 1)`. Orientation pinned on an asymmetric fixture (`counts[0,1]=2 !=
+counts[1,0]=1`) so a row/column swap is caught.
+
+**`quadratic_weighted_kappa` — implements O-M9-8 decision (8a), owner-approved 2026-07-30.** The
+frozen text's motivating parenthetical (`:798-800`, "QWK undefined on a single-class validation
+set") is read as motivation, not specification: implemented as `kappa = 1 -
+sum(w_ij*O_ij)/sum(w_ij*E_ij)` with `E_ij = row_marginal_i * col_marginal_j / n` and quadratic
+weights `(i-j)^2/(K-1)^2` over the fixed grid; NaN iff empty input or the expected-disagreement
+denominator is exactly 0 (both marginals concentrated on the *same* single class). A single-class
+truth (or predicted) side alone, against a varying opposite side, is DEFINED — usually kappa=0.
+
+Verified against `sklearn.metrics.cohen_kappa_score(weights="quadratic", labels=[0,1,2,3,4])`
+before writing any test assertion (not derived from this implementation): `true=[0,1,2,3,4]`,
+`pred` all-0 → 0.0; `true=[0,0]`, `pred=[0,1]` → 0.0; `true=pred=[0,0]` → NaN. The by-hand
+`n_classes=3` fixture (`true=[0,1,2,0,1,2]`, `pred=[0,2,1,0,0,2]`) was worked from the definition
+independently (confusion `[[2,0,0],[1,0,1],[0,1,1]]`, expected_disagreement=27/12=2.25,
+observed_disagreement=3/4=0.75, kappa=1-0.75/2.25=2/3) and cross-checked against
+`cohen_kappa_score` for agreement (0.66667), not read off a run of the code under test.
+
+**Suite.** `tests/test_metrics.py` +12 tests (35 total, all green). Full suite:
+**778 passed, 16 skipped, 1 pre-existing failure** (`test_provenance.py::
+test_git_degrades_to_none_without_env` — the step-1-diagnosed stale local `REVISION`-file issue,
+reproduced identically with this step's changes stashed away; not caused by step 2, out of its
+scope). `tests/test_m9_pin.py` + `tests/test_no_leakage.py` re-run explicitly green;
+`git diff --exit-code tests/test_no_leakage.py` clean.
+
+**Next:** step 3 — `models/ordinal.py` (`ThresholdedOrdinalRegressor`, `FrankHallOrdinal`,
+`inverse_frequency_class_weights`) + `regressors.py` `_bare_model` factoring + `selection.py`
+`SIMPLICITY_RANK` additions.
+
+---
+
 ## 2026-07-30 — M9 step 1: pre-edit behaviour pin (`tests/test_m9_pin.py`) captured — full `run_nested_candidates` byte-trace + `_viability_reason`'s outputs. Succeeded; test-only, no source touched.
 
 Per plan step 1 (`MILESTONE_9_PLAN.md` §1): steps 3 and 4 both claim byte-neutrality for every

@@ -13,12 +13,16 @@ import pytest
 
 from dehyd.eval.metrics import (
     BootstrapCI,
+    adjacent_accuracy,
+    class_unit_mae,
+    confusion_counts,
     equal_session_residual_mae,
     holm_adjusted,
     mean_difference_ci,
     per_session_residual_mae,
     per_subject_pearson_r,
     pooled_pearson_r,
+    quadratic_weighted_kappa,
     session_rmse,
     session_weighted_bootstrap,
     subject_balanced_mae,
@@ -292,3 +296,109 @@ def test_session_weighted_bootstrap_empty_session_replicate_skipped_and_can_trip
     ci = session_weighted_bootstrap(subjects, session_idx, y_true, y_pred[None, :], b=300, rng_seed=7)
     assert ci.n_skipped > 0
     assert ci.unreliable is True
+
+
+# ---------------------------------------------------------- Exp C ordinal metrics (T-M9-metrics)
+
+
+def test_class_unit_mae_hand_value():
+    y_true = np.array([0, 1, 2, 3, 4])
+    y_pred = np.array([0, 2, 2, 1, 4])
+    # |diffs| = [0, 1, 0, 2, 0] -> mean 0.6
+    assert class_unit_mae(y_true, y_pred) == pytest.approx(0.6)
+
+
+def test_class_unit_mae_nan_on_empty():
+    assert math.isnan(class_unit_mae([], []))
+
+
+def test_class_unit_mae_is_pooled_not_subject_balanced():
+    """The frozen T17 fixture in class-space: pooled (25/7), NOT subject-balanced (5.5) --
+    guards against accidentally routing Exp C's inner objective through the subject-balanced
+    reduction, which is Exp A's convention, not Exp C's (`:766-769` says plain pooled mean)."""
+    subjects = np.array([1, 1, 1, 1, 1, 2, 2])
+    y_true = np.zeros(7)
+    y_pred = np.array([1, 1, 1, 1, 1, 10, 10], dtype=float)
+    pooled = class_unit_mae(y_true, y_pred)
+    assert pooled == pytest.approx(25 / 7)
+    assert pooled != pytest.approx(subject_balanced_mae(subjects, y_true, y_pred))
+
+
+def test_adjacent_accuracy_hand_value():
+    y_true = np.array([0, 1, 2, 3, 4])
+    y_pred = np.array([0, 2, 2, 1, 4])
+    # |diffs| = [0, 1, 0, 2, 0]; <=1 -> [T, T, T, F, T] -> 4/5
+    assert adjacent_accuracy(y_true, y_pred) == pytest.approx(0.8)
+
+
+def test_adjacent_accuracy_nan_on_empty():
+    assert math.isnan(adjacent_accuracy([], []))
+
+
+def test_confusion_counts_orientation_and_sum():
+    """Asymmetric fixture: counts[true, pred] must not equal its transpose here, so a
+    row/column swap in the implementation is caught."""
+    y_true = np.array([0, 0, 0, 1])
+    y_pred = np.array([1, 1, 0, 0])
+    counts = confusion_counts(y_true, y_pred, n_classes=5)
+    assert counts.shape == (5, 5)
+    assert counts.sum() == 4
+    assert counts[0, 1] == 2   # true=0, pred=1 (twice)
+    assert counts[0, 0] == 1   # true=0, pred=0
+    assert counts[1, 0] == 1   # true=1, pred=0
+    assert counts[0, 1] != counts[1, 0]  # orientation: rows are true, not pred
+
+
+def test_qwk_hand_computed_against_standard_formula():
+    """n_classes=3 fixture, worked by hand from the definition (quadratic weights
+    w_ij=(i-j)^2/(K-1)^2, E_ij = row_marginal_i * col_marginal_j / n):
+
+    confusion (rows=true): [[2,0,0],[1,0,1],[0,1,1]], n=6, r=[2,2,2], c=[3,1,2].
+    expected_disagreement = sum(w*E) = 27/12 = 2.25
+    observed_disagreement = sum(w*O) = 3/4 = 0.75
+    kappa = 1 - 0.75/2.25 = 2/3.
+    Independently cross-checked against
+    sklearn.metrics.cohen_kappa_score(weights='quadratic', labels=[0,1,2]) == 0.6666...
+    """
+    y_true = np.array([0, 1, 2, 0, 1, 2])
+    y_pred = np.array([0, 2, 1, 0, 0, 2])
+    kappa = quadratic_weighted_kappa(y_true, y_pred, n_classes=3)
+    assert kappa == pytest.approx(2 / 3)
+
+
+def test_qwk_defined_for_single_class_truth_vs_varying_predictor():
+    """O-M9-8 (8a): single-class truth against a varying predictor is DEFINED (kappa=0),
+    not NaN -- the frozen text's motivating parenthetical ('QWK undefined on a single-class
+    validation set') is not the mathematically correct trigger on the fixed 5-class grid.
+    Cross-checked against cohen_kappa_score(weights='quadratic', labels=[0,1,2,3,4])."""
+    from sklearn.metrics import cohen_kappa_score
+
+    y_true = np.array([0, 0])
+    y_pred = np.array([0, 1])
+    kappa = quadratic_weighted_kappa(y_true, y_pred, n_classes=5)
+    ref = cohen_kappa_score(y_true, y_pred, weights="quadratic", labels=[0, 1, 2, 3, 4])
+    assert not math.isnan(kappa)
+    assert kappa == pytest.approx(ref)
+    assert kappa == pytest.approx(0.0)
+
+
+def test_qwk_defined_for_constant_predictor_vs_multiclass_truth():
+    """O-M9-8 (8a): a constant predictor against multi-class truth is likewise DEFINED
+    (kappa=0), matching cohen_kappa_score, not the single-class pre-check reading (8b)."""
+    from sklearn.metrics import cohen_kappa_score
+
+    y_true = np.array([0, 1, 2, 3, 4])
+    y_pred = np.array([0, 0, 0, 0, 0])
+    kappa = quadratic_weighted_kappa(y_true, y_pred, n_classes=5)
+    ref = cohen_kappa_score(y_true, y_pred, weights="quadratic", labels=[0, 1, 2, 3, 4])
+    assert not math.isnan(kappa)
+    assert kappa == pytest.approx(ref)
+    assert kappa == pytest.approx(0.0)
+
+
+def test_qwk_nan_only_on_empty_and_both_sides_constant_and_equal():
+    """The zero-expected-disagreement case: both true and predicted concentrate on the same
+    single class -> NaN. This is the ONLY non-empty case that is undefined under (8a)."""
+    assert math.isnan(quadratic_weighted_kappa([], []))
+    assert math.isnan(quadratic_weighted_kappa(np.array([0, 0]), np.array([0, 0]), n_classes=5))
+    # different-but-both-constant is NOT this case -- defined, per the test above.

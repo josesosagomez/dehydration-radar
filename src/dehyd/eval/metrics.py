@@ -1,6 +1,6 @@
-"""Exp A scoring and uncertainty — pure functions over already-computed predictions.
+"""Exp A/C scoring and uncertainty — pure functions over already-computed predictions.
 
-No fitting, no fold construction, no I/O. Two roles for this module:
+No fitting, no fold construction, no I/O. Three roles for this module:
 
   * `subject_balanced_mae` is BOTH the inner-CV selection metric and the per-subject
     headline (subject-balanced, never pooled, so a subject with more eligible sessions
@@ -20,6 +20,12 @@ The seed-collapse rules (StatsConfig) are metric-type-aware and live at the call
     values into ONE value per subject, then `subject_cluster_bootstrap` over those;
   * pooled/nonlinear metrics (RMSE, pooled r): within each resample recompute the metric
     per seed on the resampled data, then average across seeds — `subject_cluster_bootstrap_pooled`.
+
+  * Exp C's four ordinal pure functions (`class_unit_mae`, `adjacent_accuracy`,
+    `quadratic_weighted_kappa`, `confusion_counts`) score the 5-class S0-S4 secondary task.
+    They never raise: `quadratic_weighted_kappa`'s undefinedness trigger is decided by the
+    actual zero-expected-disagreement denominator, not by a class-count pre-check (O-M9-8),
+    so the frozen per-fold MAE fallback can consume it directly.
 """
 
 from __future__ import annotations
@@ -452,3 +458,67 @@ def wilcoxon_signed_rank(differences) -> tuple[float, float]:
         return float("nan"), float("nan")
     res = _sps.wilcoxon(diffs)
     return float(res.statistic), float(res.pvalue)
+
+
+# ------------------------------------------------------- Exp C ordinal metrics (Milestone 9)
+
+
+def class_unit_mae(y_class_true, y_class_pred) -> float:
+    """Pooled mean |predicted - true| in class units -- Exp C's frozen inner objective
+    (`:766-769`). Deliberately POOLED, not subject-balanced (that is Exp A's convention):
+    `:1199-1204` classifies class-unit MAE among the pooled/nonlinear metrics. NaN on empty."""
+    yt = np.asarray(y_class_true, dtype=float)
+    yp = np.asarray(y_class_pred, dtype=float)
+    if yt.size == 0:
+        return float("nan")
+    return float(np.mean(np.abs(yt - yp)))
+
+
+def adjacent_accuracy(y_class_true, y_class_pred) -> float:
+    """Pooled fraction of predictions within one class of the truth. NaN on empty."""
+    yt = np.asarray(y_class_true, dtype=float)
+    yp = np.asarray(y_class_pred, dtype=float)
+    if yt.size == 0:
+        return float("nan")
+    return float(np.mean(np.abs(yt - yp) <= 1))
+
+
+def confusion_counts(y_class_true, y_class_pred, *, n_classes: int = 5) -> np.ndarray:
+    """`n_classes` x `n_classes` integer counts; ROWS = true class, columns = predicted class."""
+    yt = np.asarray(y_class_true, dtype=int)
+    yp = np.asarray(y_class_pred, dtype=int)
+    counts = np.zeros((n_classes, n_classes), dtype=int)
+    np.add.at(counts, (yt, yp), 1)
+    return counts
+
+
+def quadratic_weighted_kappa(y_class_true, y_class_pred, *, n_classes: int = 5) -> float:
+    """Cohen's kappa with quadratic weights over the fixed `n_classes` x `n_classes` grid
+    (weights `(i-j)^2/(K-1)^2`, expected counts from the marginal outer product `r_i*c_j/n`).
+
+    O-M9-8 (decision 8a, owner-approved 2026-07-30): undefinedness is decided by the actual
+    denominator, NOT by a class-count pre-check. Returns NaN iff the input is empty or the
+    expected disagreement `sum(w_ij * E_ij)` is exactly 0 -- which on this fixed grid happens
+    only when both marginals concentrate on the SAME single class. A single-class truth (or
+    predicted) side alone does not trigger NaN as long as the other side varies: e.g. true
+    all-S0 against a varying predictor has nonzero expected disagreement and kappa=0 for an
+    uninformative predictor. Matches `sklearn.metrics.cohen_kappa_score(...,
+    weights="quadratic", labels=[0..n_classes-1])` exactly, including its (8b)-would-skip
+    cases; never raises, so the frozen per-fold MAE fallback can consume it directly.
+    """
+    yt = np.asarray(y_class_true, dtype=int)
+    yp = np.asarray(y_class_pred, dtype=int)
+    if yt.size == 0:
+        return float("nan")
+    n = yt.size
+    counts = confusion_counts(yt, yp, n_classes=n_classes)
+    row_marginal = counts.sum(axis=1)
+    col_marginal = counts.sum(axis=0)
+    idx = np.arange(n_classes)
+    weights = (idx[:, None] - idx[None, :]) ** 2 / float((n_classes - 1) ** 2)
+    expected = np.outer(row_marginal, col_marginal) / n
+    expected_disagreement = float(np.sum(weights * expected))
+    if expected_disagreement == 0.0:
+        return float("nan")
+    observed_disagreement = float(np.sum(weights * counts))
+    return 1.0 - observed_disagreement / expected_disagreement
