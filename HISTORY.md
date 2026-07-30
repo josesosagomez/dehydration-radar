@@ -4,6 +4,108 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 3: `models/ordinal.py` + `regressors.py` ordinal dispatch + `selection.py` ordinal tie-break. Succeeded.
+
+Per plan step 3 (`MILESTONE_9_PLAN.md` §2.2/§2.3, T-M9-ordinal + T-M9-selection): the two frozen
+Exp C estimator families, the `_bare_model` factoring that lets family (a) reuse the five base
+regressors, and `select_candidate_ordinal`. Nothing from steps 4+ (no harness edit, no `exp_c.py`,
+no fit guard).
+
+**The 2-column target.** `y[:, 0] = L = -Δm%`, `y[:, 1] = class`. Chosen so the M7 engine runs Exp
+C completely unchanged — `_fit_once` still builds `Pipeline([("scaler", StandardScaler()),
+("model", ...)])` and `StandardScaler` ignores `y`, so only the two new estimators ever read it.
+Verified against sklearn 1.9 before writing the classes: a 2-column `y` passes through
+`Pipeline.fit` untouched, but the final step **must** inherit `BaseEstimator` — `Pipeline.predict`
+calls `check_is_fitted` on it, which needs `__sklearn_tags__` and raises `AttributeError` on a
+plain class. Both estimators therefore inherit `BaseEstimator` and *neither* `RegressorMixin` nor
+`ClassifierMixin`: `predict` returns ordered class indices as floats and neither mixin's `score`
+(R², accuracy) is the Exp C objective.
+
+**`ThresholdedOrdinalRegressor` (family a).** Frozen `ExpCConfig` values: quantiles (0.2, 0.4,
+0.6, 0.8), `min_separation` 1e-9, knn the sole unweighted family. Cutpoints are quantiles of the
+regressor's **own in-sample predictions on its training rows** (`cutpoint_source`), never of the
+targets — the discriminating fixture is knn with k = n, which predicts the training mean for every
+row: prediction quantiles are all 3.2 while target quantiles on `[0, 1, 2, 3, 10]` are
+`[0.8, 1.6, 2.4, 4.4]`, so a target-quantile implementation (§5 trap 4) fails outright. The
+strict-increase nudge lifts each tied cutpoint to its **predecessor** + 1e-9, not to itself +
+1e-9: on the all-tied case the latter leaves all four equal, which `np.searchsorted` cannot use.
+`side="right"` pinned by a knn k = 1 fixture whose in-sample predictions land exactly on the
+cutpoints `[1, 2, 3, 4]` → classes `[0, 1, 2, 3, 4, 4]`; `side="left"` gives `[0, 0, 1, 2, 3, 4]`
+and fails (§5 trap 5).
+
+**`FrankHallOrdinal` (family b, A-M6-5).** Four independent `LogisticRegression(C, solver="lbfgs",
+max_iter=1000)` fits on `1[class > k]`, k = 0..3, each carrying the same class weights.
+`max_iter=1000` is a solver convergence bound, not a tuned quantity, and is deliberately not
+wrapped in a warning filter. O-M9-2 implemented as: successive differences of
+`[1, P(>0), …, P(>3), 0]` → floor at 0 → `np.argmax` (first maximum = ties to the LOWER class).
+The negative-difference fixture `P(>k) = [0.25, 0.5, 0.75, 0.5]` (the binaries are unlinked, so
+P(>k) need not decrease) gives floored `[0.75, 0, 0, 0.25, 0.5]` → class 0, whereas the
+**rejected** O-M9-2 alternative `class = Σ_k 1[P(>k) > 0.5]` gives class 1 — so that test rules
+the rejected rule out directly. `predict_proba` renormalizes; division by zero is impossible
+because the raw differences telescope to exactly 1 and flooring can only raise a row's sum.
+`OrdinalViabilityError` (typed, `ValueError` subclass) on a single-class binary target: unreachable
+once step 4's viability check lands, kept as loud defense in depth.
+
+**O-M9-7 weights.** `w(c) = n / (K_present · n_c)`, hand-computed in tests (`[0,0,0,1,2]` →
+`[5/9, 5/9, 5/9, 5/3, 5/3]`). The `K_present` divisor is what makes the mean weight exactly 1 (the
+weights sum to n) — the un-normalized `n / n_c` has mean `K_present`, so it would silently change
+what every frozen ridge α / SVR C / logistic C means. Tested that the weights genuinely reach the
+base fit by reproducing the identical `Ridge(alpha=1.0, solver="cholesky")` coefficients from
+hand-computed `sample_weight`, and that they differ from the unweighted fit.
+
+**`regressors.py`.** `_bare_model(family, params, *, seed)` factored out of `build_estimator`
+(five branches moved verbatim; `seed` kept keyword-only to match `build_estimator`'s existing
+convention). `build_estimator` dispatches `ord_*` → `_ordinal_model`, `fitted_state_params`
+dispatches `ord_*` → `fitted_state_params_ordinal`. `SEED_SENSITIVE` = `{rf, gbm, ord_a_rf,
+ord_a_gbm}`. The import cycle (regressors needs the ordinal classes; ordinal needs `_bare_model`
+and `fitted_state_params`) is broken on **one** side only: `regressors` imports `ordinal` at module
+level, `ordinal` defers its two imports into the function bodies. All three import orders verified.
+
+*Failed expectation, corrected:* the first draft of `test_ordinal_ensembles_differ_across_seeds`
+asserted the *class predictions* differ across seeds for `ord_a_rf`/`ord_a_gbm`. `ord_a_gbm`
+failed — GBM's `random_state` only breaks split ties (default `subsample=1.0`,
+`max_features=None`), and the 5-class thresholding quantizes that away entirely. The assertion was
+wrong, not the code: `SEED_SENSITIVE` encodes "this **fit** depends on the seed", so the test now
+compares `ensemble_digest` bytes. A prediction-level assertion there would have been measuring the
+coarseness of the class grid.
+
+**`selection.py`.** `SIMPLICITY_RANK` gains the six ordinal ids (`ord_a_*` mirroring their base
+family — the wrapper adds no capacity; `ord_b_frank_hall` = 0, sole member of its arm so it can
+never decide across families). `OrdinalCandidateScore` + `select_candidate_ordinal` implement
+O-M9-1: lower class-unit MAE → **higher** QWK → lower simplicity rank → lower feature dimension →
+lower inner-fold variance, comparability additionally requiring `n_evaluable_inner_folds >= 1`.
+`select_candidate`'s body is byte-unchanged (`git diff` shows exactly one removed line in the file:
+the old `SIMPLICITY_RANK` literal).
+
+*Non-obvious bug avoided, and pinned by a test.* The obvious key `(mae, -qwk, rank, dim, var)` is
+**wrong** when QWK is undefined: two NaN-QWK candidates compare False in both directions at that
+position, so Python's tuple comparison stops there and `min` returns whichever came first in input
+order — the simplicity/dimension/variance rungs never run. Encoded instead as a flag plus a
+substituted `0.0` (`(mae, int(undefined), 0.0 if undefined else -qwk, …)`), so undefined-QWK
+candidates tie exactly and fall through. `test_undefined_qwk_on_both_sides_falls_through_to_the_next_rung`
+asserts the winner is the same under both input orders and fails against the naive key.
+
+**Test-file edits outside the new files.** `tests/test_selection.py:79`'s exact-dict assertion
+updated to the eleven keys (the single edit §2.3 licenses), keeping the frozen ordering check and
+extending it to the full `ridge < knn < svr < rf < gbm` chain. `tests/test_regressors.py`'s
+`@parametrize("family", sorted(SEED_SENSITIVE))` narrowed to `SEED_SENSITIVE & set(MODEL_FAMILIES)`
+— forced, since it feeds `enumerate_grid` and a 1-D `y`, and `ord_a_rf` has neither. Ordinal seed
+sensitivity is covered by its own new test instead.
+
+**Suite.** +74 tests: `tests/test_ordinal.py` (26, new), `tests/test_selection.py` +18 (32),
+`tests/test_regressors.py` +30 (56). Full suite: **852 passed, 16 skipped, 1 pre-existing failure**
+(`test_provenance.py::test_git_degrades_to_none_without_env` — the same stale local `REVISION`-file
+issue diagnosed at step 1 and recorded at step 2; unrelated to this step, no ordinal code in its
+path). `tests/test_m9_pin.py` + `tests/test_m8_pin.py` + `tests/test_harness.py` +
+`tests/test_no_leakage.py` re-run explicitly green — the step-1 byte trace is bitwise intact after
+the `_bare_model` factoring, which is the byte-neutrality evidence D2 asks for on the step-3 half.
+`git diff --exit-code tests/test_no_leakage.py` clean.
+
+**Next:** step 4 — the one risky edit, `harness._viability_reason` generalized (knn check by param
+key; constant-`{0..4}` class-coverage check for 2-D y) + the `_score` fail-fast assert.
+
+---
+
 ## 2026-07-30 — M9 step 2: `metrics.py` — the four Exp C ordinal pure functions. Succeeded.
 
 Per plan step 2 (`MILESTONE_9_PLAN.md` §2.1, T-M9-metrics): `class_unit_mae`, `adjacent_accuracy`,

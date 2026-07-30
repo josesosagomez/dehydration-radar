@@ -22,6 +22,20 @@ scoring on inner-validation subjects across the real GroupKFold folds) and then 
 `select_candidate` here, so the tie-break has exactly ONE definition the harness and the
 plan both point at. That behavioural claim — the fit/score half — is verified at M7 against
 the real harness, not here.
+
+Milestone 9 adds Experiment C's ordinal tie-break (`select_candidate_ordinal`, O-M9-1) to
+this same module rather than to `exp_c.py`, so the single-tie-break-source doctrine holds
+for every experiment:
+
+    lower inner_val_class_mae            (the frozen primary, class-unit MAE)
+      -> HIGHER inner_val_qwk            (the frozen secondary; undefined ranks last)
+      -> lower simplicity_rank
+      -> lower feature_dimension
+      -> lower inner_fold_variance       (the frozen Exp A tail, unchanged)
+
+The aggregation that produces those numbers — evaluable-inner-folds-only `nanmean`/`nanstd`
+— lives in `exp_c.py`, deliberately NOT in the harness, so Exp A and Exp B keep their plain
+`np.mean`/`np.std` over all folds and stay byte-identical.
 """
 
 from __future__ import annotations
@@ -34,7 +48,16 @@ from dataclasses import dataclass
 # (those are not comparable across these families — KNN has no parametric complexity in the
 # same sense) and deliberately NOT the config.MODEL_FAMILIES enumeration order (knn sorts
 # ahead of svr here on simplicity grounds).
-SIMPLICITY_RANK = {"ridge": 0, "knn": 1, "svr": 2, "rf": 3, "gbm": 4}
+#
+# Milestone 9's six Exp C ids reuse their base family's rank: the thresholding wrapper adds
+# no capacity of its own, so `ord_a_svr` is exactly as "simple" as `svr`. `ord_b_frank_hall`
+# is the SOLE family in its arm, so its value can never decide a comparison across families;
+# 0 records that it is linear (four logistic thresholds) and nothing more.
+SIMPLICITY_RANK = {
+    "ridge": 0, "knn": 1, "svr": 2, "rf": 3, "gbm": 4,
+    "ord_a_ridge": 0, "ord_a_knn": 1, "ord_a_svr": 2, "ord_a_rf": 3, "ord_a_gbm": 4,
+    "ord_b_frank_hall": 0,
+}
 
 
 class SelectionError(ValueError):
@@ -101,3 +124,90 @@ def select_candidate(scores: list[CandidateScore]) -> CandidateScore:
             s.inner_fold_variance,
         ),
     )
+
+
+# ----------------------------------------------------- Experiment C's ordinal tie-break
+
+
+@dataclass(frozen=True)
+class OrdinalCandidateScore:
+    """One Exp C candidate's already-computed ordinal selection scores.
+
+    As with `CandidateScore`, every field is supplied by the caller — here `exp_c.py`, which
+    aggregates `StageOutcome.inner_scores` over the candidate's EVALUABLE inner folds only
+    (`np.nanmean` / `np.nanstd`) and passes the count as `n_evaluable_inner_folds`. That
+    count is part of the record because the class-coverage viability predicate is
+    candidate-independent: one inner fold missing a class knocks the same cell out for every
+    candidate, and `implementation_plan.md:793-800` makes the outer fold contribute no score
+    only when ALL configs are non-evaluable, not when one inner fold is.
+
+    `inner_val_qwk` comes from the stored FIRST-SEED validation predictions (O-M9-1), never
+    from a re-fit: recomputing would double-fit and can drift for rf/gbm.
+    """
+
+    candidate_id: str
+    inner_val_class_mae: float
+    inner_val_qwk: float
+    simplicity_rank: int
+    feature_dimension: int
+    inner_fold_variance: float
+    n_evaluable_inner_folds: int
+
+
+def _is_comparable_ordinal(score: OrdinalCandidateScore) -> bool:
+    """`_is_comparable`'s conditions plus at least one evaluable inner fold.
+
+    A candidate scored on zero evaluable inner folds has no evidence behind it at all; its
+    `nanmean` would be NaN anyway, but the count is checked explicitly so the reason a
+    candidate was skipped is a recorded field rather than an inference from a NaN.
+    """
+    return (
+        math.isfinite(score.inner_val_class_mae)
+        and math.isfinite(score.inner_fold_variance)
+        and score.inner_fold_variance >= 0.0
+        and score.n_evaluable_inner_folds >= 1
+    )
+
+
+def _ordinal_key(score: OrdinalCandidateScore) -> tuple:
+    """The O-M9-1 order as one sortable tuple.
+
+    QWK is MAXIMIZED, hence the negation, and an undefined QWK must rank below every finite
+    one. It is encoded as a flag plus a SUBSTITUTED 0.0 rather than as a bare `-nan`: two
+    NaN-QWK candidates would otherwise compare False in both directions at that position, and
+    Python's tuple comparison would stop right there and hand the win to whichever came first
+    in input order — silently skipping the simplicity, dimension and variance rungs beneath.
+    With the substitution all undefined-QWK candidates tie exactly and fall through.
+    """
+    qwk_undefined = not math.isfinite(score.inner_val_qwk)
+    return (
+        score.inner_val_class_mae,
+        int(qwk_undefined),
+        0.0 if qwk_undefined else -score.inner_val_qwk,
+        score.simplicity_rank,
+        score.feature_dimension,
+        score.inner_fold_variance,
+    )
+
+
+def select_candidate_ordinal(scores: list[OrdinalCandidateScore]) -> OrdinalCandidateScore:
+    """Return the winning Exp C candidate under the O-M9-1 ordinal tie-break.
+
+    Same shape as `select_candidate`: non-comparable candidates are filtered out first, a
+    genuine full tie goes to the first in input order, and an empty comparable set raises
+    `SelectionError` rather than returning something arbitrary. `exp_c.py` catches that
+    error and re-raises it naming the outer fold's test subject and the missing classes.
+    """
+    if not scores:
+        raise SelectionError("select_candidate_ordinal got an empty candidate list")
+
+    comparable = [s for s in scores if _is_comparable_ordinal(s)]
+    if not comparable:
+        n_no_evaluable = sum(1 for s in scores if s.n_evaluable_inner_folds < 1)
+        raise SelectionError(
+            f"no comparable candidate among {len(scores)} (non-finite class-unit MAE or "
+            f"non-finite/negative inner-fold variance; {n_no_evaluable} had zero evaluable "
+            "inner folds) — the fold contributes no ordinal score"
+        )
+
+    return min(comparable, key=_ordinal_key)

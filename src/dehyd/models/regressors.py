@@ -5,6 +5,14 @@ never inlines a model. Every estimator is a `Pipeline([("scaler", StandardScaler
 ("model", ...)])` fit inside the CV fold — the scaler is the fit-on-train transform the
 audit records as `quantity="scaler"`; the model step is recorded as `quantity=<family>`.
 
+Milestone 9 adds Experiment C's six ordinal family ids on top of the same machinery:
+`ord_a_<base family>` wraps one of the five base regressors in the frozen thresholding
+rule, and `ord_b_frank_hall` is the Frank-Hall decomposition. Both live in `ordinal.py`;
+this module only dispatches to them, so there is still exactly one place that turns a
+family id into an estimator. `_bare_model` is the shared factory the five base families and
+the `ord_a_*` wrapper both build from — the wrapper needs the *unpipelined* regressor,
+since the scaler already sits outside it.
+
 Determinism (bit-identity is claimed per-machine): ridge/svr/knn are deterministic; rf/gbm
 take `random_state=seed`. No `n_jobs` anywhere — the harness runs the numeric work under
 `threadpool_limits(1)`.
@@ -30,16 +38,31 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 
-from ..config import ModelGridConfig
+from ..config import ExpCConfig, ModelGridConfig
 from ..eval.selection import SIMPLICITY_RANK  # re-export: one source for the family ranking
+from .ordinal import (
+    ORDINAL_A_PREFIX,
+    ORDINAL_B_FAMILY,
+    FrankHallOrdinal,
+    ThresholdedOrdinalRegressor,
+    fitted_state_params_ordinal,
+)
 
 RIDGE_SOLVER = "cholesky"  # deterministic; matches the frozen reference procedure
 MODEL_FAMILIES = ("ridge", "svr", "rf", "gbm", "knn")
-SEED_SENSITIVE = frozenset({"rf", "gbm"})  # the rest ignore the seed
+# The six authorized Exp C family ids (arm (a) = one per base family, arm (b) = one).
+ORDINAL_FAMILIES = tuple(ORDINAL_A_PREFIX + f for f in MODEL_FAMILIES) + (ORDINAL_B_FAMILY,)
+SEED_SENSITIVE = frozenset({"rf", "gbm", "ord_a_rf", "ord_a_gbm"})  # the rest ignore the seed
+
+# The frozen Exp C wrapper constants. `load_config` rejects any run YAML that changes an
+# M6 section, so these defaults ARE the only values a run can carry; Exp C's fit guard
+# re-checks each fitted wrapper against the run's own ExpCConfig anyway.
+EXP_C = ExpCConfig()
 
 __all__ = [
     "SIMPLICITY_RANK",
     "MODEL_FAMILIES",
+    "ORDINAL_FAMILIES",
     "SEED_SENSITIVE",
     "RIDGE_SOLVER",
     "build_estimator",
@@ -54,6 +77,21 @@ class RegressorError(ValueError):
 
 def build_estimator(family: str, params: dict, *, seed: int) -> Pipeline:
     """One family's estimator, wrapped in a train-fit StandardScaler pipeline."""
+    model = (
+        _ordinal_model(family, params, seed=seed)
+        if family.startswith("ord_")
+        else _bare_model(family, params, seed=seed)
+    )
+    return Pipeline([("scaler", StandardScaler()), ("model", model)])
+
+
+def _bare_model(family: str, params: dict, *, seed: int):
+    """The UNPIPELINED estimator for one of the five base families.
+
+    Factored out of `build_estimator` at milestone 9 so `ThresholdedOrdinalRegressor` can
+    build the same base regressor without a nested scaler pipeline. The five branches are
+    unchanged from milestone 7 (pinned by `tests/test_m9_pin.py`).
+    """
     if family == "ridge":
         model = Ridge(alpha=params["alpha"], solver=RIDGE_SOLVER)
     elif family == "svr":
@@ -75,7 +113,33 @@ def build_estimator(family: str, params: dict, *, seed: int) -> Pipeline:
         )
     else:
         raise RegressorError(f"unknown family {family!r} (expected one of {MODEL_FAMILIES})")
-    return Pipeline([("scaler", StandardScaler()), ("model", model)])
+    return model
+
+
+def _ordinal_model(family: str, params: dict, *, seed: int):
+    """The unpipelined Exp C estimator for one of the six ordinal family ids.
+
+    The wrapper constants come from the frozen `ExpCConfig`, so a candidate carries only
+    the BASE family's own grid parameters (`{"alpha": ...}`, `{"C": ..., "epsilon": ...}`,
+    ...) for arm (a) and `{"C": ...}` for arm (b) — the thresholding rule, the quantiles and
+    the class-weighting are protocol, not hyperparameters, and are never searched over.
+    """
+    if family.startswith(ORDINAL_A_PREFIX):
+        base_family = family[len(ORDINAL_A_PREFIX):]
+        if base_family in MODEL_FAMILIES:
+            return ThresholdedOrdinalRegressor(
+                base_family,
+                params,
+                quantiles=EXP_C.cutpoint_quantiles,
+                min_separation=EXP_C.cutpoint_min_separation,
+                # knn is the frozen `class_weight_unsupported_families` entry — sklearn's
+                # KNeighborsRegressor.fit takes no sample_weight at all.
+                weighted=base_family not in EXP_C.class_weight_unsupported_families,
+                seed=seed,
+            )
+    elif family == ORDINAL_B_FAMILY:
+        return FrankHallOrdinal(params["C"])
+    raise RegressorError(f"unknown family {family!r} (expected one of {ORDINAL_FAMILIES})")
 
 
 def enumerate_grid(family: str, grid: ModelGridConfig) -> list[dict]:
@@ -147,6 +211,8 @@ def fitted_state_params(family: str, model) -> dict[str, np.ndarray]:
     Bit-comparable (every value is an np.ndarray, per C15), so held-out-subject mutation
     tests can assert each family's state is invariant.
     """
+    if family.startswith("ord_"):
+        return fitted_state_params_ordinal(family, model)
     if family == "ridge":
         return {
             "coef_": np.atleast_1d(model.coef_).copy(),
