@@ -836,13 +836,12 @@ weakening the strict single-point guard on the artifact path. The no-leakage tes
 byte-for-byte unchanged, as it must: this milestone adds no cross-validation code for it to
 exercise.
 
-## 6. Fluid-loss regression — Experiment A  *(method + provenance below; RESULTS pending the full-cohort run)*
+## 6. Fluid-loss regression — Experiment A  *(complete — full-cohort results below)*
 
-The milestone-7 harness and the Experiment-A driver are complete; the method and every design
-choice are settled and recorded here. **The headline numbers are deferred until the owner runs
-the full-cohort `MODE=full` job on IBEX** — that run produces the first outer-fold results and
-spends the config freeze. Fill the "Results" subsection from `metrics_exp_a_{band}.json` once it
-lands.
+The milestone-7 harness and the Experiment-A driver are complete; the method, every design
+choice, and the full-cohort results are recorded here. The full-cohort `MODE=full` job on IBEX
+produced the first outer-fold results and spent the config freeze — reported below from
+`metrics_exp_a_{10,77}ghz.json`.
 
 ### Method
 - **The harness (`eval/harness.py`).** One generic nested-LOSO engine used by both the reported
@@ -888,13 +887,200 @@ lands.
 - **Mechanism before results.** The pipeline was proven on both bands with mechanism-only smokes
   (no performance value surfaced) before the freeze was spent — the deliberate M7 checkpoint.
 
-### Results  *(pending — fill from the full-cohort run)*
-_Awaiting `metrics_exp_a_10ghz.json` / `metrics_exp_a_77ghz.json` from the IBEX `MODE=full` runs:
-session-level MAE/RMSE/r (pooled + per-subject), the subject-cluster CIs, radar-vs-session-index
-baseline (Wilcoxon + CI), and the per-fold selection-frequency table. The key read is whether the
-radar beats the time-of-day baseline given the fasting-clock confound._
+### Results
 
-## 7. Clock-decoupling — Experiment B  *(fill at milestone 8)*
+All 16 subjects evaluable both bands (73 sessions, 10 GHz; 72 sessions, 77 GHz), 5-seed set,
+commit `f36c4fb2`. All CIs are self-implemented subject-cluster BCa bootstraps, labelled
+`conditional_exploratory: true`.
+
+| | 10 GHz | 77 GHz |
+|---|---|---|
+| Session-level MAE (subject-balanced) | 0.469 [0.409, 0.568] | 0.495 [0.404, 0.646] |
+| Session RMSE | 0.593 [0.509, 0.747] | 0.581 [0.483, 0.721] |
+| Pooled predicted-vs-actual r | −0.138 [−0.286, 0.075] | −0.153 [−0.407, 0.174] |
+| Radar − baseline (mean difference) | **+0.200 [0.145, 0.260]** | **+0.216 [0.127, 0.296]** |
+| Wilcoxon p (radar vs baseline) | 3.05×10⁻⁵ | 7.6×10⁻⁴ |
+
+**The headline result is negative, and decisively so, in both bands.** The radar regressor
+*loses* to the trivial session-index-only (time-of-day) baseline — the mean-difference CI
+excludes zero by a wide margin in both bands, and the Wilcoxon test is highly significant. Pooled
+predicted-vs-actual r sits at essentially zero (both CIs straddle zero, and are wide — 77 GHz's
+particularly so), so there is no pooled linear trend between predicted and actual Δm% either. Per-
+subject r values are noisy and inconsistent in sign (10 GHz ranges from −0.99 to +0.90 across
+subjects; 77 GHz from −0.96 to +0.91), which is itself informative: whatever the model is fitting
+per fold does not generalize as a stable subject-level relationship.
+
+Selection frequency differs somewhat by band — 10 GHz favours `knn` (7/16 folds) and the tuned-ε
+branch (13/16); 77 GHz favours `svr` (8/16) and the off-ε branch (8/16, vs. 5/16 tuned) — but
+neither band's selected-model distribution rescues the aggregate result.
+
+**The key read, and why Experiment B exists.** Exp A alone cannot distinguish two explanations for
+this negative result: (a) radar carries no usable fluid-loss signal in this cohort, or (b) it
+does, but that signal is swamped by the fasting-clock confound — Δm% is structurally correlated
+with time of day, because subjects fast and dehydrate progressively across the measurement day,
+and the session-index-only baseline captures exactly that trend. A model that *only* decoded the
+clock would already beat a radar model that ignored it, independent of whether radar carries any
+real hydration signal at all. Experiment B (§7) is the pre-registered analysis designed to
+separate these two explanations, by residualizing out the session mean and testing whether
+*between-subject* variation within a fixed session is trackable.
+
+## 7. Clock-decoupling — Experiment B  *(complete — full-cohort + session-specific variant results below)*
+
+Experiment B is the analysis §6 motivated: Exp A's negative result cannot distinguish "no radar
+signal" from "signal present but swamped by the fasting-clock confound", because Δm% is
+structurally correlated with time of day. Within a *fixed* session every subject was measured at
+the same clock time but lost different amounts of fluid, so predicting the **session-mean-
+residualized** target — Δm%(subj, session) − μ_s, where μ_s is the train-only session mean —
+tests whether radar tracks between-subject fluid-loss variation rather than decoding the clock.
+ROADMAP.md calls this "the crucial evidence… a headline analysis, not a footnote."
+
+### Method
+- **Reuses Exp A's engine and search space, unchanged.** Composed on the same generic harness
+  (`eval/harness.py`) via a `score_fn`/`FeatureBundle.session_idx` hook added specifically so Exp B
+  never needs a second copy of Exp A's search-space enumeration or store-backed feature path
+  (`stage1_candidates`/`stage2_candidates`/`StoreBackedFeatures`) — the frozen search space is
+  enumerated in exactly one place in the codebase, used by both experiments.
+- **S0 excluded at the source.** S0's Δm% is identically 0 by construction (baseline session), so
+  including it would give every fold a free, perfectly-"predicted" session that deflates every
+  MAE. `build_sessions_b` filters it out before any downstream code sees session data at all.
+- **The residualizing provider (`SessionResidualFeatures`).** Wraps (does not subclass) Exp A's
+  feature path. Computes μ_s — the train-only per-session mean of the raw target — via
+  `baselines.session_means`, **fold-locally, train-only, cached per (fold, train_subjects) pair**
+  so it is computed exactly once regardless of how many candidates/stages consume it. A session
+  with fewer than 2 eligible training subjects is *dropped from that fold entirely*, never
+  imputed with a global fallback (deliberately different from Exp A's baseline, which does have a
+  global-mean fallback) — a degenerate per-subject residual would be meaningless, and Exp B's own
+  invariant is that a dropped session must be visible in `dropped_sessions`, never silently
+  smoothed over. μ_s is emitted via `extra_fits`, so it is fit-audited exactly like any other
+  fitted quantity, at both CV levels, for free.
+- **The baseline.** Zero residual, by construction — μ_s statistically saturates the mean of the
+  target it is being subtracted from, so a baseline predicting "no deviation from the session
+  mean" is the correct trivial comparison, not an afterthought.
+- **The objective (`equal_session_residual_mae`).** Equal-session-weighted, not equal-subject-
+  weighted: averages the four per-session residual MAEs, then averages those — provably different
+  from a naive subject-weighted mean whenever per-session subject counts are unequal (proved
+  directly on a synthetic fixture, not asserted). This is what makes S1-S4 contribute equally to
+  the primary aggregate regardless of how many subjects happen to be eligible in each.
+- **Statistics — two pre-defined estimands, both always computed and reported (A-M8-1, below).**
+  A `session_weighted_bootstrap` CI on `aggregate(radar) − aggregate(baseline)`, matching the
+  aggregate's own equal-session-weighting; and a subject-weighted, complete-case Wilcoxon signed-
+  rank test + CI as a companion answering a different question (only subjects with usable S1-S4
+  data contribute). A bootstrap replicate that empties a session out is skipped-and-counted
+  (`n_skipped`, `unreliable` flag), never silently averaged over the surviving sessions (A-M8-2,
+  below). Per-session breakdown for the primary model uses Holm-4 (family size 4, S1-S4). A run
+  where any session is *globally* absent from the out-of-fold data sets `primary_aggregate=null`
+  with a named `primary_unavailable_reason`, rather than a silently-degraded 3-session mean.
+- **The session-specific secondary variant.** Four *independently fitted* single-session models
+  (one per S1-S4), reusing the same objective (which degenerates naturally to plain single-session
+  residual MAE with no special-casing) and the same execution strategy as the pooled model —
+  designed from the start as four independent units of work, run as a real 4-task SLURM array, not
+  a sequential loop (a sequential loop's wall-time would be ≈ the sum of all four searches, not
+  the max). Reported descriptively only — effect size + CI, no p-value — because the frozen
+  protocol's Holm-4 is defined only for the pooled model's own per-session breakdown and
+  authorizes no multiplicity rule for four independently-fitted secondary models; inventing one
+  would itself be an undisclosed post-Exp-A protocol completion.
+- **Reproducibility + performance.** Single-threaded per fit (`threadpool_limits(1)`), bit-
+  reproducible; the outer folds are independent and run in parallel worker processes, proven
+  bit-identical to the serial result on the test fixture.
+
+### Provenance of the choices
+- **Exp B's core design — the residualization rule, search-space reuse, objective, baseline, the
+  existence of both estimands, the Holm-4 family — was locked as part of `config-freeze-v1`
+  *before any Exp A result was examined*.** That pre-registration is the entire scientific value
+  of this experiment, and is exactly why it survives being run *after* seeing Exp A's negative
+  headline: nothing about what runs, what data it uses, or how candidates are selected was
+  informed by Exp A's outcome.
+- **Two narrow, explicitly disclosed completions were decided on 2026-07-27 — after Exp A's full-
+  cohort results were already visible — and that chronology is stated plainly here, not folded
+  into "frozen before Exp A":**
+  - **A-M8-1 (which pre-specified quantity is labelled "primary").** The frozen protocol text is
+    internally ambiguous: one passage calls the equal-session aggregate "the single pre-specified
+    primary test", but that aggregate is session-weighted, while the Statistics section's test
+    form (Wilcoxon) needs per-subject pairs — the subject-weighted, complete-case estimand. Both
+    cannot be the primary at once, and the frozen text never says which wins. Decided: primary =
+    the session-weighted bootstrap CI, matching the aggregate's own words; the subject-weighted
+    Wilcoxon is a companion, never conflated with the primary. This decision is **computation-
+    neutral** — both quantities were already fully specified by the frozen text and are computed
+    and reported in every run regardless of which gets the "primary" label; the decision changes
+    prose, not numbers.
+  - **A-M8-2 (empty-session bootstrap replicates).** The frozen aggregate presupposes all four
+    S1-S4 sessions contribute to every bootstrap replicate; it does not say what happens when a
+    subject-resample happens to omit every subject holding one session's only remaining rows.
+    Decided: use the pre-registered skip-and-count machinery, never a silent fallback to a
+    3-session mean. Unlike A-M8-1, this is **not** computation-neutral — it changes what a
+    degenerate replicate contributes — which is exactly why it required the same owner-approval
+    gate as any other protocol-gap completion, not a quiet implementation default.
+  - Neither decision is a data-use choice, and neither reopens the blinding question `config-
+    freeze-v1` protects: they are statistics-labelling and edge-case-reporting completions of an
+    already-fully-specified protocol, decided in the open, after the fact that made them necessary
+    (seeing the frozen text's own internal contradiction) became visible — not decisions about
+    what to run or what data to use in response to Exp A's outcome.
+- **Gating.** Exp A's full run already spent the `config-freeze-v1` blinding guarantee; Exp B's
+  core design was itself frozen before Exp A was seen, so there was nothing left to blind for this
+  compute step — the mechanism-only smoke ran as a cheap pre-flight, and the full-cohort run
+  followed immediately with no owner pause in between (a deliberate single-phase DoD, contrasting
+  with Exp A/M7's two-phase smoke-then-pause-then-full sequence, because that pause's entire
+  purpose was already spent).
+- **Feature store.** Same per-session store Exp A uses, rebuilt and `--validate`d fail-closed
+  before any Exp B run — commit `30c6d907ca6f293f72db73517dc585bc39ec8e66` (a docs-only commit on
+  top of the code commit, carrying identical M8 source; the store/analysis commit-match rule
+  treats it as a genuinely different revision regardless, and enforced that strictly in practice —
+  see HISTORY.md's step 10.5 entry for a case where it did).
+
+### Results
+
+All 16 subjects evaluable both bands, 59 evaluable S1-S4 sessions both bands, 5-seed set
+(`seed=20260721`, `seed_set=[1,2,3,4,5]`), commit `30c6d907ca6f293f72db73517dc585bc39ec8e66`. All
+CIs are the same subject-cluster BCa bootstrap machinery as Exp A, labelled
+`conditional_exploratory: true`. `primary_viable=true` both bands (no session globally absent from
+the out-of-fold data).
+
+**Primary pooled model (full cohort):**
+
+| | 10 GHz | 77 GHz |
+|---|---|---|
+| Radar residual MAE | 0.389 [0.310, 0.523] | 0.341 [0.268, 0.443] |
+| Baseline (zero residual) MAE | 0.341 [0.270, 0.481] | 0.316 [0.247, 0.397] |
+| **Primary: radar − baseline (session-weighted, A-M8-1)** | **+0.0475 [0.0230, 0.0749]** | **+0.0246 [−0.0066, 0.0756]** |
+| Companion: subject-weighted complete-case Wilcoxon | p=0.00488 (n=11), diff +0.0592 [0.0297, 0.0906] | p=0.542 (n=13), diff +0.0195 [−0.0142, 0.0780] |
+
+Per-session Holm-4 breakdown: 10 GHz — S1 holm_p=0.0736 (n=14), **S2 holm_p=0.00305 (n=16,
+significant)**, S3 holm_p=0.482 (n=14), S4 holm_p=0.482 (n=15), all four point estimates positive
+(radar worse); 77 GHz — all four holm_p=1.0 (none significant).
+
+**10 GHz shows a statistically clear residual signal, in the wrong direction: radar loses to the
+trivial train-only session mean even after clock-decoupling**, both by the primary aggregate CI
+(excludes zero) and its significant companion Wilcoxon. **77 GHz shows no distinguishable
+difference either way** (CI crosses zero, companion not significant, no session individually
+significant). Selection frequency differs by band exactly as in Exp A: 10 GHz favours `svr`
+(10/16 folds) and the frozen-ε branch (11/16); 77 GHz also favours `svr` (12/16) but the tuned-ε
+branch (14/16) — a reversal of Exp A's own per-band pattern, worth noting but not adjudicating
+without a dedicated interpretability pass (§9).
+
+**Session-specific secondary variant** (four independently-fitted single-session models,
+descriptive only — no p-value, by design; `completed_sessions=[1,2,3,4]` both bands):
+
+| Session | 10 GHz radar − baseline | 77 GHz radar − baseline |
+|---|---|---|
+| S1 | +0.0612 [0.0105, 0.1486] (n=14) | +0.0058 [−0.0209, 0.0309] (n=13) |
+| S2 | +0.0793 [0.0056, 0.1681] (n=16) | −0.0077 [−0.1015, 0.0773] (n=16) |
+| S3 | +0.2127 [0.0448, 0.4214] (n=14) | −0.0430 [−0.0925, 0.0062] (n=14) |
+| S4 | +0.1360 [0.0006, 0.3349] (n=15) | +0.0024 [−0.0403, 0.0500] (n=16) |
+
+10 GHz's four independent single-session models agree in direction with its own pooled result —
+all four positive (radar worse), consistent rather than an artifact of pooling. 77 GHz's four are
+mixed in sign and every CI crosses zero — no consistent signal in either direction, consistent
+with its own pooled null result.
+
+**Overall reading.** Clock-decoupling does not rescue radar in this cohort. 10 GHz's Exp A loss to
+the time-of-day baseline is *not* fully explained by the fasting-clock confound alone — even after
+removing the session-mean trend, the residual radar signal is still measurably worse than a
+trivial constant, both pooled and (independently) per session. 77 GHz's Exp A loss is more
+consistent with a confound explanation: once decoupled, 77 GHz shows no significant difference
+from the residual baseline in either direction, at any level of analysis. Taken together with §6,
+neither band demonstrates a radar-based fluid-loss signal that outperforms simple time-of-day or
+session-mean statistics in this cohort — a genuinely negative result for the study's central
+hypothesis, reported here in full rather than as a footnote, per the plan's own framing.
 
 ## 8. Ordinal classification & baselines — Experiments C, D  *(fill at milestone 9)*
 

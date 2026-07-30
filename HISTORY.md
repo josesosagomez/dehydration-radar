@@ -4,6 +4,168 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — Pre-M9 planning: owner decision to add an exploratory frame-level random-split (k=5) evaluation alongside LOSO for Exp C/D.
+
+Owner asked, for milestone 9 (Exp C/D) only, to also produce a **5-fold random split over pooled
+frames** (frames from all subjects shuffled together — matching the original paper's frame-as-
+sample splitting) alongside the required LOSO protocol, for every C/D result. k=5 chosen so each
+fold holds out 20%, matching the owner's original "80/20" framing exactly while giving 5 repeated
+estimates. **This is knowingly leaky** (a held-out fold can contain frames from a subject whose
+other frames were trained on) and is explicitly exploratory-only, for the owner's own comparison —
+**not to be written into the thesis or paper**, never a headline number (CLAUDE.md's own rule).
+Recorded in `plans/implementation_plan.md` right after the Exp D baseline specs (before §E), with
+three hard constraints for whenever M9 is implemented: (1) a clearly separate code/output path,
+own tagged filenames, never merged into the LOSO metrics files; (2) must never touch or weaken
+`tests/test_no_leakage.py`, `splits.py`'s LOSO machinery, or `config-freeze-v1`; (3) never surfaces
+in SECOND_CHAPTER.md's actual findings. M9 has not been planned yet — this is a pre-planning
+decision to fold in when that planning happens.
+
+## 2026-07-30 — M8 CLOSES: step 11 done — SECOND_CHAPTER.md §6 (Exp A) + §7 (Exp B) written together from full results; HISTORY entries for 8.6-10.5 complete.
+
+Read `results/runs/` synced back from IBEX (via `rsync` from `/ibex/user/floresge/dehy_radar/`)
+and wrote up the real numbers directly from the JSON, matching every figure against source before
+writing. Both experiments' headline: **negative, in both bands, for the study's central
+hypothesis.**
+
+- **Exp A (§6, full cohort, commit `f36c4fb2`):** radar loses to the session-index-only
+  (time-of-day) baseline significantly in both bands (10 GHz +0.200 [0.145,0.260] p=3.05e-5;
+  77 GHz +0.216 [0.127,0.296] p=7.6e-4); pooled predicted-vs-actual r ≈ 0 both bands.
+- **Exp B (§7, full cohort + session-specific variant, commit `30c6d907`):** clock-decoupling
+  does not rescue radar. 10 GHz still loses to its own train-only session mean, both pooled
+  (+0.0475 [0.0230,0.0749], primary_viable) and per-session (holm-significant at S2; all four
+  independent session-specific models agree in direction). 77 GHz shows no significant residual
+  difference anywhere, pooled or per-session — more consistent with "Exp A's loss was mostly the
+  clock confound" for that band specifically.
+- **Reading, stated in SECOND_CHAPTER.md:** taken together, neither band demonstrates a radar-
+  based fluid-loss signal beating simple time-of-day/session-mean statistics in this cohort — a
+  genuinely negative result for Experiments A/B, reported in full per the plan's own framing
+  ("a headline analysis, not a footnote"), not softened or buried.
+
+**Milestone 8 is now fully closed** — plan steps 1-11 all done. Next real work is milestone 9
+(Exp C/D, ordinal classification + baselines), not yet planned. Working tree has HISTORY.md,
+SECOND_CHAPTER.md, and `plans/implementation_plan.md` (the pre-M9 frame-split note above) modified
+but **not yet committed** — commit only on explicit owner request, per standing project rule.
+
+## 2026-07-29 — M8 step 10.5 done: session-specific secondary variant, both bands (`completed_sessions=[1,2,3,4]` each) — plus two IBEX operational bugs the plan's own review missed, both fixed.
+
+Ran via `scripts/ibex/submit_exp_b_variant.sh` per band (`ARRAY_TIME=01:30:00 BAND=10ghz` /
+`ARRAY_TIME=01:45:00 BAND=77ghz`, sized from step 10's measured primary-run wall-times below).
+Two real bugs surfaced launching this against the owner's *actual* IBEX environment — a tree
+**copied** over (rsync/scp), not a git checkout — that the plan's C23-C25 review never exercised
+against that scenario:
+
+1. **The wrapper hard-required git** (`git rev-parse --show-toplevel`, a `git status --porcelain`
+   dirty-check, `DEHYD_GIT_COMMIT`/`BRANCH` stamping), and `git rev-parse --show-toplevel` fails
+   all the way to the `/ibex` mount boundary on a copied tree (no `.git` anywhere) — confirmed
+   directly from the owner's terminal output, not assumed. Unlike `submit_ibex.sh`/
+   `extract10.sbatch`/`extract77.sbatch`, which all document a copied-tree fallback via a
+   `REVISION` file, `submit_exp_b_variant.sh` had none. **Fix:** rewrote the wrapper to locate the
+   repo root from its own script path (`dirname "${BASH_SOURCE[0]}"`) instead of git, require and
+   read a `REVISION` file (the project's existing copied-tree convention), drop the dirty-tree
+   check (meaningless without git), and explicitly `unset DEHYD_GIT_COMMIT/BRANCH/DIRTY` so a
+   stale value in the calling shell can never silently override the `REVISION` fallback in
+   `provenance._git_info()`.
+2. **`_run_folds_parallel` (shared by the primary pooled model and every session-specific search)
+   printed nothing while running.** With `n_workers` set from `SLURM_CPUS_PER_TASK` (~16),
+   roughly matching the fold count, all folds dispatch together and tend to *finish* together
+   too — so even a print-on-completion line would show nothing until the very end of a ~1-1.5 h
+   job, indistinguishable from a hang. **Fix:** replaced the blocking `pool.starmap(...)` with
+   `pool.apply_async` per fold plus a polling loop (`_POLL_INTERVAL_S = 1`, fast, so it adds no
+   measurable overhead to tests) that prints a heartbeat every `_PROGRESS_INTERVAL_S = 60` s (and
+   immediately on any fold completing). Verified bit-identical results and no timing regression on
+   `test_parallel_folds_are_bit_identical_to_serial` (120 s with the change vs 133 s without —
+   noise, not a regression; the test's cost is real model fits on the fixture, unrelated to the
+   change). Both fixes committed together as `e88fd33`.
+
+That same commit then broke the fail-closed store/analysis commit-match rule: the feature stores
+had already been rebuilt and validated at commit `30c6d907ca6f293f72db73517dc585bc39ec8e66` (step
+8.6, below), and `e88fd33` — despite touching zero feature-computation code — is still a
+*different* commit, and the check makes no exception for "this diff couldn't have mattered" (by
+design: it exists to remove exactly that judgment call from the loop). Rebuilding both stores
+again (tens of GB of 77 GHz raw-file re-hashing + WST re-extraction) purely for a wrapper-script
+and logging change was not worth the cost, so: kept the new git-free `submit_exp_b_variant.sh` (a
+shell script, never fingerprinted by `validate_store`, so it may legitimately differ from the
+store's commit), reverted `src/dehyd/eval/exp_b.py` back to its exact `30c6d907` content for the
+actual IBEX deployment (confirmed via diff that the only delta between the two commits is the
+progress-logging addition — nothing feature-relevant), and re-stamped `REVISION` to
+`30c6d907ca6f293f72db73517dc585bc39ec8e66`. Honest (REVISION truthfully describes the deployed
+analysis code) at zero recompute cost; the progress-heartbeat is deferred to whenever the stores
+are next rebuilt at a commit that includes it.
+
+**Results, once both fixes landed** (`run_dir`s `20260728T224133954370Z_30c6d907` [10 GHz],
+`20260729T004647423767Z_30c6d907` [77 GHz]; `sacct`-confirmed `COMPLETED`/`0:0` end to end for
+every stage of both bands, one early superseded `init` attempt on the pre-fix commit correctly
+`FAILED` at the store/commit check before any real work started):
+
+- **10 GHz** — array wall-times per session (S1-S4): 10:59, 14:08, 13:02, 5:56. Effect sizes
+  (`mean_difference` = radar MAE − baseline MAE, descriptive only, no p-value — see below):
+  S1 +0.0612 [0.0105, 0.1486] (n=14); S2 +0.0793 [0.0056, 0.1681] (n=16); S3 +0.2127
+  [0.0448, 0.4214] (n=14); S4 +0.1360 [0.0006, 0.3349] (n=15). All four point estimates positive
+  (radar worse than the session's own train-only mean), consistent with the pooled model's own
+  per-session breakdown (step 10).
+- **77 GHz** — array wall-times per session (S1-S4): 22:05, 23:23, 22:09, 24:09 (plus one long
+  ~1h21m single-task stage consistent with init's heavier 77 GHz raw-file hashing, and a second
+  ~32 min single-task stage — both `sacct`-confirmed `COMPLETED`, exact stage attribution between
+  the two not independently reverified beyond timing plausibility). Effect sizes: S1 +0.0058
+  [-0.0209, 0.0309] (n=13); S2 -0.0077 [-0.1015, 0.0773] (n=16); S3 -0.0430 [-0.0925, 0.0062]
+  (n=14); S4 +0.0024 [-0.0403, 0.0500] (n=16). All four CIs cross zero — no consistent direction,
+  unlike 10 GHz.
+- No `wilcoxon_p`/`holm_p` field on any of the eight session results, by design: the frozen
+  protocol's Holm-4 is defined only for the primary pooled model's own per-session breakdown and
+  authorizes no multiplicity rule for these four independently-fitted secondary models —
+  `summarize_variant_session` reports effect sizes + CIs only, sidestepping rather than quietly
+  deciding an undisclosed fourth post-Exp-A completion.
+
+## 2026-07-28 — M8 step 10 done: full-cohort Exp B, both bands, on IBEX — `primary_viable=true` both bands, real numbers.
+
+Ran via `run_exp_b.sbatch` (`BAND=10ghz`/`BAND=77ghz MODE=full`), commit
+`30c6d907ca6f293f72db73517dc585bc39ec8e66`, `seed=20260721`, `seed_set=[1,2,3,4,5]` (5 seeds),
+16 evaluable subjects, 59 evaluable sessions both bands. `sacct`-measured wall-time: 10 GHz
+`01:04:20` (job 49516153), 77 GHz `01:16:51` (job 49516154) — both `COMPLETED`/`0:0`, used to size
+step 10.5's `ARRAY_TIME`.
+
+- **10 GHz primary aggregate** (session-weighted, A-M8-1): `difference_radar_minus_baseline` =
+  **+0.0475 [0.0230, 0.0749]** (radar MAE 0.3885 [0.3097, 0.5234] vs baseline 0.3411
+  [0.2703, 0.4811]) — CI excludes zero, radar *worse* than the session-mean baseline even after
+  clock-decoupling. Companion subject-weighted complete-case Wilcoxon (n=11 complete-case
+  subjects): p=0.00488, diff +0.0592 [0.0297, 0.0906] — agrees in direction and significance.
+  Per-session Holm-4: S1 holm_p=0.0736 (n=14), S2 holm_p=0.00305 (n=16, significant), S3
+  holm_p=0.482 (n=14), S4 holm_p=0.482 (n=15). Selection frequency: svr 10/16 folds, gbm 3, knn 2,
+  rf 1; tiling_idx 2 selected 11/16; log_branch frozen 11/16.
+- **77 GHz primary aggregate**: `difference_radar_minus_baseline` = **+0.0246
+  [-0.0066, 0.0756]** (radar 0.3407 [0.2678, 0.4433] vs baseline 0.3161 [0.2473, 0.3973]) — CI
+  *crosses* zero, no significant difference from baseline. Companion Wilcoxon (n=13): p=0.542,
+  diff +0.0195 [-0.0142, 0.0780] — agrees (not significant). Per-session Holm-4: all four
+  holm_p=1.0 (no session individually significant). Selection frequency: svr 12/16, gbm 2, knn 1,
+  rf 1; tiling_idx 0 selected 9/16 (contrast with 10 GHz's tiling 2); log_branch tuned 14/16
+  (contrast with 10 GHz's frozen-dominant).
+- **Reading:** 10 GHz shows a statistically clear residual signal in the *wrong* direction (radar
+  worse than the trivial train-only session mean, both by the primary aggregate and the per-session
+  breakdown); 77 GHz shows no distinguishable difference either way. Neither band shows Exp B's
+  hoped-for outcome (radar beating the residualized baseline). This mirrors Exp A's own negative
+  headline (`SECOND_CHAPTER.md` §6) — together the two experiments suggest whatever the radar
+  regressor is fitting is not out-performing simple time-of-day/session-mean statistics in this
+  cohort, at either band.
+
+## 2026-07-27 — M8 step 9 done: mechanism-only smoke, both bands, against the step-8.6 stores — no performance value surfaced, per Step 0 item 2.
+
+`--subset 6subjects` against commit `30c6d907ca6f293f72db73517dc585bc39ec8e66`'s stores: 10 GHz
+6 subjects/20 sessions, 77 GHz 6 subjects/24 sessions, both `mode: mechanism-only`, both reports
+explicitly `note: "performance values suppressed -- mechanism-only smoke"`. Clean pass on both
+bands, no owner pause taken between smoke and full (Step 0 item 2 — Exp B's core design was frozen
+before Exp A was seen, so there was no freeze left to spend gating this compute step).
+
+## 2026-07-27 — M8 step 8.6 done: both 10 GHz and 77 GHz feature stores rebuilt + `--validate`d from a docs-only commit on top of the step-8.5 code commit.
+
+Owner ran `extract10.sbatch`/`extract77.sbatch` on IBEX. The stores ended up built (and every
+downstream run's `validate_store` call confirms) at commit `30c6d907ca6f293f72db73517dc585bc39ec8e66`
+— one commit *after* step 8.5's clean implementation commit (`81cec63`), itself only a
+journal-only diff (HISTORY.md + a fresh HANDOFF.md, no source changes) — so it carries identical
+M8 code to `81cec63`, just a different commit hash. Confirms the commit-match doctrine is
+genuinely strict (any new commit, however trivial, requires a fresh store validation or a
+fresh rebuild) rather than a nominal rule — a fact that bit this same milestone again at step 10.5
+above.
+
 ## 2026-07-28 — M8 step 8.5 done: clean M8 implementation commit on `v1_milestone8`.
 
 Owner confirmed (asked explicitly, per CLAUDE.md's commit policy). Staged and committed all of

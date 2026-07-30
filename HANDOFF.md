@@ -1,127 +1,126 @@
-# HANDOFF — resume point for a new chat (Milestone 8: Exp B — code complete, IBEX runs in progress)
+# HANDOFF — resume point for a new chat (Milestone 8 CLOSED; Milestone 9 not yet planned)
 
-_Written 2026-07-28. **All of M8's local code (plan steps 1-8) is implemented, tested, and
-committed. Steps 8.6-10.5 (rebuild feature stores, mechanism-only smoke, full-cohort run,
-session-specific variant) are IBEX-cluster-dependent and were handed to the owner to run
-directly — this chat has no ssh access.** Picking this up almost certainly means: check whether
-the owner's IBEX runs have finished and, if so, do step 11 (HISTORY.md entries for 8.6-10.5 from
-the real run logs, then SECOND_CHAPTER.md §6+§7 together — a standing owner decision, not
-optional)._
+_Written 2026-07-30. **Milestone 8 (Exp B, clock-decoupling) is fully complete — plan steps 1-11
+all done, both bands, real IBEX results in hand and written up.** Picking this up almost certainly
+means: start planning Milestone 9 (Experiments C/D — ordinal classification + baselines), the next
+unplanned work. There is one pre-M9 decision already made and recorded that MUST be folded into
+that plan (see "Next steps" item 2) — do not miss it by planning from ROADMAP.md/
+implementation_plan.md alone without reading the note called out below._
 
 ## TL;DR
 
-M8 (Exp B, clock-decoupling) plan steps 1-8 are done: the `harness.py` `score_fn` hook,
-`metrics.py`/`baselines.py` additions, the full `eval/exp_b.py` composition (residualizing
-provider, staged search, A-M8-1/A-M8-2 reporting, the session-specific secondary variant), and
-`experiments/run_clock_decoupling.py` + the three `scripts/ibex/*` artifacts. Committed as
-`81cec63` on `v1_milestone8` ("M8 steps 1-8: Exp B (clock-decoupling) implementation complete and
-green"). **Full repo suite: 767 passed, 16 pre-existing skips**, `tests/test_no_leakage.py`
-`git diff --exit-code`-clean.
+M8 is done. Both Experiment A (fluid-loss regression, full cohort) and Experiment B
+(clock-decoupling, full cohort + session-specific variant) have real, final results, both bands,
+written into `SECOND_CHAPTER.md` §6+§7 and logged step-by-step in `HISTORY.md`. **The headline is
+negative for both experiments, in both bands:** radar does not beat the trivial time-of-day
+(Exp A) or session-mean (Exp B) baselines in this cohort — 10 GHz loses significantly in both
+experiments; 77 GHz loses significantly in Exp A but shows no significant difference either way
+in Exp B (more consistent with "Exp A's loss was mostly the clock confound" for that band
+specifically). This is reported in full as the plan required, not softened.
 
-Two real bugs were caught by the tests during implementation, both fixed and logged in
-HISTORY.md: `models/baselines.session_means` silently omitted a session from `dropped` when it
-had ZERO (not just <2) eligible training subjects, because it only iterated sessions present
-among the *training* rows; and a bash quoting quirk — an apostrophe inside a `${VAR:?message}`
-parameter expansion breaks bash's parser even within double quotes
-(`scripts/ibex/submit_exp_b_variant.sh`).
+Along the way, two real IBEX-only operational bugs were found and fixed (git-free
+`submit_exp_b_variant.sh` for the owner's copied-tree — no `.git` — deployment; a progress
+heartbeat added to `_run_folds_parallel` so long jobs' logs don't look hung) — both are in commit
+`e88fd33`. A **separate, not-yet-resolved wrinkle**: that commit doesn't match the feature stores'
+build commit (`30c6d907ca6f293f72db73517dc585bc39ec8e66`), so the *deployed* `src/dehyd/eval/
+exp_b.py` on IBEX right now is deliberately the older, no-heartbeat version (see HISTORY.md's
+2026-07-29 step-10.5 entry for the full reasoning) — the heartbeat feature is real, committed, and
+in the codebase, just not live on IBEX until the stores are next rebuilt at a commit that includes
+it. Nothing to do about this now; it's just a fact worth knowing before assuming what code is
+actually running there.
 
-**The owner is now running steps 8.6-10.5 on IBEX directly** (rebuild+validate both feature
-stores from commit `81cec63`; mechanism-only smoke both bands; full-cohort Exp B both bands; the
-session-specific variant both bands, via `scripts/ibex/submit_exp_b_variant.sh`). This chat
-stopped here — mid-IBEX-run — specifically to update the journal and prepare this handoff, per
-explicit owner request; it was not asked to wait for the runs to finish.
+There's also a **pre-M9 planning decision already made**, not yet acted on: the owner wants an
+additional, deliberately-leaky, exploratory frame-level random-split (k=5) evaluation alongside
+LOSO for every Exp C/D result — see "Next steps" item 2.
+
+**Working tree has uncommitted changes** (`HISTORY.md`, `SECOND_CHAPTER.md`,
+`plans/implementation_plan.md`) — the M8-closing journal entries and the pre-M9 note. **Not
+committed** — commit only on explicit owner request, per standing project rule. (There is also a
+long-standing unrelated deletion, `results/preprocess/preprocess_diagnostics_10ghz.csv`, present
+in git status since before this chat started — not something this session touched; leave it
+alone unless the owner raises it.)
 
 ## Read first (in this order)
 
-1. `CLAUDE.md` — hard invariants, code style, journal rules (unchanged from prior milestones).
-2. `HISTORY.md` — the newest ~7 entries (M8 steps 1 through 8.5) for exactly what was built, what
-   broke and why, and the reasoning behind every non-obvious choice. Older M8 planning entries
-   below that only if you need the plan's own pre-implementation reasoning.
-3. `plans/MILESTONE_8_PLAN.md` — the plan (`REVIEW_COMPLETE`, 25/25 review comments applied), if
-   you need to check an implementation detail against its spec. §1's build-sequence table, §2's
-   per-file specs, §4's DoD, and §5's 26 traps are the sections you're most likely to actually
-   need; the resolved-review log (C1-C25) at the end explains *why* almost every non-obvious
-   design choice is the way it is.
-4. This file's "Next steps" below.
+1. `CLAUDE.md` — hard invariants, code style, journal rules (unchanged).
+2. `HISTORY.md` — the newest ~6 entries (2026-07-30's two entries, then M8 steps 10.5/10/9/8.6)
+   for exactly what happened, what broke and why, and the real numbers. Older M8 entries below
+   that only if you need earlier reasoning (e.g. why A-M8-1/A-M8-2 were decided the way they
+   were).
+3. `SECOND_CHAPTER.md` §6 (Exp A) and §7 (Exp B) — the full, final, real-numbers write-up. This is
+   the authoritative account of what M8 (and M7's Exp A) actually found; read it before citing any
+   number from memory.
+4. `plans/implementation_plan.md` — the note right after the Exp D baseline specs (before §E),
+   headed "Owner-requested addition, pre-M9 (decided 2026-07-30)" — the frame-split decision, see
+   below. This is the one thing most likely to get missed if M9 planning starts from ROADMAP.md
+   alone.
+5. This file's "Next steps" below.
 
-## What's actually done (implemented AND tested, not just planned)
+## What's actually done
 
-- `src/dehyd/eval/harness.py`: keyword-only `score_fn`/`FeatureBundle.session_idx` hook, proven
-  bit-identical to pre-M8 behaviour via `tests/test_m8_pin.py` (a pin captured BEFORE any M8
-  edit, re-asserted after both the `metrics.py` and `harness.py` changes).
-- `src/dehyd/eval/metrics.py`: `per_session_residual_mae`, `equal_session_residual_mae`,
-  `holm_adjusted`, `_cluster_bootstrap_over_rows` (extracted from
-  `subject_cluster_bootstrap_pooled`, bit-identical), `session_weighted_bootstrap` (A-M8-1's
-  primary CI, A-M8-2's skip-and-count built in).
-- `src/dehyd/models/baselines.py`: `session_means`/`fit_session_mean_baseline`/
-  `predict_session_mean` — deliberately NO Exp-A-style global-mean fallback; a degenerate session
-  is dropped, never imputed.
-- `src/dehyd/eval/exp_b.py` (new, ~900 lines): the full composition — `build_sessions_b`
-  (S0-excluded), `evaluable_subjects_b`, `SessionResidualFeatures` (wraps
-  `exp_a.StoreBackedFeatures`), `run_exp_b`, `summarize_exp_b` (C4 run-level viability, C5
-  per-session `baseline_mae` as a CI, Holm-4), `write_exp_b_reports`, `run_and_report_b`, and the
-  session-specific variant (`run_exp_b_one_session`, `run_exp_b_session_specific`,
-  `summarize_variant_session`, `merge_session_specific_reports` with fail-closed shard-lineage
-  validation, `config_fingerprint`, `eligible_subjects_for_session`).
-- `src/dehyd/provenance.py`: `_fold_manifest` → public `fold_manifest` (docstring-only change
-  beyond the name; zero behaviour change, confirmed by `test_provenance.py`).
-- `experiments/run_clock_decoupling.py` (new CLI): the primary path (mirrors
-  `run_regression.py`) plus the entirely separate `--session-specific` path with its three
-  sub-flags (`--init-run-group`/`--session S --run-dir`/`--merge-sessions --run-dir`).
-- `scripts/ibex/run_exp_b.sbatch` (primary path, cloned from `run_exp_a.sbatch`),
-  `scripts/ibex/run_exp_b_variant.sbatch` (`STAGE=init|array|merge`, zero `#SBATCH` resource
-  directives — C24), `scripts/ibex/submit_exp_b_variant.sh` (the init→array→merge orchestration
-  wrapper, job-ID normalization — C25).
-- Tests: `test_m8_pin.py`, `test_exp_b.py` (34 tests — run half, report half, variant),
-  `test_run_clock_decoupling.py` (15), `test_exp_b_ibex_scripts.py` (5, incl. a `bash -n` syntax
-  gate over all three new shell artifacts), plus additions to `test_metrics.py`/
-  `test_baselines.py`/`test_harness.py`. All green individually and together with the full
-  pre-existing suite (767 passed, 16 pre-existing skips).
+- **M8 plan steps 1-11, all complete** (`plans/MILESTONE_8_PLAN.md`, `REVIEW_COMPLETE`). Code
+  committed at `81cec63` (steps 1-8); operational fixes at `e88fd33` (git-free wrapper + progress
+  logging, step 10.5's own detour). Full repo test suite green (767 passed, 16 pre-existing skips)
+  as of `e88fd33`; `tests/test_no_leakage.py` unchanged.
+- **Real IBEX results, both experiments, both bands** — in `results/runs/` locally (synced back
+  via `rsync` from `/ibex/user/floresge/dehy_radar/`) and written up in `SECOND_CHAPTER.md` §6+§7:
+  - Exp A full-cohort: `20260727T111437230187Z_f36c4fb2` (10 GHz), `20260727T115046533408Z_f36c4fb2`
+    (77 GHz).
+  - Exp B mechanism-only smoke: `20260727T224535326693Z_30c6d907` (10 GHz),
+    `20260727T231856775480Z_30c6d907` (77 GHz).
+  - Exp B full-cohort: `20260727T233312448972Z_30c6d907` (10 GHz),
+    `20260728T000714076071Z_30c6d907` (77 GHz).
+  - Exp B session-specific variant (merged, `completed_sessions=[1,2,3,4]` both bands):
+    `20260728T224133954370Z_30c6d907` (10 GHz), `20260729T004647423767Z_30c6d907` (77 GHz).
+  - Three empty `*_nogit` run dirs (provenance.json only, no results) are dead-end artifacts from
+    early failed `init` attempts before the git-free wrapper/REVISION fix — harmless, candidates
+    for `archive/` cleanup per CLAUDE.md file hygiene, not urgent.
+- **HISTORY.md** fully current through M8's close (newest-first: pre-M9 frame-split decision, M8
+  CLOSES, then steps 10.5/10/9/8.6/8.5/... down to M8's start).
 
 ## Next steps, in order
 
-1. **Check whether the owner's IBEX runs (steps 8.6-10.5) have finished.** Ask, or look for new
-   `results/runs/<stamp>_81cec63*/` directories containing `metrics_exp_b_{10,77}ghz.json` and,
-   after the merge stage, `session_specific_{10,77}ghz.json`. If they haven't finished, there is
-   genuinely nothing to do here yet except wait — do not re-derive, estimate, or guess numbers.
-2. Once real results exist: **write per-step HISTORY.md entries for 8.6/9/10/10.5** — store
-   rebuild+validate confirmation, the smoke pass (confirm no performance value surfaced), the
-   actual full-cohort numbers per band (primary aggregate CI, paired Wilcoxon, per-session
-   breakdown, `primary_viable`), and the variant's `completed_sessions`/per-session numbers —
-   continuously as each resolves, per CLAUDE.md, not batched into one entry.
-3. **Then, and only then, write SECOND_CHAPTER.md §6 (Exp A) and §7 (Exp B) TOGETHER.** This is
-   an explicit standing owner decision from M7/M8 (see HISTORY.md's "M7 CLOSES" entry), not
-   optional or reopenable without a new owner decision. §6's method/provenance subsections are
-   already written; only its "Results" subsection and all of §7 are pending — fill both from the
-   real numbers, in one pass. State the A-M8-1/A-M8-2 chronology plainly (both decided
-   2026-07-27, *after* Exp A's full-cohort results were already visible — plan §0/Step 0 item 1,
-   Step 0b, and resolved-review-log entries C3/C10 explain why this distinction is load-bearing
-   and must not be elided or folded into "frozen before Exp A" language).
-4. Do **not** reopen A-M8-1, A-M8-2, or any resolved plan comment (C1-C25) without a new,
-   explicit owner decision — same standing rule as every prior milestone's frozen choices.
-5. If a store `--validate`, a smoke run, or a full/variant run fails on IBEX: read the actual
-   error against `plans/MILESTONE_8_PLAN.md` §5's 26 traps before guessing at a fix. Traps 20-26
-   (the `record_run`/provenance contract) and 17/18 (`validate_store` enforcement) are the most
-   IBEX-orchestration-specific; everything this session's own test suite could exercise for those
-   paths is green, so a failure there most likely means something genuinely IBEX-specific (a
-   stale store, a wrong commit checked out, a resource/time-limit issue) rather than a logic bug.
+1. **Do not reopen anything M7/M8 already settled** (A-M7-1/2/3, A-M8-1/A-M8-2, any resolved
+   `MILESTONE_7_PLAN.md`/`MILESTONE_8_PLAN.md` review comment, the Exp A/B results themselves)
+   without a new, explicit owner decision — same standing rule as every prior milestone.
+2. **Start Milestone 9 planning (Experiments C/D — ordinal 5-class classification + baselines),
+   and fold in the pre-M9 decision already made:** alongside the required LOSO protocol, also
+   plan for a **5-fold random split over pooled frames** (k=5, ~80/20 per fold, frames from all
+   subjects shuffled together — matching the original paper's frame-as-sample splitting) for
+   every Exp C/D result. This is deliberately leaky and **exploratory-only — never for the thesis
+   or paper, never a headline number** (owner's own words). Three hard constraints when
+   implementing it (already in `plans/implementation_plan.md`'s note): (a) a clearly separate
+   code/output path, own tagged filenames, never merged into the LOSO metrics files; (b) must
+   never touch or weaken `tests/test_no_leakage.py`, `splits.py`'s LOSO machinery, or
+   `config-freeze-v1`; (c) never surfaces in `SECOND_CHAPTER.md`'s actual findings.
+3. Read `ROADMAP.md`'s Exp C/D framing and `plans/implementation_plan.md`'s full C/D spec
+   (ordinal sign convention, Frank-Hall decomposition amendment A-M6-5, fold-viability rules,
+   the three D baselines + budget-parity rule) before drafting `plans/MILESTONE_9_PLAN.md` — this
+   is a large, detailed, already-mostly-specified section; the plan mostly needs to sequence
+   implementation, not invent design.
+4. Follow the same process as M6-M8: draft the plan, run the Codex⇄Claude review loop to
+   closure, then implement — per CLAUDE.md and the owner's established preference (confirmed
+   explicitly at M8 Step 0 item 4).
+5. Commit only when the owner asks — including the currently-uncommitted M8-closing journal
+   changes (`HISTORY.md`, `SECOND_CHAPTER.md`, `plans/implementation_plan.md`), which are still
+   sitting unstaged from this session.
 
 ## Hard invariants (unchanged, never violate)
 
-LOSO at subject level; fit-on-train-only at both CV levels; no test-set tuning; primary target
-continuous Δm%, session-level headline; folds only from `splits.py`; tie-break only via
+LOSO at subject level for every REPORTED result; fit-on-train-only at both CV levels; no
+test-set tuning; primary target continuous Δm%, session-level headline; 5-class S0-S4 is
+secondary, ordinal metrics only; folds only from `splits.py`; tie-break only via
 `select_candidate`; numpy backs all reported features; `protocol_freeze_guard` before every
-fit/write; `tests/test_no_leakage.py` unchanged (confirmed `git diff --exit-code` clean as of
-commit `81cec63`, M8's own step-4 diff included).
+fit/write; `tests/test_no_leakage.py` unchanged. The one deliberate, disclosed exception: the
+pre-M9 exploratory frame-split addition above — never a substitute for LOSO, never reported.
 
 ## Journal & hygiene
 
-**HISTORY.md** newest-first, current through M8 step 8.5. **SECOND_CHAPTER.md** §0-§5 written,
-§6 method/provenance written, §6 Results + all of §7 deliberately pending (see "Next steps" item
-3 — do not write §6 in isolation). **MILESTONE_8_PLAN.md** `REVIEW_COMPLETE`, plan steps 1-8
-implemented and committed, steps 8.6-11 not yet done (owner-run/IBEX-dependent). Branch
-`v1_milestone8`, HEAD `81cec63` at the time this was written, working tree clean. Whether
-`81cec63` has been pushed to `origin` is not verified from this session — the owner may have
-synced it to IBEX by push, pull, or a copied-tree workflow (`scripts/ibex/README.md`'s
-alternative for repos without git access on the cluster); check before assuming. Commit only when
-the owner asks.
+**HISTORY.md** newest-first, current through M8's close + the pre-M9 decision (2026-07-30).
+**SECOND_CHAPTER.md** §0-§7 all complete and final; §8 (Exp C/D) and §9 (fusion/interpretability/
+statistics) pending their own milestones. **MILESTONE_8_PLAN.md** `REVIEW_COMPLETE`, all 11 steps
+done. No `MILESTONE_9_PLAN.md` exists yet. Branch `v1_milestone8`, HEAD `e88fd33` at the time this
+was written, 3 commits ahead of `origin/v1_milestone8` (not pushed — not verified whether the
+owner has separately synced to IBEX by another route). Working tree has `HISTORY.md`,
+`SECOND_CHAPTER.md`, and `plans/implementation_plan.md` modified but uncommitted (see TL;DR).
+Commit only when the owner asks.

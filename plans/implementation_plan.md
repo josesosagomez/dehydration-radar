@@ -922,6 +922,24 @@ All baseline specs above are locked at the **config-freeze gate (milestone 6)**,
 before any Exp A/D results are inspected; nothing here is chosen or adjusted after
 seeing outer-test scores.
 
+**Owner-requested addition, pre-M9 (decided 2026-07-30) — exploratory frame-level random-split
+eval, in ADDITION to LOSO, for every Exp C/D result.** Alongside the required LOSO protocol above,
+also run a **5-fold random split over pooled frames** (frames from all subjects shuffled
+together, k=5 so each fold holds out 20% — matching the paper's original frame-as-sample
+splitting) for both Exp C and every Exp D baseline. This is **known to leak information** (a
+held-out fold can contain frames from a subject whose other frames were trained on) and is
+**purely exploratory** — the owner wants the numbers for comparison/curiosity, not for the thesis
+or paper. Hard constraints on the implementation:
+- A clearly separate code/output path — its own script or flag, its own output filenames tagged
+  (e.g. `..._frameSplit_leaked_exploratory...`), never merged into or reported alongside the LOSO
+  metrics files.
+- Must NOT touch, weaken, or run through `tests/test_no_leakage.py`, `splits.py`'s LOSO
+  machinery, or `config-freeze-v1` — it is an addition, not a substitute or an amendment to the
+  frozen protocol.
+- Never surfaces as a headline number or in SECOND_CHAPTER.md's actual findings — CLAUDE.md's
+  "do not report frame-level random-split accuracy as a headline number" still governs anything
+  written up.
+
 **E — Physics-grounded interpretability (beat/range domain, honest about limits).**
 Identify which scattering paths drive the prediction.
 - **Interpret the clock-decoupled (Exp B) model as primary — not Exp A.** Exp A
