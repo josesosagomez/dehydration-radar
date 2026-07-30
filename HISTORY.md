@@ -4,6 +4,135 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 7: `models/cnn.py` + `eval/exp_d.py`'s CNN nested torch path. Succeeded.
+
+Per plan step 7 (`MILESTONE_9_PLAN.md` §2.7 + the CNN half of §2.8; T-M9-cnn, T-M9-cnnpath). Two new
+modules and two new test files; **no existing file changed at all** (`git status`: exactly four
+untracked files), so every step-1 pin and every Exp A/B/C path is byte-neutral by construction, not
+by argument. Nothing from step 8 (no physics, no session-index, no per-family reports, no
+shard/merge, no comparison statistics) and nothing from step 9 (no store-v2 producers — the tests
+write the v2 keys directly; no entrypoint, no sbatch).
+
+**`models/cnn.py`.** The frozen architectures and per-frame input constructions, with **no CV logic
+at all** — the only fitted quantity in the file is `SpectrogramNorm`, and it is fitted only from
+rows its caller hands it. `Cnn1d` = 3 × (Conv1d k=7 stride 1 → BatchNorm1d → ReLU → MaxPool1d 4),
+channels 16/32/64 → global average pool → Linear → 1 scalar (18 433 params at 1 channel, 18 545 at
+2, both hand-summed in the test). `Cnn2d` = 2 × (Conv2d 3×3 → BN → ReLU → MaxPool 2×2), channels
+16/32 → GAP → Linear (4 929 / 5 073 params). STFT: Hann 64 / hop 16 / nfft 128 → 65 rfft bins ×
+`(N−64)//16 + 1` frames (30 at N=534, 26 at 470, 13 at 256). Constants are literals here — the §2.7
+signatures (`Cnn1d(in_channels)`, `spectrogram(x_1d)`) take no config — and `assert_frozen_constants`
+compares them against `BaselineConfig` fail-closed at run time, the same two-separately-written-values
+doctrine as `exp_c.FRANK_HALL_MAX_ITER`.
+
+**The three unstated choices, made explicitly rather than silently.** (1) *Periodic* Hann
+(`hann(64, sym=False)`), following this repo's own split — the chain window is symmetric
+(`pipeline_77.py:24`) while every spectral-analysis window is periodic (`qc/screens.py:147-154`,
+`qc/axis_check_77.py:60`); an STFT is spectral analysis, and periodic is also the standard STFT
+convention. (2) *Unpadded* convolutions: the freeze names kernel, stride and pool and says nothing
+about padding, so padding 0 is the literal reading — 'same' would be an unstated choice of its own.
+(3) *float32* tensors: the freeze fixes no dtype, float32 is what the GPU path needs and CPU
+single-threaded float32 is still bit-deterministic (asserted by the two-runs test); the fitted
+`SpectrogramNorm` statistics stay float64.
+
+**Two implementations the plan explicitly rules out, and the fixtures that catch them.** The
+spectrogram is the literal `log(|STFT| + finfo.tiny)`. Hand-computed on a 2-channel length-64
+fixture whose windowed DFT is analytic: an all-zero channel gives `log(tiny) = −1022·ln2 =
+−708.3964185322641` everywhere, and a constant-1 channel through the periodic Hann gives bin 0 =
+`sum(w) = 32` → `5·ln2 = 3.4657359027997265` and bin 2 = `−16` → `4·ln2 = 2.772588722239781`. A
+log-*power* implementation returns exactly twice those; a `1e-30` floor returns `−69.078` on the
+zero channel, ~639 nats away. `SpectrogramNorm` keeps `[C, F]` statistics reduced over **frames ×
+time** with `scale = np.where(std == 0, 1.0, std)`; the asymmetric 2-channel fixture
+(ch0 f0 = {1,3,5,7} → mean 4, sd √5; ch1 f1 = {2,4,6,8} → mean 5, sd √5; ch1 f2 = {1,1,1,3} → mean
+1.5, sd √0.75; three zero-variance cells) fails against both a cross-channel-shared reduction (f0
+mean would be 51.5) and a frames-only reduction (parameter would be `[C, F, T]`). The
+`std + tiny` fallback is refused by a validation cell reading 13 against a constant-10 training
+bin: `scale = 1.0` gives 3.0, `std + tiny` gives ≈1.3e308.
+
+**Per-variant spectrogram inputs — the part §2.7 spends a page on because the obvious version is
+wrong.** The two *raw* branches STFT the unstandardized stored array (a doubled input adds exactly
+`ln 2` to every bin — a robust-standardizing branch would be scale-invariant and fail); the 10 GHz
+*matched* branch consumes the store's already-standardized `sig__matched_iq` bytewise with **no**
+second standardization; the 77 GHz *matched* branch consumes `matched_input_77`'s robust-standardized
+output, because that store keeps the tensor pre-standardization. One `FRAME_INPUT[(band, family)]`
+table holds the store key and the builder for all eight combinations, so "which signal does this
+variant consume" has exactly one answer.
+
+**`eval/exp_d.py` (step-7 half).** `build_frames_d(config, band, family, sessions, store_dir)` →
+`FramesD` (one row per QC-passed frame: subject, session position, frame id, the family's input
+tensor, the session's Δm% broadcast — a *training* device only, since every score aggregates frames
+to sessions first). `run_cnn_family(config, band, family, fold, seeds, frames, *, device="cpu")` runs
+ONE outer fold: the frozen 6-config grid (lr 3e-4/1e-3/3e-3 × wd 0.0/1e-4, lr-major — 6 ≤ K=12, the
+`:917-919` budget-parity rule) × the fold's inner folds × the seed set; Adam(0.9, 0.999),
+`MSELoss(reduction="mean")` with **no** per-row weight (the balancing lives in the sampler and is
+never applied twice), batch 16, early stopping patience 15 / min-delta 1e-4 on the frozen
+`checkpoint_metric` = median frame→session aggregation of the val predictions →
+`subject_balanced_mae` over session rows. Config selection routes through
+`selection.select_candidate` (simplicity rank 0 and a constant feature dimension for all six, so
+only the variance rung can break a residual tie). Budget = `int(np.median(...))` over the winner's
+**(inner fold × seed)** epoch counts — trap 7's population, asserted by size (`3 × 2` on the fixture)
+and not just by value. Refit: per seed, all outer-training frames, exactly the budget, no early
+stopping, then the held-out subject's frames → median per session → per-seed scores, never
+ensembled.
+
+**The sampler/DataLoader contract, pinned.** `WeightedRandomSampler(weights,
+num_samples=len(train), replacement=True, generator=g)` + `DataLoader(batch_size=16,
+sampler=sampler, shuffle=False, drop_last=True, num_workers=0, generator=g)`, one generator per fit
+from the named derivation `fit_seed(run_seed, fold_id, config_index, inner_fold, seed) =
+run_seed + 900000 + (((fold_id·16 + config)·9 + inner_slot)·16 + seed)`, with `inner_fold = -1` (the
+final refit) taking reserved slot 8. Hand-checked: `(7, 3, 2, 1, 5) → 907228`, `(7, 3, 2, −1, 5) →
+907340`; distinct over all 16×6×6×5 fits of a run. Sampler weights are the literal
+`1/frames_in_session`, deliberately **not** renormalized to mean 1 (the sampler normalizes
+internally, so the recorded `FitRecord` stays the quantity the plan names).
+
+**Two things the trace test taught us.** (i) A `num_workers=0` `DataLoader` draws its `_base_seed`
+from the *shared* generator before the sampler iterates, so the realized draw is
+`torch.multinomial(...)` taken **after** one `random_()` — verified directly, and the test re-derives
+it that way with the reason written down, so a torch change to that pattern surfaces as a failed
+test rather than as silently different batches. (ii) `np.stack` of the transposed `[F, T]` STFT
+outputs yields a **non-C-contiguous** array, and numpy's reduction sums it in a different order — so
+`SpectrogramNorm` fit on bytewise-identical data differed in the last bits (rel. 2.1e-15) purely by
+memory layout, which broke the held-out-mutation bit-assert on the spectrogram families. Fixed by
+forcing C-contiguity in `spectrogram`, `SpectrogramNorm.fit/transform` and `build_frames_d`; a
+fitted statistic must be a function of the data, not of how the caller sliced it. This was a real
+bug found by the test, not a test that needed loosening.
+
+**Mutation-checked, not just green.** Two deliberate wrong implementations were run against the
+suite and confirmed to fail: fitting `SpectrogramNorm` on the pooled `frames.X` instead of the
+training rows (fails the held-out-mutation bit-assert), and sharing one module-level
+`torch.Generator` across fits (fails the trace test, the same-batches-under-changed-held-out test
+*and* the full mutation property — exactly trap 8's predicted failure mode). `model.eval()` at every
+predict is pinned three ways (repeat-predict identity, subset-equals-slice, and the mode flag
+itself), which is trap 9.
+
+**Suite.** +78 tests (`tests/test_cnn.py` 40, `tests/test_exp_d.py` 38). Full suite: **985 passed,
+16 skipped, 1 pre-existing failure** (`test_provenance.py::test_git_degrades_to_none_without_env`,
+the stale local `REVISION` file diagnosed at step 1 — unrelated, and identical to step 6's run).
+907 + 78 = 985 exactly. `git diff --exit-code tests/test_no_leakage.py` clean; `test_no_leakage.py`,
+`test_m9_pin.py`, `test_m8_pin.py`, `test_harness.py`, `test_selection.py` re-run explicitly (100
+passed, 1 skipped).
+
+**Signatures: where the plan's contract needed one more argument.** §2.8 writes
+`build_frames_d(config, band, family)` and `run_cnn_family(config, band, family, fold, seeds)`, but
+neither can reach a store without the QC spine and the store root (and §2.8's own
+`run_physics(config, band, sessions, store_dir)` passes both). The step-6 precedent was followed:
+the given positional prefix is kept and the missing arguments are appended — `sessions, store_dir`
+on the spine builder, and the already-built `frames` on the fold runner, so a fold-array task does
+`build_frames_d(...)` once and hands the tensors over (the alternative, rebuilding the spine inside
+every fold, re-reads the store and recomputes every spectrogram per fold).
+
+**Not done here, on purpose.** No multi-fold CNN driver: §1 makes one fold the unit of work (one
+array task), the merge across folds is step 8's, and the local CPU loop belongs with step 9's
+entrypoint — so `test_exp_d.py`'s share of T-M9-parallel is deferred to the step that creates the
+thing being parallelised. No GPU determinism test (`cnn.enable_gpu_determinism` is called but
+unexercised on this machine; §0 makes every bit-assert CPU-scoped anyway). No 10 GHz training
+fixture — the 10 GHz shapes are pinned in `test_cnn.py`, which needs no training, and the band
+enters `run_cnn_family` only through `FRAME_INPUT`.
+
+**Next:** step 8 — `eval/exp_d.py` remaining: physics + session-index LOSO runs, per-family
+reports, fold-shard/merge, comparison statistics.
+
+---
+
 ## 2026-07-30 — M9 step 6: `eval/exp_c.py` — the ordinal two-arm composition (run + report). Succeeded.
 
 Per plan step 6 (`MILESTONE_9_PLAN.md` §2.6, T-M9-expc-*). One new 900-line module and one new
