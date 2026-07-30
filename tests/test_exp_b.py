@@ -3,16 +3,18 @@ store (run half) -- no private data -- plus `summarize_exp_b`/reporting on hand-
 `ExpBFoldResult`s (report half, mirroring `test_run_regression.py`'s stubbing pattern for
 Exp A). Covers T-M8-provider, T-M8-degenerate, T-M8-residual-leak, T-M8-outer-mutation (C2),
 and T-M8-report. The session-specific variant (T-M8-variant) lives once step 7 exists.
+M9 step 5 adds T-M9-parallel: exp_b's half of the `eval/fold_parallel.py` extraction.
 """
 
 import json
+from collections import namedtuple
 
 import numpy as np
 import pytest
 
 from dehyd.config import load_config
 from dehyd.data.sessions import SESSION_NAMES
-from dehyd.eval import exp_a, harness
+from dehyd.eval import exp_a, exp_b, fold_parallel, harness
 from dehyd.eval.exp_b import (
     ExpBError,
     ExpBFoldResult,
@@ -254,6 +256,97 @@ def test_parallel_folds_are_bit_identical_to_serial(tmp_path, config):
             assert fs.quantity == fp.quantity
             for k in fs.params:
                 assert fs.params[k].tobytes() == fp.params[k].tobytes()
+
+
+# ---------------------------------------------------------------------------- T-M9-parallel
+# M9 step 5: the pool + heartbeat moved to `eval/fold_parallel.py` and exp_b now delegates.
+# `test_parallel_folds_are_bit_identical_to_serial` above is the extraction's headline
+# evidence (unchanged, still green); the tests below pin what survived only by intent --
+# that exp_b really calls the shared implementation (rather than keeping a copy), that the
+# canonical ordering stayed with the caller, and that the C12 exception re-raise, the
+# heartbeat constants and the label parameterization are all live.
+
+# Top-level so the spawn-context Pool can pickle them by qualified name.
+_FoldStub = namedtuple("_FoldStub", ["test_subject", "value"])
+
+
+def _toy_worker(test_subject, value):
+    return _FoldStub(test_subject=test_subject, value=value * 2)
+
+
+def _raising_worker(test_subject, value):
+    raise RuntimeError(f"toy worker refuses subject {test_subject}")
+
+
+def test_fold_parallel_heartbeat_constants_are_the_m8_committed_values():
+    # Provenance: HISTORY.md 2026-07-29 fix 2 (commit e88fd33). A silent re-tune of either
+    # would change what an IBEX log looks like across every experiment at once.
+    assert fold_parallel._POLL_INTERVAL_S == 1
+    assert fold_parallel._PROGRESS_INTERVAL_S == 60
+
+
+def test_exp_b_routes_both_call_sites_through_fold_parallel(monkeypatch, tmp_path, config):
+    """Fails against the wrong implementation the extraction invites: leaving exp_b's own
+    pool in place (or migrating only `run_exp_b` and not `run_exp_b_one_session`), which
+    would make `fold_parallel.py` dead code that no bit-identity test ever exercises."""
+    calls = []
+
+    def recorder(worker, tasks, n_workers, label):
+        calls.append({"worker": worker, "tasks": list(tasks), "n_workers": n_workers, "label": label})
+        return []                      # no fold actually runs: no store is needed
+
+    monkeypatch.setattr(fold_parallel, "run_folds_parallel", recorder)
+    sessions = _make_sessions_b()      # 6 subjects x sessions 1-4
+
+    assert run_exp_b(config, "10ghz", sessions, tmp_path, seeds=(0,), n_workers=3) == []
+    assert run_exp_b_one_session(config, "10ghz", sessions, tmp_path, 2, seeds=(0,), n_workers=1) == []
+
+    assert len(calls) == 2
+    for call in calls:
+        assert call["worker"] is exp_b._run_single_fold_b
+        assert call["label"] == "exp_b"
+        # 6 subjects -> 6 selectable outer folds, one task each, fold at position 4.
+        assert len(call["tasks"]) == 6
+        assert [t[4].test_subject for t in call["tasks"]] == [1, 2, 3, 4, 5, 6]
+    assert calls[0]["n_workers"] == 3   # pass-through, not a hardcoded default
+    assert calls[1]["n_workers"] == 1
+
+
+def test_run_folds_parallel_leaves_canonical_ordering_to_the_caller():
+    # Tasks handed over in descending subject order come back in that order: the shared
+    # helper must NOT sort (exp_b's own `results.sort(key=test_subject)` is what makes the
+    # reassembly canonical). An internal sort would silently move the ordering contract out
+    # of the caller, where exp_c/exp_d are specified to keep it.
+    tasks = [(5, 1.0), (3, 2.0), (1, 3.0)]
+    out = fold_parallel.run_folds_parallel(_toy_worker, tasks, 1, "toy")
+    assert [r.test_subject for r in out] == [5, 3, 1]
+    assert [r.value for r in out] == [2.0, 4.0, 6.0]
+
+
+def test_run_folds_parallel_pool_results_match_the_serial_run():
+    tasks = [(s, float(s)) for s in (4, 2, 3, 1)]
+    serial = fold_parallel.run_folds_parallel(_toy_worker, tasks, 1, "toy")
+    pooled = fold_parallel.run_folds_parallel(_toy_worker, tasks, 2, "toy")
+    assert sorted(pooled) == sorted(serial) == [_FoldStub(s, 2.0 * s) for s in (1, 2, 3, 4)]
+
+
+def test_run_folds_parallel_propagates_a_worker_exception():
+    # C12: a failing fold surfaces as that fold's exception, never as a missing/placeholder
+    # result. In the pool branch this only holds because the polling loop calls `.get()`.
+    with pytest.raises(RuntimeError, match="refuses subject 1"):
+        fold_parallel.run_folds_parallel(_raising_worker, [(1, 1.0)], 1, "toy")
+    with pytest.raises(RuntimeError, match="refuses subject"):
+        fold_parallel.run_folds_parallel(_raising_worker, [(1, 1.0), (2, 2.0)], 2, "toy")
+
+
+def test_run_folds_parallel_progress_lines_carry_the_callers_label(capsys):
+    # Rules out a prefix left hardcoded as "exp_b" while the parameter is accepted and
+    # ignored -- which would mislabel every Exp C / Exp D IBEX log.
+    fold_parallel.run_folds_parallel(_toy_worker, [(1, 1.0), (2, 2.0)], 1, "exp_toy")
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("[")]
+    assert len(lines) == 2
+    assert all(ln.startswith("[exp_toy progress] ") for ln in lines)
+    assert "test_subject=1" in lines[0] and "test_subject=2" in lines[1]
 
 
 # ------------------------------------------------------------------------ T-M8-provider

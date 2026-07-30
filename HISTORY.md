@@ -4,6 +4,66 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 5: `eval/fold_parallel.py` extracted from exp_b; exp_b delegates. Succeeded.
+
+Per plan step 5 (`MILESTONE_9_PLAN.md` §2.5, T-M9-parallel) — a zero-behaviour-change move so Exp C
+and Exp D share ONE fold-parallel implementation instead of each growing a copy of a process pool
+(the copies drift: one gets a fix, the others do not). Nothing from steps 6+ (no `exp_c.py`).
+Diff: one new 80-line module, a 60→14-line `exp_b._run_folds_parallel`, and a new test group.
+
+**Where the seam was cut.** `run_folds_parallel(worker, tasks, n_workers, label)` — the plan's
+literal signature. What moved is only the *execution strategy*: the serial branch, the
+spawn-context `Pool`, the `apply_async`/poll loop with its `.get()` re-raise (C12), and the
+heartbeat. What stayed in exp_b is everything experiment-specific: which folds exist
+(`harness.nested_loso_splits(subjects)`, still the only fold source), what a task tuple carries,
+and `results.sort(key=test_subject)` — the plan's "canonical result ordering by the caller".
+The pool therefore hands results back in **completion** order, which is why the sort could not
+simply come along with it.
+
+**The one contract the generic body keeps on results: `.test_subject`.** The serial branch's
+completion line prints it. Dropping it would have been "more generic" but would have changed
+exp_b's stdout, and every fold result in this project (ExpA/B, and ExpC/D as specified) has the
+attribute — so the extraction stayed verbatim and the docstring states the assumption instead.
+Verbatim also means the constants moved unchanged: `_POLL_INTERVAL_S = 1` (poll fast, so the
+wrapper adds no measurable latency to a test-speed workload) and `_PROGRESS_INTERVAL_S = 60`
+(heartbeat spacing — the M8-committed values from 2026-07-29 fix 2, commit e88fd33; a job whose
+folds all finish together would otherwise log nothing until the very end).
+
+**exp_a deliberately NOT migrated.** `exp_a.run_exp_a` still has its own inline `pool.starmap`
+with no heartbeat. Migrating it is not in step 5's scope, and it would change an Exp A code path
+that the step-1 pins and D2 exist to hold byte-fixed — for a log-line improvement, not a
+correctness one. Left as is, flagged here so it is a recorded decision rather than an oversight.
+
+**Verification — what each new test rules out, checked by running the wrong implementation.**
+The headline evidence is the *unchanged* `test_parallel_folds_are_bit_identical_to_serial`
+(serial vs 2-worker run: same fold order, same selected feature key/family/params, same
+`test_predictions` bytes, same `final_fits` parameter bytes) — still green through the move. The
+five new tests cover what that test cannot see, and three wrong implementations were coded up and
+each is rejected by the test written for it: (W1) sorting inside the shared helper → fails
+`test_run_folds_parallel_leaves_canonical_ordering_to_the_caller` (three tasks handed over as
+subjects 5, 3, 1 must come back 5, 3, 1); (W2) the progress prefix left hardcoded as `exp_b`
+while `label` is accepted and ignored → fails
+`test_run_folds_parallel_progress_lines_carry_the_callers_label`; (W3) exp_b binding the helper
+by reference (`from .fold_parallel import run_folds_parallel`) instead of by module — a
+plausible-looking delegation that no module-attribute monkeypatch can intercept → fails
+`test_exp_b_routes_both_call_sites_through_fold_parallel`, which also pins that **both** call
+sites migrated (pooled `run_exp_b` *and* `run_exp_b_one_session`), that the worker is
+`_run_single_fold_b`, that `n_workers` is passed through rather than defaulted, and that the six
+selectable folds arrive one per task. The remaining two: the heartbeat-constant pin, and
+`test_run_folds_parallel_propagates_a_worker_exception` (serial *and* pool branch — in the pool
+the property holds only because the loop calls `.get()`).
+
+**Suite.** +6 tests in `tests/test_exp_b.py` (34 → 40). Full suite: **867 passed, 16 skipped, 1
+pre-existing failure** (`test_provenance.py::test_git_degrades_to_none_without_env`, the stale
+local `REVISION` file diagnosed at step 1 — unrelated). `test_m9_pin.py`, `test_m8_pin.py` and
+`test_no_leakage.py` re-run explicitly and green with zero edits to any of the three files
+(`git diff --exit-code` clean).
+
+**Next:** step 6 — `eval/exp_c.py`, the run half (spine, `OrdinalFeatures`, picklable worker,
+staged two-arm search over `fold_parallel`) then the report half.
+
+---
+
 ## 2026-07-30 — M9 step 4: `harness._viability_reason` generalized + the `_score` fail-fast. Succeeded.
 
 Per plan step 4 (`MILESTONE_9_PLAN.md` §2.4, T-M9-harness) — the milestone's **one structural edit
