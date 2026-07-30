@@ -286,9 +286,9 @@ def _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_wo
     (`run_exp_b_one_session`) -- one execution strategy, not two.
 
     The pool and its heartbeat live in `fold_parallel.run_folds_parallel` since M9 step 5 (Exp C
-    and Exp D run the same machinery); what stays here is what is genuinely Exp B's: which folds
-    exist, what a task carries, and the canonical test-subject ordering of the reassembled
-    results."""
+    runs the same machinery; Exp D uses one outer fold per SLURM array task); what stays here is
+    what is genuinely Exp B's: which folds exist, what a task carries, and the canonical
+    test-subject ordering of the reassembled results."""
     folds = [f for f in harness.nested_loso_splits(subjects) if f.selectable]
     tasks = [(config, band, sessions, store_dir, fold, seeds) for fold in folds]
     results = fold_parallel.run_folds_parallel(_run_single_fold_b, tasks, n_workers, "exp_b")

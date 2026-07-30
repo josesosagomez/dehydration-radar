@@ -4,6 +4,19 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 5 specification clarification: Exp D uses SLURM fold arrays. Succeeded.
+
+Read-only verification of step 5 found stale acceptance text in `MILESTONE_9_PLAN.md`: it required
+an Exp D serial-vs-in-process-pool identity test even though §2.8 defines one outer fold as one
+SLURM array task. The implemented architecture follows §2.8: Exp B and Exp C use the shared
+`eval/fold_parallel.py` spawn pool, while Exp D's concurrency contract is verified through
+fold-shard/merge validation (`T-M9-expd-shard`).
+
+The step-5 build-sequence row, §2.5 acceptance criteria, and §3 test matrix now state that division
+explicitly. Matching module docstrings in `fold_parallel.py` and `exp_b.py` were corrected. This is
+a specification/documentation-only clarification: no executable statement, parameter, fold,
+model, or result path changed.
+
 ## 2026-07-31 — M9 step 3 follow-up: Frank-Hall non-convergence now fails loudly. Succeeded.
 
 Read-only verification of step 3 found one mismatch with `MILESTONE_9_PLAN.md` §2.2: the plan

@@ -1,11 +1,12 @@
 """Fold-parallel execution with a progress heartbeat -- the single implementation.
 
 Extracted verbatim from `exp_b._run_folds_parallel` (M8) at milestone 9 step 5, because Exp C
-and Exp D need the same thing and a per-experiment copy of a process pool is exactly the kind
-of duplication that drifts silently (one copy gains a fix, another does not). The outer folds
-are independent by construction, so running them in worker processes is a pure speedup: the
-results are bit-identical to the serial run, which is asserted by each experiment's own
-serial-vs-parallel test rather than assumed here.
+needs the same thing and a per-experiment copy of a process pool is exactly the kind of
+duplication that drifts silently (one copy gains a fix, another does not). The outer folds are
+independent by construction, so running them in worker processes is a pure speedup: the
+results are bit-identical to the serial run, which is asserted by Exp B's and Exp C's own
+serial-vs-parallel tests rather than assumed here. Exp D deliberately uses one outer fold per
+SLURM array task instead of this in-process pool.
 
 Deliberately generic and deliberately thin: this module knows about tasks and workers, NOT
 about folds, providers, scores or configs. The caller builds the tasks (fold construction stays

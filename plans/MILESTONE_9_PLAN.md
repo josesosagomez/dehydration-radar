@@ -242,7 +242,7 @@ bit-deterministic and is covered instead by per-seed reporting and CPU-fixture c
 | 2 | `metrics.py` — the four ordinal pure functions | No dependencies; they define Exp C's objective and reports; hand-computed fixtures first |
 | 3 | `models/ordinal.py` + `regressors.py` dispatch + `selection.py` additions | The estimators and tie-break exp_c consumes; pure/CPU; existing-family byte-neutrality asserted against step-1 pins |
 | 4 | `harness.py` — the `_viability_reason` generalization | **The one risky edit.** Own commit between two green states; step-1 pin + full `test_harness.py` + `test_no_leakage.py` re-run immediately |
-| 5 | `eval/fold_parallel.py` extraction; exp_b delegates | Zero-behaviour-change move proven by the existing serial-vs-parallel bit-identity tests; exp_c/exp_d need it next |
+| 5 | `eval/fold_parallel.py` extraction; exp_b delegates | Zero-behaviour-change move proven by the existing serial-vs-parallel bit-identity tests; exp_c needs it next. Exp D deliberately does not use an in-process fold pool: one outer fold is one SLURM array task (§2.8) |
 | 6 | `eval/exp_c.py` run half (spine, provider, worker, staged two-arm search) then report half (summaries, CSVs, confusion matrix, mechanism assertions) | Needs steps 2-5. Imports `stage1_candidates`-style enumeration from `exp_a.py` machinery — never copies the frozen space (A-M9-1 = one enumeration) |
 | 7 | `models/cnn.py` + `eval/exp_d.py`'s torch nested path (grid × early stopping × epoch budget × refit), CPU-tested end to end on synthetic stores | The dominant new machinery; contract-tested before any real data or GPU |
 | 8 | `eval/exp_d.py` remaining: physics + session-index LOSO runs, per-family reports, fold-shard/merge, comparison statistics | Needs step 7 + the frozen comparison rules; comparisons also need the Exp A re-run artifacts (step 12) but are testable on fixtures now |
@@ -461,8 +461,11 @@ parameterized `run_folds_parallel(worker, tasks, n_workers, label)`; `exp_b` del
 spawn-context, single-threaded workers, canonical result ordering by the caller — unchanged.
 
 **Acceptance criteria.** (T-M9-parallel) exp_b's existing serial-vs-parallel bit-identity test
-green unchanged; exp_c's and exp_d's equivalents added; the heartbeat interval constants are
-the M8-committed values (provenance: HISTORY.md 2026-07-29 fix 2, commit e88fd33).
+green unchanged; exp_c's equivalent added; the heartbeat interval constants are the M8-committed
+values (provenance: HISTORY.md 2026-07-29 fix 2, commit e88fd33). Exp D is explicitly outside this
+in-process-pool contract: §2.8 defines one outer fold as one SLURM array task, so its concurrency
+contract is tested through fold-shard/merge validation (T-M9-expd-shard), not through a
+serial-vs-pool identity test.
 
 ### 2.6 `src/dehyd/eval/exp_c.py` (new)
 
@@ -1102,7 +1105,7 @@ normalizes job ids on a `"12345;ibex"` fixture; a failing init aborts before arr
 | T-M9-ordinal | test_ordinal.py | Cutpoints/weights are train-only fitted quantities (mutation fixtures); cutpoints from in-sample predictions not targets; strict-increase nudge on all-tied cutpoints; knn unweighted; O-M9-7 weights hand-computed; Frank-Hall cumulative/difference recovery hand-checked; negative-difference floor+argmax; `OrdinalViabilityError` on missing class; determinism |
 | T-M9-selection | test_selection.py | Each rung of `select_candidate_ordinal`'s order decides exactly when higher rungs tie; higher-QWK-wins; NaN-QWK loses at equal MAE; `n_evaluable_inner_folds = 0` is incomparable even with finite MAE/variance; `select_candidate` byte-unchanged and its existing tests pass unedited, while the `SIMPLICITY_RANK` exact-dict assertion (`tests/test_selection.py:79`) is updated to include the six ordinal keys and keeps the frozen base ordering |
 | T-M9-harness | test_harness.py, test_m8_pin.py | Step-1 pins bytewise intact after the `_viability_reason` edit on every 1-D-y path; knn reason string unchanged; 2-D-y missing-class cell → named reason, no fit, NaN score; **coverage predicate is a pure function of inner-training rows — permuting/deleting classes in inner-val and outer-test rows leaves every cell's reason bytewise identical; a class absent from the whole bundle still blocks the fit (`ordinal_missing_class_3_in_inner_train`), i.e. the constant `{0..4}` predicate, never `set(y[:,1])`** (C1); 2-D-y with `score_fn=None` raises; `git diff --exit-code tests/test_no_leakage.py` |
-| T-M9-parallel | test_exp_b.py, test_exp_c.py, test_exp_d.py | exp_b serial-vs-parallel bit-identity green through the `fold_parallel` extraction; exp_c/exp_d equivalents |
+| T-M9-parallel | test_exp_b.py, test_exp_c.py | exp_b serial-vs-parallel bit-identity green through the `fold_parallel` extraction; exp_c equivalent; Exp D excluded because its parallel unit is one outer fold per SLURM array task and is covered by T-M9-expd-shard |
 | T-M9-expc-provider | test_exp_c.py | `OrdinalFeatures` X bytewise == `StoreBackedFeatures` per branch; y columns [L, class] correct; tuned-ε identical to Exp A's on the same (fk, train set); session_idx aligned; **`assert_exp_c_fit_authorized` negative matrix (unauthorized family id, off-grid `ord_a_svr` `(C, ε)`, `base_family` disagreeing with the candidate id, mismatched cutpoint quantiles, off-grid Frank-Hall `C`) each raises `ExpCProtocolError` naming the field with no `.fit()` reached; arm (b)'s `active` record carries no `model_family` and arm (a)'s carries the base family** (C3, trap 2) |
 | T-M9-expc-leak | test_exp_c.py | T16-pattern fit-record property over the real composition: inner-val label/class mutation leaves every inner-train fit (cutpoints, weights, scaler, base state, tuned-ε) bytewise identical; inner-train mutation moves them (power companion) |
 | T-M9-expc-mutation | test_exp_c.py | End-to-end synthetic-store outer-mutation over the REAL two-arm Exp C composition (the M8 T-M8-outer-mutation pattern): only the held-out subject's predictions/scores may change |
