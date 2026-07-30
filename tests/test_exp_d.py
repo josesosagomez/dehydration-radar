@@ -1,21 +1,26 @@
-"""T-M9-cnnpath: Exp D's CNN nested torch path on a deterministic CPU fixture.
+"""T-M9-cnnpath / T-M9-physics / T-M9-expd-shard / T-M9-expd-compare: Experiment D.
 
-Milestone 9 step 7 only — the frame spine and `run_cnn_family` (grid x early stopping x
-epoch budget x per-seed refit). The physics/session-index baselines, the per-family
-reports, the fold-array shard/merge and the comparison statistics are step 8 and are not
-touched here.
+Milestone 9 steps 7 and 8: the frame spine and `run_cnn_family` (grid x early stopping x
+epoch budget x per-seed refit) from step 7, then the physics and session-index baselines,
+the four per-family merged artifacts, the GPU fold-array shard/merge and the frozen
+comparison statistics from step 8.
 
 Everything is asserted against the SPECIFICATION's arithmetic (plan §2.8, `:644-655`,
-`:917-919`), never against a recorded run: the sampler weights, the median aggregation, the
-epoch-budget median and the per-fit seed derivation are all hand-computed, and the sampler
-trace is re-derived from `torch.multinomial` (which is what `WeightedRandomSampler` *is*)
-rather than from the implementation's own output.
+`:826-849`, `:917-919`, `:1263-1281`), never against a recorded run: the sampler weights,
+the median aggregation, the epoch-budget median and the per-fit seed derivation are all
+hand-computed; the sampler trace is re-derived from `torch.multinomial` (which is what
+`WeightedRandomSampler` *is*); and the physics band bins and band powers are derived from
+the frozen radar constants and from the closed-form DFT of a periodic Hann window rather
+than read back from the implementation.
 
-The fixture uses the 77 GHz signal shapes (256-sample slow time) because they are the
+The CNN fixtures use the 77 GHz signal shapes (256-sample slow time) because they are the
 smallest real ones; the 10 GHz shapes are pinned in `test_cnn.py`, which needs no training.
 """
 
+import csv
 import dataclasses
+import hashlib
+import json
 import math
 
 import numpy as np
@@ -24,18 +29,53 @@ import torch
 
 from dehyd.config import load_config
 from dehyd.data.sessions import SESSION_NAMES
-from dehyd.eval import harness
+from dehyd.eval import exp_b, exp_c, exp_d, harness
+from dehyd.eval import metrics as M
 from dehyd.eval.exp_d import (
+    COMPOSITE_MEMBERS,
+    EXPD_FAMILIES,
     FIT_SEED_BASE,
+    PHYSICS_EPS_SCALE,
+    PHYSICS_SIGNAL_KEY,
+    RNG_OFFSET_EXPD_BASE,
+    BaselineFoldResult,
     CnnFoldResult,
+    CnnSeedOutcome,
     ExpDError,
     ExpDProtocolError,
+    FramesD,
+    RadarReference,
+    band_masks_from_frequencies,
+    band_power_ratio_scalar,
     baseline_config_grid,
     build_frames_d,
+    build_physics_spine,
+    build_session_index_spine,
+    cheap_prediction_rows,
+    cheap_selection_row,
+    cnn_prediction_rows,
+    cnn_selection_row,
+    expected_test_rows_by_fold,
     fit_seed,
+    half_spectrum_power,
+    load_exp_a_radar,
+    load_family_artifacts,
     median_frame_to_session,
+    merge_exp_d_folds,
+    physics_band_masks,
+    physics_frame_scalar,
+    realized_fold_census,
+    run_cheap_baseline,
     run_cnn_family,
+    run_physics,
+    run_session_index,
+    selectable_folds,
     session_sampler_weights,
+    summarize_exp_d,
+    write_exp_d_comparison_reports,
+    write_family_artifacts,
+    write_fold_shard,
+    write_noop_marker,
 )
 from dehyd.eval.selection import CandidateScore, select_candidate
 from dehyd.features.store import write_session_store
@@ -659,3 +699,1083 @@ def test_the_held_out_subject_never_appears_in_any_recorded_fit(cnn_result):
             assert result.test_subject not in record.subjects
     for record in result.final_fits:
         assert result.test_subject not in record.subjects
+
+
+# =====================================================================================
+# Milestone 9 step 8 — physics + session-index baselines, per-family artifacts,
+# fold-array shard/merge, and the frozen comparison statistics.
+# =====================================================================================
+
+
+N_BEAT = 534          # the frozen 10 GHz raw chirp-mean beat length
+N_SLOW = 256          # the frozen 77 GHz raw reduced slow-time length
+
+
+@pytest.fixture(scope="module")
+def fast_ci_config(config):
+    """The same frozen config with a SMALL bootstrap B. Only the replicate count moves —
+    every estimand, seed-collapse rule and CI method stays frozen; B=10000 x 3 metrics x 6
+    families inside one test would cost minutes and prove nothing extra."""
+    return dataclasses.replace(config, stats=dataclasses.replace(config.stats, bootstrap_b=200))
+
+
+# ------------------------------------------------------- the physics band definitions
+
+
+def test_physics_bands_are_the_hand_derived_bins_of_the_frozen_10ghz_constants(config):
+    """Hand-derived from `:826-849` + the frozen radar constants, not read back from code.
+
+        hz_per_m = 2*(B/T)/c = 2*(500e6 / 1024e-6) / 299792458 = 3257.4619 Hz/m
+        target     [0.9, 1.5) m -> [2931.72, 4886.19) Hz
+        background [1.5, 3.0] m -> [4886.19, 9772.39] Hz
+        df = fs/n = 520834/534 = 975.3446 Hz, half-spectrum bin centres k*df:
+            bin  3 = 2926.03  -> below target
+            bins 4, 5 = 3901.38, 4876.72  -> TARGET
+            bins 6..10 = 5852.07 .. 9753.45 -> BACKGROUND
+            bin 11 = 10728.79 -> above background
+    """
+    target, background = physics_band_masks(config, "10ghz", N_BEAT)
+
+    assert target.shape == background.shape == (N_BEAT // 2,)     # bins 0 .. n//2-1
+    assert np.flatnonzero(target).tolist() == [4, 5]
+    assert np.flatnonzero(background).tolist() == [6, 7, 8, 9, 10]
+    assert not np.any(target & background)
+
+
+def test_the_1_5_m_boundary_bin_belongs_to_the_background_band_only():
+    """Half-open at 1.5 m (`:829-843`): a bin landing exactly on the shared edge is
+    background, never target, and never both. Exercised on explicit frequencies because no
+    bin of the real 534-point grid lands exactly on the 4886.19 Hz edge — a closed target
+    band (`<=`) would double-count it, which this fixture would catch."""
+    lo, edge, hi = 2931.72, 4886.19, 9772.39
+    freqs = np.array([2000.0, lo, 4000.0, edge, 6000.0, hi, 10000.0])
+    target, background = band_masks_from_frequencies(freqs, (lo, edge), (edge, hi))
+
+    assert target.tolist() == [False, True, True, False, False, False, False]
+    assert background.tolist() == [False, False, False, True, True, True, False]
+    assert not np.any(target & background)
+
+
+def test_77ghz_physics_partition_is_the_dc_bin_against_every_resolvable_doppler_bin(config):
+    """A-M6-2 (iii): bin 0 alone vs bins 1..127 — a partition of the non-negative
+    half-spectrum of the 256-point Doppler FFT, both bands nonempty and disjoint."""
+    static, motion = physics_band_masks(config, "77ghz", N_SLOW)
+
+    assert static.shape == motion.shape == (128,)
+    assert np.flatnonzero(static).tolist() == [0]
+    assert np.flatnonzero(motion).tolist() == list(range(1, 128))
+    assert not np.any(static & motion)
+    assert np.all(static | motion)                     # an exact partition, nothing dropped
+
+
+def test_physics_band_masks_refuse_a_length_the_frozen_77ghz_partition_cannot_cover(config):
+    """The frozen (1, 127) motion range assumes the 256-point FFT; on any other length the
+    partition would silently stop covering the half-spectrum."""
+    with pytest.raises(ExpDProtocolError, match="partition"):
+        physics_band_masks(config, "77ghz", 512)
+
+
+# ---------------------------------------------------------- the physics scalar (hand)
+
+
+def test_physics_scalar_on_a_hand_computed_two_tone_10ghz_signal(config):
+    """The periodic Hann window's DFT has exactly three nonzero bins,
+    W[0] = N/2 and W[+-1] = -N/4, so a complex tone `A*exp(2*pi*i*k0*n/N)` windowed and
+    transformed puts `0.5*A*N` at bin k0, `-0.25*A*N` at k0 +- 1, and nothing anywhere else.
+
+    Tones at bin 5 (amplitude 2, inside the target band {4, 5}) and bin 8 (amplitude 1,
+    inside the background band {6..10}) therefore give, with N = 534:
+
+        P_target     = |-0.25*2*534|^2 + |0.5*2*534|^2          = 267^2 + 534^2
+        P_background = |-0.25*2*534|^2 + |-0.25*534|^2
+                       + |0.5*534|^2 + |-0.25*534|^2 + 0        = 267^2 + 133.5^2
+                                                                  + 267^2 + 133.5^2
+
+    an exact power ratio of 2, and the frozen scalar is
+    `log10((P_t + eps)/(P_b + eps))` with `eps = 1e-12*(P_t + P_b)`.
+    """
+    n = np.arange(N_BEAT)
+    signal = 2.0 * np.exp(2j * np.pi * 5 * n / N_BEAT) + np.exp(2j * np.pi * 8 * n / N_BEAT)
+
+    p_target = 267.0**2 + 534.0**2
+    p_background = 267.0**2 + 133.5**2 + 267.0**2 + 133.5**2
+    assert p_target / p_background == 2.0
+    eps = PHYSICS_EPS_SCALE * (p_target + p_background)
+    expected = math.log10((p_target + eps) / (p_background + eps))
+
+    assert physics_frame_scalar(config, "10ghz", signal) == pytest.approx(expected, rel=1e-9)
+
+
+def test_physics_scalar_on_a_hand_computed_77ghz_constant_signal(config):
+    """A constant slow-time series is pure DC, so the windowed spectrum is the Hann
+    window's own DFT: 0.5*N at bin 0 and -0.25*N at bin 1 (bin 255 is outside the
+    half-spectrum). With N = 256 that is P_dc = 128^2 against P_motion = 64^2 — a ratio of
+    exactly 4, i.e. log10(4) up to the frozen eps coupling."""
+    signal = np.ones(N_SLOW)
+    p_dc, p_motion = 128.0**2, 64.0**2
+    eps = PHYSICS_EPS_SCALE * (p_dc + p_motion)
+    expected = math.log10((p_dc + eps) / (p_motion + eps))
+
+    assert expected == pytest.approx(math.log10(4.0), abs=1e-11)   # eps moves it by ~1.6e-12
+    assert physics_frame_scalar(config, "77ghz", signal) == pytest.approx(expected, rel=1e-9)
+
+
+def test_physics_scalar_is_finite_when_the_target_band_holds_no_energy():
+    """`:930-940`: eps is added to BOTH terms precisely so `P_target = 0` gives a finite
+    floor instead of -inf. With P_t = 0 the value is log10(eps/(P_b + eps)) -> -12."""
+    power = np.array([0.0, 0.0, 4.0, 6.0])
+    target = np.array([True, True, False, False])
+    background = np.array([False, False, True, True])
+
+    value = band_power_ratio_scalar(power, target, background)
+    assert math.isfinite(value)
+    assert value == pytest.approx(math.log10(1e-12 / (1.0 + 1e-12)), rel=1e-9)
+
+
+def test_physics_scalar_refuses_a_frame_with_no_energy_in_either_band():
+    """Then eps is 0 too and the ratio is a genuine 0/0 — the one case the frozen eps
+    cannot rescue, so it must stop rather than emit NaN into a fitted linear model."""
+    power = np.zeros(4)
+    with pytest.raises(ExpDError, match="no energy"):
+        band_power_ratio_scalar(power, np.array([True, True, False, False]),
+                                np.array([False, False, True, True]))
+
+
+def test_physics_scalar_is_scale_invariant_only_through_the_frozen_eps_coupling(config):
+    """Trap 13's positive half: eps is proportional to (P_t + P_b), so multiplying the
+    signal by a constant leaves the scalar unchanged — which is exactly why the baseline
+    may not be fed a robust-standardized signal (that changes the SHAPE, not the scale)."""
+    n = np.arange(N_BEAT)
+    signal = 2.0 * np.exp(2j * np.pi * 5 * n / N_BEAT) + np.exp(2j * np.pi * 8 * n / N_BEAT)
+    assert physics_frame_scalar(config, "10ghz", 1e4 * signal) == pytest.approx(
+        physics_frame_scalar(config, "10ghz", signal), rel=1e-12
+    )
+
+
+def test_half_spectrum_power_keeps_dc_and_drops_nyquist():
+    """The repo's own half-spectrum convention (`qc/screens.py:147-154`): bins
+    0 .. n//2 - 1, DC included, Nyquist excluded — which is what makes the 77 GHz
+    `bins 0..127` of A-M6-2 the literal non-negative half-spectrum."""
+    assert half_spectrum_power(np.ones(N_SLOW)).shape == (128,)
+    assert half_spectrum_power(np.ones(N_BEAT)).shape == (267,)
+
+
+# ------------------------------------------------- the physics spine and its LOSO run
+
+
+def _write_store_10(store_dir, sessions, *, dc_offset=0.0):
+    """A synthetic schema-v2 10 GHz store carrying only `sig__raw_beat`. The target-band
+    tone's amplitude tracks the session, so the range-power scalar genuinely varies with
+    the label and the per-fold linear fit has something to fit."""
+    k = np.arange(N_BEAT)
+    for s in sessions:
+        n = len(s["frame_ids"])
+        amplitude = 1.0 + 0.6 * s["session_idx"] + 0.1 * s["subject"]
+        beat = amplitude * np.exp(2j * np.pi * 5 * k / N_BEAT) + np.exp(2j * np.pi * 8 * k / N_BEAT)
+        signals = np.stack([beat * (1.0 + 0.02 * i) + dc_offset for i in range(n)])
+        write_session_store("10ghz", s["subject"], s["session_name"],
+                            {"sig__raw_beat": signals}, {"n_frames": n}, store_dir)
+
+
+@pytest.fixture(scope="module")
+def store_10(tmp_path_factory):
+    path = tmp_path_factory.mktemp("expd_store_10")
+    sessions = _sessions()
+    _write_store_10(path, sessions)
+    return path, sessions
+
+
+def test_physics_reads_the_named_unstandardized_raw_store_key():
+    """Trap 13: robust standardization destroys absolute power, so the physics path reads
+    the raw keys — the same ones the raw CNN families consume, stated here independently of
+    `cnn.FRAME_INPUT` so the two sources check each other."""
+    assert PHYSICS_SIGNAL_KEY == {"10ghz": "sig__raw_beat", "77ghz": "sig__raw_slowtime"}
+    for band in ("10ghz", "77ghz"):
+        assert PHYSICS_SIGNAL_KEY[band] == cnn.FRAME_INPUT[(band, "cnn1d_raw")][0]
+
+
+def test_physics_scalar_differs_from_the_robust_standardized_signals_scalar(config):
+    """Trap 13, made concrete on the 77 GHz band where DC *is* the target band: robust
+    standardization removes the median, so a standardized signal would give a completely
+    different (and meaningless) DC-vs-motion ratio. The physics path must not do it."""
+    from dehyd.preprocess.standardize import robust_standardize
+
+    rng = np.random.default_rng(3)
+    signal = 5.0 + rng.normal(size=N_SLOW)          # a strong DC pedestal
+    raw = physics_frame_scalar(config, "77ghz", signal)
+    standardized = physics_frame_scalar(config, "77ghz", robust_standardize(signal))
+    assert abs(raw - standardized) > 1.0
+
+
+def test_build_physics_spine_is_one_row_per_session_with_the_median_over_its_frames(
+    store_10, config
+):
+    """O-M9-4: the per-frame scalar becomes a session value by the frozen
+    `frame_to_session_aggregation: median` — the analysis unit is the session."""
+    store_dir, sessions = store_10
+    spine = build_physics_spine(config, "10ghz", sessions, store_dir)
+
+    assert spine.family == "physics"
+    assert len(spine.subjects) == len(sessions)
+    assert spine.n_frames.tolist() == [N_FRAMES_PER_SESSION] * len(sessions)
+    assert spine.delta_m_pct.tolist() == [s["delta_m_pct"] for s in sessions]
+
+    # hand-recompute one session's value straight from the stored array
+    row = 7
+    target = sessions[row]
+    store = np.load(store_dir / "features" / "10ghz" /
+                    f"s{target['subject']}_{target['session_name']}.npz")
+    per_frame = [physics_frame_scalar(config, "10ghz", f) for f in store["sig__raw_beat"]]
+    assert spine.physics_scalar[row] == pytest.approx(float(np.median(per_frame)))
+
+
+def test_the_physics_scalar_is_finite_on_every_frame_of_the_spine(store_10, config):
+    """The frozen finite-output assertion (`:936-938`), over every QC-passed frame."""
+    store_dir, sessions = store_10
+    spine = build_physics_spine(config, "10ghz", sessions, store_dir)
+    assert np.all(np.isfinite(spine.physics_scalar))
+
+
+def _mutate_spine_held_out(spine, subject, *, seed=11):
+    """Value mutation of the held-out subject's rows only — session membership untouched."""
+    rng = np.random.default_rng(seed)
+    mutated = dataclasses.replace(
+        spine,
+        physics_scalar=spine.physics_scalar.copy(),
+        delta_m_pct=spine.delta_m_pct.copy(),
+    )
+    rows = mutated.subjects == subject
+    mutated.physics_scalar[rows] = rng.normal(size=int(rows.sum())) * 20 + 50
+    mutated.delta_m_pct[rows] = rng.normal(size=int(rows.sum())) * 20 + 50
+    return mutated
+
+
+def test_the_physics_linear_fit_is_train_only_at_both_cv_levels(store_10, config):
+    """`:942-944` + O-M9-4: a per-fold least-squares line on the outer-TRAINING sessions.
+    Mutating the held-out subject's scalars and labels must leave every fitted coefficient
+    bytewise identical and move only that subject's predictions."""
+    store_dir, sessions = store_10
+    spine = build_physics_spine(config, "10ghz", sessions, store_dir)
+    base = run_cheap_baseline(spine)
+    mutated = run_cheap_baseline(_mutate_spine_held_out(spine, 1))
+
+    fold_a = next(r for r in base if r.test_subject == 1)
+    fold_b = next(r for r in mutated if r.test_subject == 1)
+    for rec_a, rec_b in zip(fold_a.fits, fold_b.fits, strict=True):
+        assert rec_a.quantity == rec_b.quantity == "physics_linear_fit"
+        assert rec_a.role == rec_b.role
+        assert 1 not in rec_a.subjects
+        for key in rec_a.params:
+            assert rec_a.params[key].tobytes() == rec_b.params[key].tobytes()
+    assert fold_a.inner_scores == fold_b.inner_scores
+    # the power companion: the held-out subject's own predictions DID move
+    assert fold_a.test_predictions.tobytes() != fold_b.test_predictions.tobytes()
+
+    # and other folds' fits, which train ON subject 1, are genuinely different
+    other_a = next(r for r in base if r.test_subject == 2)
+    other_b = next(r for r in mutated if r.test_subject == 2)
+    assert (other_a.fits[-1].params["slope"].tobytes()
+            != other_b.fits[-1].params["slope"].tobytes())
+
+
+def test_run_physics_and_run_session_index_share_the_folds_and_the_inner_scoring(
+    store_10, config
+):
+    """`:917-919`: every baseline runs under the identical outer folds, and each is scored
+    on the inner folds too so the composite procedure has a real inner-CV score."""
+    store_dir, sessions = store_10
+    physics = run_physics(config, "10ghz", sessions, store_dir)
+    session_index = run_session_index(config, "10ghz", sessions)
+
+    folds = selectable_folds(sorted({s["subject"] for s in sessions}))
+    assert [r.fold_id for r in physics] == list(range(len(folds)))
+    assert [r.test_subject for r in physics] == [f.test_subject for f in folds]
+    assert [r.test_subject for r in session_index] == [f.test_subject for f in folds]
+    for a, b in zip(physics, session_index, strict=True):
+        assert a.test_session_idx.tolist() == b.test_session_idx.tolist()
+        assert a.n_inner_folds == b.n_inner_folds == len(folds[a.fold_id].inner_folds)
+        assert len(a.inner_scores) == len(b.inner_scores) == a.n_inner_folds
+        assert math.isfinite(a.inner_score) and math.isfinite(b.inner_score)
+
+
+def test_session_index_baseline_reuses_the_shared_model_verbatim(store_10, config):
+    """`:850-854`, `:915-916`: band-agnostic and shared — the fitted quantity is
+    `models/baselines.fit_session_index_baseline`'s own record, not a re-implementation."""
+    from dehyd.models import baselines as baselines_mod
+
+    _store_dir, sessions = store_10
+    results = run_session_index(config, "10ghz", sessions)
+    fold = results[0]
+    outer = fold.fits[-1]
+    assert outer.quantity == "session_index_means"
+    assert fold.test_subject not in outer.subjects
+
+    expected = baselines_mod.fit_session_index_baseline(
+        np.array([s["subject"] for s in sessions]),
+        np.array([s["session_idx"] for s in sessions]),
+        np.array([s["delta_m_pct"] for s in sessions]),
+        sorted(set(s["subject"] for s in sessions) - {fold.test_subject}),
+    )
+    predicted = baselines_mod.predict_session_index(expected.model, fold.test_session_idx)
+    assert fold.test_predictions.tolist() == predicted.tolist()
+
+
+def test_assert_mechanism_ok_d_catches_a_fit_that_saw_the_held_out_subject(store_10, config):
+    store_dir, sessions = store_10
+    results = run_physics(config, "10ghz", sessions, store_dir)
+    subjects = sorted({s["subject"] for s in sessions})
+    exp_d.assert_mechanism_ok_d(results, subjects)          # the real run passes
+
+    leaked = dataclasses.replace(
+        results[0],
+        fits=[dataclasses.replace(results[0].fits[-1],
+                                  subjects=frozenset(subjects))],
+    )
+    with pytest.raises(AssertionError):
+        exp_d.assert_mechanism_ok_d([leaked] + list(results[1:]), subjects)
+
+
+# ----------------------------------------------------- the four per-family artifacts
+
+
+def _artifact_lineage(run_group_id="rg_test"):
+    return {"analysis_commit": "c0ffee1234", "config_hash": "cfg0001",
+            "run_group_id": run_group_id}
+
+
+def _write_cheap_family(config, band, family, results, out_dir, *, deterministic=True):
+    return write_family_artifacts(
+        band, family, out_dir,
+        prediction_rows=[row for r in results for row in cheap_prediction_rows(r)],
+        selection_rows=[cheap_selection_row(r) for r in results],
+        deterministic=deterministic,
+        bootstrap_b=config.stats.bootstrap_b,
+        rng_seed=config.run.seed,
+        skip_threshold_pct=config.stats.undefined_metric_skip_threshold_pct,
+        lineage=_artifact_lineage(),
+    )
+
+
+def test_write_family_artifacts_emits_the_four_named_files(store_10, fast_ci_config, tmp_path):
+    store_dir, sessions = store_10
+    results = run_physics(fast_ci_config, "10ghz", sessions, store_dir)
+    paths = _write_cheap_family(fast_ci_config, "10ghz", "physics", results, tmp_path)
+
+    assert set(paths) == {"predictions", "metrics", "selection", "per_subject"}
+    assert paths["predictions"].name == "predictions_physics_10ghz.csv"
+    assert paths["metrics"].name == "metrics_physics_10ghz.json"
+    assert paths["selection"].name == "selection_physics_10ghz.csv"
+    assert paths["per_subject"].name == "per_subject_physics_10ghz.csv"
+
+    header = next(csv.reader(paths["predictions"].open(encoding="utf-8")))
+    assert header == ["fold_id", "subject", "session_idx", "seed", "y_true_delta_m_pct",
+                      "y_pred", "n_frames_aggregated"]
+
+    metrics = json.loads(paths["metrics"].read_text(encoding="utf-8"))
+    assert metrics["conditional_exploratory"] is True
+    assert metrics["deterministic"] is True
+    assert metrics["n_seeds"] == 1
+    assert set(metrics) >= {"per_subject_session_mae", "subject_balanced_mae", "session_rmse",
+                            "pooled_pearson_r", "n_eval", "fold_ids", "lineage"}
+    assert metrics["lineage"] == _artifact_lineage()
+
+
+def test_a_deterministic_family_writes_one_seed_row_per_session_never_five(
+    store_10, fast_ci_config, tmp_path
+):
+    """`:644-649` forbids ensembling and the schema forbids pretending a deterministic
+    family has five observations: seed 1 once, `deterministic: true` in the metrics JSON."""
+    store_dir, sessions = store_10
+    results = run_session_index(fast_ci_config, "10ghz", sessions)
+    paths = _write_cheap_family(fast_ci_config, "10ghz", "session_index", results, tmp_path)
+
+    rows = list(csv.DictReader(paths["predictions"].open(encoding="utf-8")))
+    assert {r["seed"] for r in rows} == {"1"}
+    # every subject is the test subject of exactly one fold, so every session appears once
+    assert len(rows) == len(sessions)
+    assert json.loads(paths["metrics"].read_text(encoding="utf-8"))["deterministic"] is True
+
+
+def test_load_family_artifacts_recomputes_the_per_subject_vector_from_the_predictions(
+    store_10, fast_ci_config, tmp_path
+):
+    store_dir, sessions = store_10
+    results = run_physics(fast_ci_config, "10ghz", sessions, store_dir)
+    _write_cheap_family(fast_ci_config, "10ghz", "physics", results, tmp_path)
+    loaded = load_family_artifacts(tmp_path, "10ghz", "physics")
+
+    # independently: per subject, mean over seeds of the mean |error| over its sessions
+    expected = {}
+    for r in results:
+        expected[r.test_subject] = float(
+            np.mean(np.abs(r.test_truth - r.test_predictions))
+        )
+    assert loaded.per_subject_mae == pytest.approx(expected)
+    assert loaded.deterministic is True
+    assert loaded.inner_score_by_fold == pytest.approx({r.fold_id: r.inner_score for r in results})
+
+
+@pytest.mark.parametrize(
+    "victim", ["predictions_physics_10ghz.csv", "metrics_physics_10ghz.json",
+               "selection_physics_10ghz.csv", "per_subject_physics_10ghz.csv"]
+)
+def test_load_family_artifacts_refuses_an_incomplete_family_naming_the_file(
+    store_10, fast_ci_config, tmp_path, victim
+):
+    store_dir, sessions = store_10
+    results = run_physics(fast_ci_config, "10ghz", sessions, store_dir)
+    _write_cheap_family(fast_ci_config, "10ghz", "physics", results, tmp_path)
+    (tmp_path / victim).unlink()
+    with pytest.raises(ExpDError, match=victim):
+        load_family_artifacts(tmp_path, "10ghz", "physics")
+
+
+def test_load_family_artifacts_refuses_a_metrics_json_that_no_longer_recomputes(
+    store_10, fast_ci_config, tmp_path
+):
+    """The merge acceptance rule: the metrics JSON's per-subject vector must recompute
+    exactly from the predictions CSV, so a hand-edited or stale metrics file is rejected."""
+    store_dir, sessions = store_10
+    results = run_physics(fast_ci_config, "10ghz", sessions, store_dir)
+    paths = _write_cheap_family(fast_ci_config, "10ghz", "physics", results, tmp_path)
+
+    metrics = json.loads(paths["metrics"].read_text(encoding="utf-8"))
+    first = sorted(metrics["per_subject_session_mae"])[0]
+    metrics["per_subject_session_mae"][first] += 0.5
+    paths["metrics"].write_text(json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ExpDError, match="per-subject"):
+        load_family_artifacts(tmp_path, "10ghz", "physics")
+
+
+def test_load_family_artifacts_refuses_a_selection_budget_that_is_not_its_own_median(
+    tmp_path, fast_ci_config
+):
+    """The other merge acceptance rule, on the CNN schema: `epoch_budget` must equal the
+    median of the per-(inner fold x seed) counts the row itself lists."""
+    frames = _tiny_frames()
+    folds = selectable_folds(sorted(set(frames.subjects.tolist())))
+    results = [_fake_cnn_fold(frames, fold) for fold in folds]
+    write_family_artifacts(
+        "77ghz", "cnn1d_raw", tmp_path,
+        prediction_rows=[row for i, r in enumerate(results) for row in cnn_prediction_rows(r, i)],
+        selection_rows=[cnn_selection_row(r, i) for i, r in enumerate(results)],
+        deterministic=False, bootstrap_b=fast_ci_config.stats.bootstrap_b,
+        rng_seed=fast_ci_config.run.seed, skip_threshold_pct=5.0, lineage=_artifact_lineage(),
+    )
+
+    path = tmp_path / "selection_cnn1d_raw_77ghz.csv"
+    rows = list(csv.DictReader(path.open(encoding="utf-8")))
+    fieldnames = list(rows[0])
+    rows[0]["epoch_budget"] = str(int(rows[0]["epoch_budget"]) + 3)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ExpDError, match="epoch budget"):
+        load_family_artifacts(tmp_path, "77ghz", "cnn1d_raw")
+
+
+# ------------------------------------------------------ the CNN fold-array shard/merge
+
+
+def _tiny_frames(n_subjects=4, n_sessions=2, n_frames=3):
+    """A minimal `FramesD` — the census and the merge only ever read its membership."""
+    subjects, session_row, frame_ids, y = [], [], [], []
+    s_subjects, s_idx, s_delta = [], [], []
+    row = 0
+    for subject in range(1, n_subjects + 1):
+        for session_idx in range(n_sessions):
+            delta = -(0.5 * session_idx + 0.1 * subject)
+            for frame in range(n_frames):
+                subjects.append(subject)
+                session_row.append(row)
+                frame_ids.append(frame)
+                y.append(delta)
+            s_subjects.append(subject)
+            s_idx.append(session_idx)
+            s_delta.append(delta)
+            row += 1
+    return FramesD(
+        band="77ghz", family="cnn1d_raw",
+        subjects=np.array(subjects), session_row=np.array(session_row),
+        frame_ids=np.array(frame_ids), X=np.zeros((len(subjects), 1, 4)),
+        y=np.array(y), session_subjects=np.array(s_subjects),
+        session_idx=np.array(s_idx), session_delta_m_pct=np.array(s_delta),
+    )
+
+
+SHARD_SEEDS = (1, 2, 3, 4, 5)
+
+
+def _fake_cnn_fold(frames, fold, *, seeds=SHARD_SEEDS, bias=0.0):
+    """A `CnnFoldResult` with fabricated predictions. The nested path itself is pinned by
+    the step-7 tests; the shard/merge machinery only reads the result's shape."""
+    positions = np.flatnonzero(frames.session_subjects == fold.test_subject)
+    truth = frames.session_delta_m_pct[positions]
+    n_frames = np.array([int(np.count_nonzero(frames.session_row == p)) for p in positions])
+    outcomes = [
+        CnnSeedOutcome(seed=s, session_predictions=truth + bias + 0.01 * s,
+                       session_mae=abs(bias + 0.01 * s))
+        for s in seeds
+    ]
+    grid = [{"lr": 3e-4, "weight_decay": 0.0}, {"lr": 1e-3, "weight_decay": 0.0}]
+    return CnnFoldResult(
+        band=frames.band, family=frames.family, test_subject=fold.test_subject,
+        train_subjects=fold.train_subjects, n_inner_folds=len(fold.inner_folds),
+        config_grid=grid,
+        per_config_scores=[CandidateScore("cfg0", 0.5, 0, 4, 0.1),
+                           CandidateScore("cfg1", 0.4, 0, 4, 0.1)],
+        selected_config_index=1, selected_config=grid[1], epoch_budget=4,
+        selected_epoch_counts=[3, 4, 4, 5, 6, 4], inner_results=[], final_fits=[],
+        seed_outcomes=outcomes, test_session_subjects=frames.session_subjects[positions],
+        test_session_idx=frames.session_idx[positions], test_session_truth=truth,
+        test_n_frames_aggregated=n_frames,
+    )
+
+
+def _sha_lines(lines):
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def test_realized_fold_census_hashes_frame_and_session_identities_separately():
+    """Two hashes, not one (§2.8): the frame hash cannot validate a session-level CSV, so a
+    substituted session at unchanged `n_session_rows` would pass a count-only check. Both
+    are re-derived here from the canonical string forms named in the plan."""
+    frames = _tiny_frames()
+    fold = selectable_folds([1, 2, 3, 4])[0]
+    census = realized_fold_census(frames, fold, SHARD_SEEDS)
+
+    frame_ids = sorted(f"{s}|{si}|{fid}" for s, si, fid in [
+        (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 1, 0), (1, 1, 1), (1, 1, 2)])
+    session_ids = sorted({"1|0", "1|1"})
+    assert census == {
+        "test_subject": 1,
+        "n_frame_rows": 6,
+        "n_session_rows": 2,
+        "frame_rows_sha256": _sha_lines(frame_ids),
+        "session_rows_sha256": _sha_lines(session_ids),
+        "seed_set": [1, 2, 3, 4, 5],
+    }
+    assert census["frame_rows_sha256"] != census["session_rows_sha256"]
+
+
+def test_expected_test_rows_by_fold_covers_exactly_the_selectable_folds_by_position():
+    """Trap 14: fold ids are POSITIONS in the selectable-fold list, not subject ids."""
+    frames = _tiny_frames()
+    expected = expected_test_rows_by_fold(frames, SHARD_SEEDS)
+    assert sorted(expected) == ["0", "1", "2", "3"]
+    assert [expected[k]["test_subject"] for k in sorted(expected)] == [1, 2, 3, 4]
+
+
+def _init_group(tmp_path, frames, *, band="77ghz", family="cnn1d_raw",
+                commit="c0ffee1234", config_hash="cfg0001", seeds=SHARD_SEEDS):
+    """The run-group provenance a `--init-run-group` task writes (the entrypoint that calls
+    `record_run` is step 9; this is the same payload shape, `extra` NESTED as `record_run`
+    nests it)."""
+    run_dir = tmp_path / "rg_expd"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "provenance.json").write_text(json.dumps({
+        "git": {"commit": commit},
+        "seed": 20260730,
+        "config": {"stats": {"bootstrap_b": 200, "undefined_metric_skip_threshold_pct": 5.0}},
+        "extra": {
+            "stage": "exp-d-cnn-group", "band": band, "family": family,
+            "config_hash": config_hash,
+            "expected_subjects": sorted(set(frames.subjects.tolist())),
+            "expected_test_rows_by_fold": expected_test_rows_by_fold(frames, seeds),
+        },
+    }, indent=2, sort_keys=True), encoding="utf-8")
+    return run_dir
+
+
+def _write_all_shards(run_dir, frames, *, commit="c0ffee1234", config_hash="cfg0001",
+                      seeds=SHARD_SEEDS, biases=None):
+    folds = selectable_folds(sorted(set(frames.subjects.tolist())))
+    for fold_id, fold in enumerate(folds):
+        bias = 0.0 if biases is None else biases[fold_id]
+        write_fold_shard(
+            _fake_cnn_fold(frames, fold, seeds=seeds, bias=bias), frames, fold, fold_id,
+            run_dir, band=frames.band, family=frames.family, seeds=seeds,
+            run_group_id=run_dir.name, analysis_commit=commit, config_hash=config_hash,
+        )
+    return folds
+
+
+def test_merge_produces_the_family_summary_only_when_every_fold_is_present(tmp_path):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    merged = merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+    assert merged["complete"] is True
+    assert merged["state"] == "complete"
+    assert merged["completed_folds"] == [0, 1, 2, 3]
+    assert merged["missing_folds"] == [] and merged["noop_folds"] == []
+    for name in ("predictions", "metrics", "selection", "per_subject"):
+        assert merged["artifacts"][name].exists()
+
+    loaded = load_family_artifacts(run_dir, "77ghz", "cnn1d_raw")
+    assert sorted(loaded.per_subject_mae) == [1, 2, 3, 4]
+    assert loaded.deterministic is False
+
+
+def test_a_partial_merge_is_a_named_non_reportable_state_not_a_smaller_cohort(tmp_path):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+    (run_dir / "exp_d_cnn1d_raw_77ghz_fold2.json").unlink()
+
+    merged = merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+    assert merged["complete"] is False
+    assert merged["state"] == "partial_non_reportable"
+    assert merged["missing_folds"] == [2]
+    assert merged["artifacts"] is None
+    assert not (run_dir / "metrics_cnn1d_raw_77ghz.json").exists()
+
+
+def test_merge_distinguishes_a_noop_marker_from_a_missing_shard(tmp_path):
+    """Trap 14: a task whose fold index exceeds the selectable list exits 0 with a NAMED
+    marker; the merge must never confuse that with a crashed task."""
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+    (run_dir / "exp_d_cnn1d_raw_77ghz_fold1.json").unlink()
+    write_noop_marker(run_dir, band="77ghz", family="cnn1d_raw", fold_id=1,
+                      reason="fold index beyond the selectable list")
+    write_noop_marker(run_dir, band="77ghz", family="cnn1d_raw", fold_id=9,
+                      reason="fold index beyond the selectable list")
+
+    merged = merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+    assert merged["noop_folds"] == [1]
+    assert merged["noop_out_of_range_folds"] == [9]
+    assert merged["missing_folds"] == []
+    assert merged["complete"] is False
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [("analysis_commit", "deadbeef"), ("config_hash", "other"), ("band", "10ghz"),
+     ("family", "spec2d_raw"), ("fold_id", 3), ("run_group_id", "somewhere_else")],
+)
+def test_every_lineage_mismatch_field_is_rejected_by_name(tmp_path, field, value):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    path = run_dir / "exp_d_cnn1d_raw_77ghz_fold0.json"
+    shard = json.loads(path.read_text(encoding="utf-8"))
+    shard[field] = value
+    path.write_text(json.dumps(shard, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ExpDError, match=field):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+def test_a_shard_that_silently_drops_one_test_row_is_rejected_by_the_census(tmp_path):
+    """(C7) Perfect lineage — same commit, config hash, family, band, fold id — and a
+    plausible count, but one expected test frame is gone. Only the row census and
+    `frame_rows_sha256` can see it; nothing in `record_run`'s manifest can."""
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    path = run_dir / "exp_d_cnn1d_raw_77ghz_fold0.json"
+    shard = json.loads(path.read_text(encoding="utf-8"))
+    shard["census"]["n_frame_rows"] -= 1
+    shard["census"]["frame_rows_sha256"] = _sha_lines(sorted(
+        ["1|0|0", "1|0|1", "1|1|0", "1|1|1", "1|1|2"]))     # one frame dropped
+    path.write_text(json.dumps(shard, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ExpDError, match="frame_rows_sha256|n_frame_rows"):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+def _rewrite_fold_predictions(run_dir, fold_id, transform, band="77ghz", family="cnn1d_raw"):
+    path = run_dir / f"exp_d_{family}_{band}_fold{fold_id}_predictions.csv"
+    rows = list(csv.DictReader(path.open(encoding="utf-8")))
+    fieldnames = list(rows[0])
+    rows = transform(rows)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_a_predictions_csv_missing_a_row_the_shard_still_counts_is_rejected(tmp_path):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+    _rewrite_fold_predictions(run_dir, 0, lambda rows: rows[1:])
+
+    with pytest.raises(ExpDError, match="session_rows_sha256|seed"):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+def test_a_csv_substituting_a_session_at_unchanged_row_count_is_rejected(tmp_path):
+    """(C14) The count-only check's blind spot: the number of rows is right, but one
+    session identity is wrong. `session_rows_sha256` is what sees it."""
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    def substitute(rows):
+        for row in rows:
+            if row["session_idx"] == "1":
+                row["session_idx"] = "4"       # a session this fold never held out
+        return rows
+
+    _rewrite_fold_predictions(run_dir, 0, substitute)
+    with pytest.raises(ExpDError, match="session_rows_sha256"):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+def test_a_csv_duplicating_a_session_at_unchanged_row_count_is_rejected(tmp_path):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    def duplicate(rows):
+        for row in rows:
+            row["session_idx"] = "0"           # every row becomes session 0
+        return rows
+
+    _rewrite_fold_predictions(run_dir, 0, duplicate)
+    with pytest.raises(ExpDError, match="session_rows_sha256|duplicate"):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+def test_a_csv_missing_one_seed_of_one_session_is_rejected_by_the_cross_product(tmp_path):
+    """Seed is deliberately NOT part of the row identity hashes; it is validated as an
+    exact `session identities x seed_set` cross product instead."""
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+    _rewrite_fold_predictions(
+        run_dir, 0,
+        lambda rows: [r for r in rows if not (r["seed"] == "3" and r["session_idx"] == "1")],
+    )
+
+    with pytest.raises(ExpDError, match="seed"):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+# ------------------------------------------------------------------ the comparisons
+
+
+def test_exp_d_rng_offsets_are_pairwise_distinct_including_the_other_experiments():
+    """Trap 10's doctrine: fixed named blocks, never a running counter. Exp A occupies
+    seed+0..3, Exp B +100..134, Exp C +200..212, Exp D +300..373."""
+    offsets = exp_d._all_rng_offsets()
+    assert RNG_OFFSET_EXPD_BASE == 300
+    assert min(offsets) == 300 and max(offsets) == 373
+    assert len(set(offsets)) == len(offsets)
+    assert not set(offsets) & set(exp_b._all_rng_offsets())
+    assert not set(offsets) & set(exp_c._all_rng_offsets())
+    assert not set(offsets) & {0, 1, 2, 3}
+
+
+def test_the_composite_and_holm_families_are_the_three_primary_variants_only():
+    """O-M9-3: the matched-preprocessing ablations are reported AS ablations and enter no
+    comparison family, so the Holm denominator stays exactly 3."""
+    assert COMPOSITE_MEMBERS == ("cnn1d_raw", "spec2d_raw", "physics")
+    assert "cnn1d_matched" not in COMPOSITE_MEMBERS
+    assert "spec2d_matched" not in COMPOSITE_MEMBERS
+    assert set(EXPD_FAMILIES) == {"cnn1d_raw", "cnn1d_matched", "spec2d_raw",
+                                  "spec2d_matched", "physics", "session_index"}
+
+
+# The comparison fixture: 4 subjects x 2 sessions, every family's per-(subject, seed) error
+# fixed by hand so every downstream quantity can be recomputed with plain numpy.
+COMPARE_SUBJECTS = (1, 2, 3, 4)
+COMPARE_SESSIONS = (1, 2)
+COMPARE_TRUTH = {s: np.array([-1.0 * s, -2.0 * s]) for s in COMPARE_SUBJECTS}
+
+# deliberately MIXED-SIGN across seeds, so the seed-averaged per-subject MAE and the MAE of
+# a seed-ensembled prediction are genuinely different numbers (the C13 discriminator).
+CNN_SEED_ERRORS = (-0.5, -0.3, 0.1, 0.4, 0.6)
+
+
+def _family_errors(family, subject, seed):
+    base = {"cnn1d_raw": 0.10, "spec2d_raw": 0.35, "physics": 0.20,
+            "cnn1d_matched": 0.55, "spec2d_matched": 0.65, "session_index": 0.45}[family]
+    if family in ("physics", "session_index"):
+        return np.full(2, base + 0.05 * subject)
+    return np.full(2, base + 0.05 * subject + CNN_SEED_ERRORS[seed - 1])
+
+
+def _family_seeds(family):
+    return (1,) if family in ("physics", "session_index") else (1, 2, 3, 4, 5)
+
+
+def _expected_per_subject_mae(family):
+    """The frozen additive collapse (`:1193-1199`): per subject, average the per-seed
+    per-subject MAEs. A deterministic family averages ONE value, which is that value."""
+    out = {}
+    for subject in COMPARE_SUBJECTS:
+        per_seed = [float(np.mean(np.abs(_family_errors(family, subject, seed))))
+                    for seed in _family_seeds(family)]
+        out[subject] = float(np.mean(per_seed))
+    return out
+
+
+# per-fold inner scores: folds 0 and 2 make the raw 1D-CNN the best member, folds 1 and 3
+# make physics the best — so the composite genuinely alternates across folds.
+COMPOSITE_INNER = {
+    "cnn1d_raw": {0: 0.10, 1: 0.90, 2: 0.11, 3: 0.95},
+    "spec2d_raw": {0: 0.50, 1: 0.50, 2: 0.50, 3: 0.50},
+    "physics": {0: 0.80, 1: 0.20, 2: 0.85, 3: 0.15},
+    "cnn1d_matched": {i: 0.01 for i in range(4)},     # would win if ablations were members
+    "spec2d_matched": {i: 0.01 for i in range(4)},
+    "session_index": {i: 0.70 for i in range(4)},
+}
+EXPECTED_COMPOSITE_WINNER = {0: "cnn1d_raw", 1: "physics", 2: "cnn1d_raw", 3: "physics"}
+
+
+def _write_comparison_family(root, band, family, config, *, error_fn=_family_errors):
+    out_dir = root / family
+    out_dir.mkdir(parents=True, exist_ok=True)
+    prediction_rows, selection_rows = [], []
+    for fold_id, subject in enumerate(COMPARE_SUBJECTS):
+        truth = COMPARE_TRUTH[subject]
+        for seed in _family_seeds(family):
+            pred = truth + error_fn(family, subject, seed)
+            for k, session_idx in enumerate(COMPARE_SESSIONS):
+                prediction_rows.append({
+                    "fold_id": fold_id, "subject": subject, "session_idx": session_idx,
+                    "seed": seed, "y_true_delta_m_pct": float(truth[k]),
+                    "y_pred": float(pred[k]), "n_frames_aggregated": 3,
+                })
+        selection_rows.append({
+            "fold_id": fold_id, "test_subject": subject, "selected_config": "n/a",
+            "learning_rate": "", "weight_decay": "", "epoch_budget": "",
+            "selected_epoch_counts": [], "per_config_inner_scores": [COMPOSITE_INNER[family][fold_id]],
+            "inner_score": COMPOSITE_INNER[family][fold_id], "n_inner_folds": 3,
+            "fitted_coefficients": {},
+        })
+    write_family_artifacts(
+        band, family, out_dir, prediction_rows=prediction_rows, selection_rows=selection_rows,
+        deterministic=family in ("physics", "session_index"),
+        bootstrap_b=config.stats.bootstrap_b, rng_seed=config.run.seed,
+        skip_threshold_pct=config.stats.undefined_metric_skip_threshold_pct,
+        lineage=_artifact_lineage(),
+    )
+    return out_dir
+
+
+RADAR_ERRORS = {1: 0.30, 2: 0.55, 3: 0.25, 4: 0.80}
+
+
+def _write_exp_a_run(path, band, *, commit="c0ffee1234", config=None):
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "provenance.json").write_text(json.dumps({
+        "git": {"commit": commit},
+        "config": config or {"paths": {"results_dir": str(path)}, "model_grid": {"ridge_alpha": [1.0]}},
+    }, indent=2, sort_keys=True), encoding="utf-8")
+    with (path / f"predictions_{band}.csv").open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["subject", "seed", "y_true", "y_pred"])
+        for subject in COMPARE_SUBJECTS:
+            for seed in (1, 2, 3, 4, 5):
+                for k, truth in enumerate(COMPARE_TRUTH[subject]):
+                    writer.writerow([subject, seed, truth, truth + RADAR_ERRORS[subject]])
+    return path
+
+
+@pytest.fixture(scope="module")
+def comparison_inputs(tmp_path_factory, fast_ci_config):
+    root = tmp_path_factory.mktemp("expd_compare")
+    family_runs = {
+        family: _write_comparison_family(root, "10ghz", family, fast_ci_config)
+        for family in EXPD_FAMILIES
+    }
+    m7 = _write_exp_a_run(root / "m7_run", "10ghz")
+    m9 = _write_exp_a_run(root / "m9_run", "10ghz")
+    return root, family_runs, m9, m7
+
+
+@pytest.fixture(scope="module")
+def comparison_summary(comparison_inputs, fast_ci_config):
+    _root, family_runs, m9, m7 = comparison_inputs
+    radar = load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234")
+    return summarize_exp_d("10ghz", fast_ci_config, family_runs, radar)
+
+
+def test_load_exp_a_radar_refuses_predictions_that_are_not_bit_identical_to_m7(
+    comparison_inputs, tmp_path
+):
+    """O-M9-5 / trap 17: a mismatch STOPS the milestone. Comparing against the fresh
+    predictions anyway would convert a detected fault into a silent protocol change."""
+    _root, _family_runs, m9, m7 = comparison_inputs
+    drifted = _write_exp_a_run(tmp_path / "drifted", "10ghz")
+    path = drifted / "predictions_10ghz.csv"
+    rows = list(csv.reader(path.open(encoding="utf-8")))
+    rows[1][3] = str(float(rows[1][3]) + 1e-9)          # one prediction, one ULP-scale drift
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        csv.writer(fh).writerows(rows)
+
+    with pytest.raises(ExpDProtocolError, match="bit-identical"):
+        load_exp_a_radar("10ghz", drifted, m7, analysis_commit="c0ffee1234")
+    # and the clean pair passes
+    assert load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234").bit_identity_verified
+
+
+def test_load_exp_a_radar_refuses_a_run_at_the_wrong_commit_or_config(
+    comparison_inputs, tmp_path
+):
+    _root, _family_runs, _m9, m7 = comparison_inputs
+    wrong_commit = _write_exp_a_run(tmp_path / "wrong_commit", "10ghz", commit="deadbeef")
+    with pytest.raises(ExpDProtocolError, match="commit"):
+        load_exp_a_radar("10ghz", wrong_commit, m7, analysis_commit="c0ffee1234")
+
+    wrong_config = _write_exp_a_run(
+        tmp_path / "wrong_config", "10ghz",
+        config={"paths": {"results_dir": "elsewhere"}, "model_grid": {"ridge_alpha": [7.0]}},
+    )
+    with pytest.raises(ExpDProtocolError, match="model_grid"):
+        load_exp_a_radar("10ghz", wrong_config, m7, analysis_commit="c0ffee1234")
+
+
+def test_summarize_exp_d_refuses_a_radar_input_without_the_bit_identity_precondition(
+    comparison_inputs, fast_ci_config
+):
+    """The precondition is STRUCTURAL: `summarize_exp_d` accepts only a `RadarReference`
+    that `load_exp_a_radar` produced, so a bare run directory cannot slip past O-M9-5."""
+    _root, family_runs, m9, _m7 = comparison_inputs
+    with pytest.raises(ExpDProtocolError, match="O-M9-5"):
+        summarize_exp_d("10ghz", fast_ci_config, family_runs, m9)
+    with pytest.raises(ExpDProtocolError, match="O-M9-5"):
+        summarize_exp_d("10ghz", fast_ci_config, family_runs,
+                        dataclasses.replace(
+                            load_exp_a_radar("10ghz", m9, _m7, analysis_commit="c0ffee1234"),
+                            bit_identity_verified=False))
+
+
+def test_summarize_exp_d_refuses_an_incomplete_family_set_naming_the_family(
+    comparison_inputs, fast_ci_config
+):
+    _root, family_runs, m9, m7 = comparison_inputs
+    radar = load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234")
+    partial = {f: p for f, p in family_runs.items() if f != "spec2d_matched"}
+    with pytest.raises(ExpDError, match="spec2d_matched"):
+        summarize_exp_d("10ghz", fast_ci_config, partial, radar)
+
+
+def test_the_pre_registered_primary_is_radar_versus_the_session_index_baseline(
+    comparison_summary, fast_ci_config
+):
+    """`:1263-1266`: fixed in advance, not chosen from outer-test scores — and numerically
+    the same paired comparison M7 reported, recomputed here from the artifacts."""
+    radar = {s: RADAR_ERRORS[s] for s in COMPARE_SUBJECTS}
+    baseline = _expected_per_subject_mae("session_index")
+    diffs = np.array([radar[s] - baseline[s] for s in COMPARE_SUBJECTS])
+    wstat, wp = M.wilcoxon_signed_rank(diffs)
+
+    primary = comparison_summary["primary_vs_session_index"]
+    assert primary["comparison"] == "radar_vs_session_index"
+    assert primary["n_eval"] == 4
+    assert primary["wilcoxon_statistic"] == pytest.approx(wstat)
+    assert primary["wilcoxon_p"] == pytest.approx(wp)
+    assert primary["mean_difference_radar_minus_baseline"]["point"] == pytest.approx(
+        float(np.mean(diffs))
+    )
+
+
+def test_the_composite_picks_its_per_fold_winner_by_inner_cv_score_alone(comparison_summary):
+    """`:1267-1274` + O-M9-3: the best of {raw 1D-CNN, raw spectrogram, physics} INSIDE each
+    outer fold, by inner CV. The ablations have the best inner scores in this fixture and
+    must never be selected."""
+    rows = {row["subject"]: row for row in comparison_summary["composite"]["per_fold"]}
+    for fold_id, subject in enumerate(COMPARE_SUBJECTS):
+        assert rows[subject]["selected_family"] == EXPECTED_COMPOSITE_WINNER[fold_id]
+        assert rows[subject]["inner_score"] == pytest.approx(
+            COMPOSITE_INNER[EXPECTED_COMPOSITE_WINNER[fold_id]][fold_id]
+        )
+    assert {r["selected_family"] for r in rows.values()} <= set(COMPOSITE_MEMBERS)
+
+
+def test_the_composite_is_spliced_at_the_per_subject_seed_averaged_metric_level(
+    comparison_summary
+):
+    """(C13) Each subject's composite value is its fold's winning family's OWN seed-averaged
+    per-subject MAE — a deterministic family contributes one value, never five copies, and
+    no prediction is ever averaged across seeds."""
+    per_family = {f: _expected_per_subject_mae(f) for f in COMPOSITE_MEMBERS}
+    expected = {
+        subject: per_family[EXPECTED_COMPOSITE_WINNER[fold_id]][subject]
+        for fold_id, subject in enumerate(COMPARE_SUBJECTS)
+    }
+    rows = {row["subject"]: row for row in comparison_summary["composite"]["per_fold"]}
+    for subject, value in expected.items():
+        assert rows[subject]["per_subject_mae"] == pytest.approx(value)
+        assert rows[subject]["n_seeds_averaged"] == (
+            1 if EXPECTED_COMPOSITE_WINNER[COMPARE_SUBJECTS.index(subject)] == "physics" else 5
+        )
+
+    diffs = np.array([RADAR_ERRORS[s] - expected[s] for s in COMPARE_SUBJECTS])
+    assert comparison_summary["composite"]["mean_difference_radar_minus_composite"][
+        "point"] == pytest.approx(float(np.mean(diffs)))
+
+
+def test_a_prediction_level_splice_would_give_a_different_answer(comparison_summary):
+    """The discriminator for C13: with mixed-sign per-seed errors, the MAE of the
+    seed-ENSEMBLED prediction is a genuinely different number from the seed-averaged
+    per-subject MAE, so an implementation that spliced predictions fails the test above."""
+    subject = 1
+    per_seed = [np.abs(_family_errors("cnn1d_raw", subject, seed))
+                for seed in _family_seeds("cnn1d_raw")]
+    seed_averaged = float(np.mean([v.mean() for v in per_seed]))
+    ensembled = float(np.mean(np.abs(np.mean(
+        [_family_errors("cnn1d_raw", subject, seed) for seed in _family_seeds("cnn1d_raw")],
+        axis=0))))
+    assert abs(seed_averaged - ensembled) > 0.1
+
+    rows = {row["subject"]: row for row in comparison_summary["composite"]["per_fold"]}
+    assert rows[subject]["per_subject_mae"] == pytest.approx(seed_averaged)
+    assert rows[subject]["per_subject_mae"] != pytest.approx(ensembled)
+
+
+def test_the_per_family_family_is_holm_corrected_at_exactly_three(comparison_summary,
+                                                                 fast_ci_config):
+    """`:1275-1277` + O-M9-3: a Holm family of exactly 3, pinned strictly stronger than a
+    len-2 family would be on the same p-values."""
+    block = comparison_summary["per_family_exploratory"]
+    assert block["holm_family_size"] == fast_ci_config.stats.holm_family_baseline_per_family == 3
+    assert sorted(block["families"]) == sorted(COMPOSITE_MEMBERS)
+
+    raw_p = [block["families"][f]["wilcoxon_p"] for f in COMPOSITE_MEMBERS]
+    expected = M.holm_adjusted(raw_p, family_size=3)
+    assert [block["families"][f]["holm_p"] for f in COMPOSITE_MEMBERS] == pytest.approx(expected)
+    weaker = M.holm_adjusted(raw_p, family_size=2)
+    assert any(a > b for a, b in zip(expected, weaker, strict=True))
+
+
+def test_the_ablations_are_descriptive_only_and_carry_no_comparison(comparison_summary):
+    """O-M9-3: reported as ablations — their own MAE and CI, no p-value, no Holm slot."""
+    ablations = comparison_summary["ablations_descriptive"]
+    assert sorted(ablations) == ["cnn1d_matched", "spec2d_matched"]
+    for block in ablations.values():
+        assert "subject_balanced_mae" in block
+        assert "wilcoxon_p" not in block and "holm_p" not in block
+    assert set(comparison_summary["per_family_exploratory"]["families"]) == set(COMPOSITE_MEMBERS)
+
+
+def test_every_comparison_ci_is_labelled_conditional_exploratory(comparison_summary):
+    assert comparison_summary["conditional_exploratory"] is True
+    assert comparison_summary["n_eval"] == 4
+
+
+def test_write_exp_d_comparison_reports_writes_the_composite_audit_trail(
+    comparison_summary, tmp_path
+):
+    paths = write_exp_d_comparison_reports(comparison_summary, tmp_path, "10ghz")
+    assert set(paths) == {"metrics", "composite"}
+    assert paths["metrics"].name == "metrics_exp_d_10ghz.json"
+
+    rows = list(csv.DictReader(paths["composite"].open(encoding="utf-8")))
+    assert list(rows[0]) == ["subject", "selected_family", "inner_score", "per_subject_mae",
+                             "n_seeds_averaged"]
+    assert [r["selected_family"] for r in rows] == [
+        EXPECTED_COMPOSITE_WINNER[i] for i in range(4)
+    ]

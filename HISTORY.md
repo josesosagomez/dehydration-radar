@@ -4,6 +4,144 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 8: `eval/exp_d.py` remaining — physics + session-index, per-family artifacts, shard/merge, comparisons. Succeeded.
+
+Per plan step 8 (`MILESTONE_9_PLAN.md` §2.8's cheap half; T-M9-physics, T-M9-expd-shard,
+T-M9-expd-compare). **Exactly two files changed** — `src/dehyd/eval/exp_d.py` (+~1190 lines) and
+`tests/test_exp_d.py` (+~1120) — so every step-1 pin and every Exp A/B/C path is byte-neutral by
+construction. Nothing from step 9 (no store-v2 producers, no `run_baselines.py`, no sbatch, no
+frame split).
+
+**(iii) The physics baseline — where the numbers come from.** `half_spectrum_power` is a
+**periodic**-Hann-windowed `|FFT|²` over bins `0 .. n//2−1` (DC in, Nyquist out). Both choices are
+this repo's own convention for band-power ratios (`qc/screens.py:147-154`), not new ones, and the
+half-spectrum convention is *why* A-M6-2's "bins 0..127" of the 256-point Doppler FFT is literally
+the non-negative half spectrum. 10 GHz bins are **derived**, never written down:
+`hz_per_m = 2(B/T)/c = 2(500e6/1024e-6)/299792458 = 3257.4619 Hz/m` → target `[0.9, 1.5) m` =
+`[2931.72, 4886.19) Hz`, background `[1.5, 3.0] m` = `[4886.19, 9772.39] Hz`; at
+`df = fs/n = 520834/534 = 975.3446 Hz` that is **target bins {4, 5}** and **background bins
+{6..10}** (bin 3 = 2926.03 falls short, bin 11 = 10728.79 overshoots) — all four numbers
+hand-derived in the test. The 1.5 m edge is half-open on the target side and closed on the
+background side, so a bin landing exactly on it belongs to background only; since no bin of the real
+534-point grid lands there, the half-open rule is pinned on explicit frequencies instead of on the
+real grid, which is the only way to actually exercise it.
+
+**Two hand-computed scalars, from the closed-form periodic-Hann DFT rather than from a run.** The
+periodic Hann's DFT is exactly three bins (`W[0] = N/2`, `W[±1] = −N/4`), so a complex tone
+`A·exp(2πik₀n/N)` windowed and transformed is `0.5AN` at `k₀`, `−0.25AN` at `k₀±1`, nothing
+elsewhere. Tones at bin 5 (A = 2, target) and bin 8 (A = 1, background), N = 534, give
+`P_t = 267² + 534² = 356445` and `P_b = 267² + 133.5² + 267² + 133.5² = 178222.5` — an exact ratio
+of 2. A constant 77 GHz slow-time series is pure DC, giving `P_dc = 128²` against `P_motion = 64²`,
+ratio exactly 4. Both are then put through the frozen `log10((P_t + ε)/(P_b + ε))`,
+`ε = 1e-12(P_t + P_b)`. The ε coupling is tested in both directions: with `P_t = 0` the value floors
+at `log10(ε/(P_b+ε)) ≈ −12` (finite, which is the whole point of adding ε to *both* terms), and with
+**both** bands empty ε is itself 0 and the scalar raises rather than emitting NaN into a fitted
+linear model — the one case ε cannot rescue.
+
+**Trap 13 made concrete.** The path reads `sig__raw_beat` / `sig__raw_slowtime`, asserted equal to
+`cnn.FRAME_INPUT[(band, "cnn1d_raw")][0]` so the two tables check each other. Robust
+standardization is scale-*and*-median-removing, so at 77 GHz — where DC **is** the target band — it
+would gut the ratio; the test shows a >1.0-decade difference between the raw and standardized
+scalars on a DC-pedestal fixture, while a pure ×1e4 rescale leaves the scalar invariant to 1e-12
+through the ε coupling.
+
+**O-M9-4 and the fold loop.** Per-frame scalar → session value = the **median** over that session's
+QC-passed frames → a one-dimensional `lstsq` slope+intercept on the outer-**training** sessions →
+test predictions. Both cheap baselines run through one `run_cheap_baseline(spine)` loop over
+`selectable_folds(...)` so they cannot drift in which rows they may see, and both are **also scored
+on the inner folds** (fit inner-train, score inner-val with the same `subject_balanced_mae` the CNN
+path checkpoints on) so the composite has a genuinely comparable inner-CV score. K = 1: nothing is
+selected. The session-index baseline calls `models/baselines.fit_session_index_baseline` /
+`predict_session_index` **verbatim** — the test re-fits it independently and asserts the predictions
+match element-for-element. Train-only-ness is a mutation fixture: perturbing the held-out subject's
+scalars *and* labels leaves every `physics_linear_fit` `FitRecord` bytewise identical at both levels
+while that subject's predictions move, and a *different* fold (which trains on the mutated subject)
+does move — the power companion, so the test cannot pass by fitting nothing.
+
+**The four per-family artifacts — one schema for CNN and deterministic families alike.**
+`predictions_/metrics_/selection_/per_subject_{family}_{band}`. Deterministic families write
+**seed 1 once** and `"deterministic": true`, never five identical copies that would fake five
+observations for the seed-collapse rules. The metrics JSON carries MAE (additive collapse: average
+seeds within subject, then bootstrap subjects) and RMSE / pooled r (pooled collapse: recompute per
+seed inside each resample, then average) — `:1193-1204` exactly. `load_family_artifacts` is where
+the merge acceptance rules live, because the comparison stage must not be able to read a family that
+does not hold together: all four files present (named individually when missing), the metrics JSON's
+per-subject vector recomputing exactly from the predictions CSV, the selection row's `epoch_budget`
+equalling the median of the counts **the row itself lists**, and the three files agreeing on which
+folds they cover.
+
+**Shard/merge — the one field the M8 contract had no need for.** `expected_test_rows_by_fold` is a
+per-fold row census keyed by the fold's **position** in the selectable list (trap 14), carrying
+counts plus **two** SHA-256s: `frame_rows_sha256` over `subject|session_idx|frame_id` and
+`session_rows_sha256` over the distinct `subject|session_idx`. Two, not one, because the artifacts
+they guard are different files — the frame hash is opaque to a session-level CSV, so a CSV that
+*substituted* a session while preserving `n_session_rows` would sail past a count-only check. Seed
+is deliberately outside both identities and is validated as an exact `session identities × seed_set`
+cross product. Five negative fixtures, each rejected by the check that is supposed to catch it: a
+perfect-lineage shard that drops one test frame (census/frame hash); a CSV missing a row the shard
+still counts (cross product); a CSV substituting a session at unchanged row count (session hash); a
+CSV collapsing every row onto one session (session hash); a CSV missing one seed of one session
+(cross product). Every lineage field (`analysis_commit`, `config_hash`, `band`, `family`, `fold_id`,
+`run_group_id`) raises **by name**. A partial merge is `state: "partial_non_reportable"` with
+`artifacts: None` and **no** summary file — never a silently smaller cohort — and a no-op marker is
+reported separately from a missing shard (`noop_folds` vs `missing_folds`, plus
+`noop_out_of_range_folds` for a 16-task array index the selectable list never had).
+
+**O-M9-5 made structural, not procedural.** `summarize_exp_d(band, config, family_runs, exp_a_run)`
+accepts **only** a `RadarReference`, which only `load_exp_a_radar` can produce, and which it produces
+only after: the Exp A run's provenance records the analysis commit; every config section except
+`paths` matches the M7 run's; and the two `predictions_{band}.csv` files are **byte-identical**
+(SHA-256). Passing a bare run directory raises. That makes the precondition impossible to skip
+rather than merely documented — trap 17's tempting move ("compare against the fresh predictions
+anyway") is unavailable.
+
+**The composite splices at the per-subject metric level (C13), and the fixture proves it matters.**
+Per outer fold the best of {`cnn1d_raw`, `spec2d_raw`, `physics`} by inner-CV score alone (ties
+break toward the earlier member of the declared order); each subject is one fold's test subject, so
+the composite's per-subject vector is that fold's winner's own **seed-averaged** per-subject MAE — a
+deterministic family contributes one value, never five pseudo-observations, and no prediction is
+ever averaged across seeds. The discriminator: the fixture's per-seed CNN errors are deliberately
+**mixed-sign** (−0.5, −0.3, 0.1, 0.4, 0.6), which makes the seed-averaged per-subject MAE and the
+MAE of a seed-ensembled prediction differ by >0.1 — a prediction-level splice fails the test rather
+than coincidentally agreeing. The ablations are given the *best* inner scores in the fixture and
+must still never be selected (O-M9-3). Holm family size is pinned at 3 and additionally asserted
+strictly stronger than a len-2 family on the same p-values.
+
+**RNG offsets.** `RNG_OFFSET_EXPD_BASE = 300`, one named block of 10 per block
+(6 families + `composite` + `radar`) × `{mae 0, rmse 1, pooled_pearson_r 2, difference_vs_radar 3}`
+→ +300..373, tested pairwise distinct and disjoint from Exp A's +0..3, Exp B's +100..134 and Exp C's
++200..212. Fixed named blocks, never a running counter (trap 10).
+
+**Signatures: two places the plan's contract needed a decision.** (i) `merge_exp_d_folds(band,
+family, run_dir)` is the plan's exact 3-arg signature, but writing the family's metrics needs
+`bootstrap_b` / `seed` / the skip threshold — taken from the **run group's own provenance**
+(`provenance["config"]["stats"]`, `provenance["seed"]`) rather than from a passed config, which is
+both the authoritative record and strictly safer: a merge cannot be run against a config that
+differs from the one the shards were produced under. (ii) `summarize_exp_d(band, config,
+family_runs, exp_a_run)` keeps its four arguments, with `exp_a_run` typed as the `RadarReference`
+described above rather than as a path — that is what makes the O-M9-5 precondition structural.
+
+**Not done here, on purpose.** No `run_and_report_*` composer: §2.8 names no such function, and
+composing `validate_store` → run → `assert_mechanism_ok_d` → `write_family_artifacts` is the
+entrypoint's job (the `run_clock_decoupling.py` `_main_session_specific` precedent), which is step 9.
+No `--init-run-group` / `--fold` / `--merge-folds` CLI, and therefore no `record_run` contract test
+(§3 splits T-M9-expd-shard across `test_exp_d.py` and `test_run_baselines.py`); `config_hash` is
+`exp_b.config_fingerprint` reused at that call site, not reinvented here. No `fold_parallel` use:
+the cheap baselines are one `lstsq` per fold, and the CNN path's concurrency **is** the SLURM fold
+array, whose correctness story is the shard/merge above rather than a serial-vs-parallel bit-assert.
+
+**Suite.** +57 tests in `tests/test_exp_d.py` (38 → 95). Full suite: **1042 passed, 16 skipped, 1
+pre-existing failure** (`test_provenance.py::test_git_degrades_to_none_without_env` — the stale local
+`REVISION` file diagnosed at step 1, unrelated and identical to steps 6 and 7). 985 + 57 = 1042
+exactly. `git diff --exit-code tests/test_no_leakage.py` clean; `test_no_leakage.py`, `test_m9_pin.py`,
+`test_m8_pin.py`, `test_harness.py`, `test_selection.py`, `test_exp_c.py` re-run explicitly (140
+passed, 1 skipped).
+
+**Next:** step 9 — store schema v2 producers (`STORE_VERSION = 2`), the three entrypoints, the
+sbatch scripts + git-free wrapper, and `eval/frame_split.py`.
+
+---
+
 ## 2026-07-30 — M9 step 7: `models/cnn.py` + `eval/exp_d.py`'s CNN nested torch path. Succeeded.
 
 Per plan step 7 (`MILESTONE_9_PLAN.md` §2.7 + the CNN half of §2.8; T-M9-cnn, T-M9-cnnpath). Two new
