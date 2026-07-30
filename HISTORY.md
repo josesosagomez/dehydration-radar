@@ -4,6 +4,93 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-30 — M9 step 6: `eval/exp_c.py` — the ordinal two-arm composition (run + report). Succeeded.
+
+Per plan step 6 (`MILESTONE_9_PLAN.md` §2.6, T-M9-expc-*). One new 900-line module and one new
+900-line test file; **no other file changed** (`git status`: exactly two untracked files). Nothing
+from steps 7+ (no `cnn.py`, no `exp_d.py`, no entrypoint, no store v2).
+
+**Shape.** Deliberately `exp_b.py`'s: spine → provider → picklable per-fold worker → `fold_parallel`
+→ out-of-fold assembly → summaries/CSVs → mechanism assertions → `run_and_report_c`. What is
+genuinely new is only the ordinal part; everything reusable is *called*, not copied:
+`exp_a.stage1_candidates`/`stage2_candidates` (A-M9-1 = ONE enumeration of the frozen space —
+`stage1_candidates_c` is `dataclasses.replace(c, family="ord_a_ridge")` over Exp A's own list, and
+arm (a) is the same over its Stage-2 list), `exp_a.StoreBackedFeatures` (wrapped, not subclassed —
+X and the tuned-ε FitRecord are bytewise Exp A's on all three log branches),
+`harness._score_candidates_on_fold`/`_final_refit`, `selection.select_candidate_ordinal`,
+`exp_a._selection_frequency`, `metrics.subject_cluster_bootstrap_pooled`.
+
+**Concrete values.** Stage 1 = 72 (10 GHz) / 9 (77 GHz) feature-axis candidates at the frozen
+`stage1_anchor_ridge_alpha = 1.0`, family `ord_a_ridge`, scored by the ordinal objective (pooled
+class-unit MAE), **one** Stage-1 winner shared by both Stage-2 arms (A-M9-1's shared-anchor rule).
+Arm (a) = 41 candidates (ridge 8 + svr 12 + rf 6 + gbm 8 + knn 7, the frozen `ModelGridConfig`
+grids). Arm (b) = 3 (`proportional_odds_c_grid` 0.1/1.0/10.0). Targets: `y = [L, class]` with
+`L = -Δm%` and `class = session_idx`; S0 **kept** (unlike Exp B, where S0's identically-zero Δm%
+was a free session — here S0 is the lowest of the five ordered classes, and
+`_assert_mechanism_ok_c` fails if the spine lost it). RNG offsets 200-202 (arm a) / 210-212
+(arm b) off `config.run.seed`, named constants, tested pairwise-distinct against Exp A's 0-3 and
+Exp B's 100-134.
+
+**The two decisions that needed judgement.**
+1. *`assert_exp_c_fit_authorized` takes a keyword-only `arm`.* §2.6 writes the signature as
+   `(candidate, config)` but its clause (a) requires the family to "match the arm being run",
+   which the candidate alone cannot answer. Positional contract kept, `*, arm` added
+   (`"stage1"`/`"a"`/`"b"`). At Stage 1 it additionally pins `base_params == {"alpha": 1.0}` — a
+   legal Stage-2 ridge alpha is an *unauthorized* Stage-1 value.
+2. *The guard reads the estimator the run will actually build*, via `regressors._ordinal_model`
+   (the same factory `build_estimator` delegates to), not the candidate id. Re-deriving
+   `base_family` from the id would make clause (b) vacuous — the test monkeypatches the factory to
+   return an SVR wrapper for an `ord_a_ridge` id and requires a refusal. It deliberately does NOT
+   call `build_estimator`, so the "no `.fit()` was reached" spy stays meaningful.
+
+**The §2.3 aggregation, and why the plan insists on it.** `_ordinal_candidate_scores` reduces
+`StageOutcome.inner_scores` with mean/std over the **finite** entries only and carries
+`n_evaluable_inner_folds`; the harness's own `candidate_scores` are ignored except for
+`feature_dimension` (a measured bundle property, not a fold aggregation). Verified by *running* the
+wrong implementation: with the harness's plain `np.mean`, the six-subject fixture where class 3
+lives only in subject 6 makes ONE inner-training set miss a class, which NaNs every candidate and
+raises `ExpCError` on the test-subject-1 fold — i.e. "one inner fold lost a class" silently becomes
+"this outer fold produced no ordinal result", stricter than the frozen `:793-800`. Both
+`test_ordinal_candidate_scores_aggregate_over_evaluable_folds_only` and
+`test_one_inner_fold_missing_a_class_still_selects_a_winner` fail against it and pass against the
+evaluable-folds-only reduction (`n_evaluable_inner_folds == 4`, winner still selected). The
+all-inner-folds-missing case (test-subject-6 on the same fixture) still raises, re-labelled with
+the subject and `missing_classes={3}` per fold — trap 3's two halves, tested separately.
+
+**Hand-computed fixtures (written from the spec's arithmetic, never from a run).** The aggregation
+fixture pins `inner_scores = [0.5, nan, 1.5, 2.5, 0.5]` → mean 1.25, population std sqrt(0.6875),
+4 evaluable folds; its four evaluable cells' stored first-seed predictions give QWK 1.0 / -1.0 /
+1.0 / 0.0 on the fixed 5-class grid (weights `(i-j)²/16`), mean **0.25**. Rewriting one stored
+`val_predictions` entry moves it to -0.25 — that is trap 6's test: a QWK recomputed by re-predicting
+would be blind to the mutation. A 1×1-mass cell (truth all-S0, prediction all-S0) is the only
+undefined case (O-M9-8's operative trigger) and is skipped-and-counted, while the MAE still counts
+that fold.
+
+**Reporting.** Both arms get pooled class-unit MAE / adjacent accuracy / QWK with subject-cluster
+BCa CIs under the **pooled** seed-collapse (`:1199-1204`), the descriptive per-subject class-MAE
+distribution, a 5×5 confusion matrix averaged **across seeds** (a first-seed-only or a
+pooled-over-seeds count fails the fixture: true-class-4 cells must read 2.0/2.0, not 4.0/8.0), the
+selection-frequency table with per-fold `n_evaluable_inner_folds` + viability-reason counts, and the
+O-M9-8 counters at both CV levels. **No baseline comparison field at all** (trap 16 — the
+session-index baseline predicts the Exp C class perfectly by construction); a test asserts the
+serialized summary contains no "baseline", "wilcoxon" or "holm" token.
+
+**Suite.** +40 tests in the new `tests/test_exp_c.py`. Full suite: **907 passed, 16 skipped, 1
+pre-existing failure** (`test_provenance.py::test_git_degrades_to_none_without_env`, the stale local
+`REVISION` file diagnosed at step 1 — unrelated). `test_no_leakage.py` `git diff --exit-code` clean;
+`test_m9_pin.py`, `test_m8_pin.py`, `test_harness.py` re-run explicitly and green (step 6 touched no
+shared file, so nothing could have moved — checked rather than assumed).
+
+**Not done here, on purpose.** No 77 GHz exp_c fixture (the band branch is exercised by
+`exp_a`'s own enumeration and `_stage1_anchor`; a 77 GHz synthetic store belongs with the step-9
+entrypoint tests, matching Exp B's precedent). `ExpCFoldResult.reason` exists and is always `None`
+today: Exp C drops no rows, so nothing sets it — the field is kept because the report half filters
+on it exactly like Exp B's, and step 9's frame-split/entrypoint work reads the same shape.
+
+**Next:** step 7 — `models/cnn.py` + `eval/exp_d.py`'s torch nested path.
+
+---
+
 ## 2026-07-30 — M9 step 5: `eval/fold_parallel.py` extracted from exp_b; exp_b delegates. Succeeded.
 
 Per plan step 5 (`MILESTONE_9_PLAN.md` §2.5, T-M9-parallel) — a zero-behaviour-change move so Exp C
