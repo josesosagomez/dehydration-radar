@@ -4,6 +4,167 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 3 follow-up: Frank-Hall non-convergence now fails loudly. Succeeded.
+
+Read-only verification of step 3 found one mismatch with `MILESTONE_9_PLAN.md` §2.2: the plan
+requires an sklearn `ConvergenceWarning` to fail a Frank-Hall threshold fit, but the implementation
+only allowed the warning to print and then appended the non-converged classifier. Reproduced with
+`FrankHallOrdinal(C=1.0, max_iter=1)` on the five-class separable fixture: four warnings were
+emitted and the old implementation returned four classifiers.
+
+`FrankHallOrdinal.fit` now wraps each binary `LogisticRegression.fit` in a local warnings context
+that promotes only `sklearn.exceptions.ConvergenceWarning` to an exception. The frozen production
+bound remains `max_iter=1000`; successful fits, coefficients, class weights, probability recovery,
+and selection are unchanged. A focused regression test uses `max_iter=1` to deterministically
+exhaust lbfgs and asserts that fitting raises rather than returning approximate coefficients.
+
+Verification: the focused test passed; `tests/test_ordinal.py`, `tests/test_regressors.py`,
+`tests/test_selection.py`, `tests/test_m9_pin.py`, and `tests/test_m8_pin.py` passed
+(**120 passed**). The step-1 byte trace remains intact and `tests/test_no_leakage.py` remains
+unchanged.
+
+## 2026-07-31 — M9 step 9: store schema v2, the three entrypoints, the IBEX scripts, and the sanctioned exploratory frame split. Succeeded.
+
+Per plan step 9 (`MILESTONE_9_PLAN.md` §2.9-§2.12; T-M9-store, T-M9-frame-split,
+T-M9-entrypoints, T-M9-sbatch, plus the run_baselines half of T-M9-expd-shard). Producers
+change last, by design: everything above this step is import-stable, so the clean M9
+implementation commit (step 9.5) and the store rebuild (9.6) can follow immediately.
+
+**Store schema v2 (`STORE_VERSION = 1 -> 2`).** Two new per-frame signal arrays per band,
+written in the same canonical QC-passed frame order as the raw WST tensors, by two named
+helpers (`session_signals_10ghz` / `session_signals_77ghz`) the existing builders call — so
+the acceptance tests can hand-compose the frozen input definitions on a tiny fixture without
+running a full WST extraction. 10 GHz: `sig__raw_beat` `[N, 534] complex128` = the chirp mean
+(`reduce_option_a`) of the **raw, ungated** frame (no bandpass, no EdgeTrim, no
+standardization — the physics baseline's power ratio is an absolute-magnitude quantity, trap
+13), and `sig__matched_iq` `[N, 2, 470] float64` = literally
+`preprocess_cube(sub, config.preprocess, reduction="a", channel="iq")` at the DEFAULT model
+gate, which is bytewise the same array the WST chain preprocesses at gate index 0 (asserted:
+`config.preprocess.model_gate_m == search_10ghz.range_gate_m[0] == (1.0, 2.0)`, one
+definition, two consumers). 77 GHz: `sig__raw_slowtime` `[N, 256] float64` = mean over the
+256 fast-time bins and the 16 Rx (A-M6-2 (i), the chirp axis retained), and
+`sig__matched_iq` `[N, 2, 256] float64` = chain steps 1-5, **Rx 0**, mean over the 27 gate
+bins, stored PRE-standardization (`cnn.matched_input_77` applies the robust per-channel z at
+load). Size delta ~1.6 MB / 0.8 MB per session. The version bump makes every v1 store fail
+closed on `store_version` — intended, and tested. Negative companions were written for each
+definition so a plausible wrong implementation fails: the raw beat is asserted *unequal* to
+the band-gated chirp mean and its median is *not* ~0 (it was not standardized); the 77 GHz
+matched array is asserted unequal to Rx 1's and to the cross-Rx mean (the fusion A-M6-2
+forbids pre-WST); the raw slow-time reduction is cross-checked against a per-chirp
+accumulation in a different summation order (`allclose`, not bytewise, deliberately).
+
+**`provenance.build_provenance_payload` extracted, byte-neutrally.** The exploratory path may
+not create `results/runs/<stamp>_<rev>/` at all, and `record_run` does that unconditionally
+(`provenance.py:204-208`), so the payload construction is now a public function and
+`record_run` calls it and writes. The clock and git are read ONCE, inside the builder, and
+`record_run` derives the directory stamp from `payload["timestamp_utc"]` — so the run dir and
+the record now describe the same instant by construction rather than by two nearby
+`datetime.now()` calls. Byte-neutrality is pinned by transcribing the pre-extraction body
+verbatim into `tests/test_provenance.py` and asserting dict equality modulo the timestamp
+(four parametrized cases: folds present/absent x extra present/absent), plus an assertion
+that the file content is still `json.dumps(payload, indent=2, sort_keys=True) + "\n"`.
+
+**`eval/frame_split.py` — the sanctioned exploratory path.** The owner's 2026-07-30 decision,
+implemented so its three constraints are structural rather than conventional. (1) *In
+addition to LOSO*: every unit is a REFIT of the configuration its LOSO run already selected —
+`modal_classical_config` reads the Exp C `selection_table_{band}.csv` **artifact** (never a
+recomputation, trap 15), `modal_cnn_config` reduces the merged Exp D selection table to the
+modal `(lr, weight_decay)` pair (ties toward the lowest fold id) and
+`int(floor(median(budgets)))` over only the folds that chose that pair — floor because a
+plain median over an even count returns a non-integral epoch count. Both hand-computed in the
+tests on an 8-fold fixture with a 4-4 tie and budgets [5, 10, 13, 20] -> 11.5 -> 11. (2)
+*Structurally isolated*: no `eval.splits` import (AST-asserted), its own
+`KFold(n_splits=5, shuffle=True, random_state=config.run.seed + 900)`, and every write goes
+through `_require_exploratory_path`, an **allowlist** (must resolve under
+`results/exploratory_frame_split/` AND carry `frameSplit_leaked_exploratory` in the filename)
+— an allowlist rather than a `runs/`-substring refusal, so a path spelled differently cannot
+slip through. A complete CLI invocation is tested by snapshotting `results/runs/` before and
+after: it stays empty. (3) *Tagged*: every filename carries the tag, every JSON carries
+`leaky_protocol` / `never_report`.
+
+**The second leak that had to be prevented.** The sanctioned leak is subject overlap and
+nothing else, so `tuned-ε` is recomputed here from the RAW scattering tensors restricted to
+each fold's TRAINING frames — the stored `prelog__*` tuples are per-session medians over
+*all* of a session's frames, and under a pooled frame split nearly every session straddles
+the split, so consuming one would fit ε on the very rows being scored (trap 19). The frozen
+hierarchy is kept intact and is not reimplemented: `per_frame_prelog` stops
+`extraction._prelog_scale` one step early (time-mean -> mean over the order's paths -> mean
+over channels, *before* its median-over-frames), and `training_frame_epsilons` builds one
+tuple per session from its training frames and hands them to `harness.tuned_epsilons`
+unchanged — so session median -> subject mean -> subject median -> `ε = k·scale` (k = 0.1,
+1e-6 fallback) is one implementation with a narrowed innermost population. Three tests carry
+this: `per_frame_prelog`'s per-frame values hand-computed on a 2-frame fixture whose medians
+reproduce `_prelog_scale`'s tuple exactly; the hierarchy hand-computed on a deliberately
+unbalanced fixture (subject 1 with sessions of 4 and 2 training frames, subject 2 with 1,
+plus a zero-training-frame session and a whole subject with none) giving ε = 0.1 · median([2.5,
+10]) = **0.625**, where a POOLED-frame median would give 0.1 — so the rejected pooled reading
+fails the test; and the end-to-end mutation property, where scaling every held-out frame's raw
+coefficients by 7 leaves ε and the fold's fitted-state SHA bytewise identical (with the test
+asserting at least one scaled session also contributes training frames, so the invariance
+cannot come from a whole session being absent) while scaling every TRAINING frame by 7 scales
+ε by **exactly 7** — every step of the hierarchy is positively homogeneous, so the power
+companion is an equality, not a mere "it differs".
+
+**Provenance for a path that cannot call `record_run`.** `write_exploratory_provenance` calls
+the same public builder with `folds=None` and writes
+`{task}_{unit}_provenance_frameSplit_leaked_exploratory.json` under the exploratory root only.
+The filename deviates from the plan's bare `provenance_frameSplit_leaked_exploratory.json`
+because the eight runs of a band share one directory and would otherwise overwrite each
+other. `extra` records what the KFold *recipe* cannot: `frame_order_sha256` (the canonical
+`subject|session_idx|frame_id` list in the exact order the KFold indexes) and
+`fold_assignment_sha256` (the same list annotated `|fold{j}` after the split), so a permuted
+cohort is never provenance-identical; `source_run` (run dir, analysis commit, config hash,
+artifact rel path + SHA-256) and `resolved_config`, so the number is traceable to the LOSO
+selection it claims to mirror (C24). The manifest and the band-correct `data_dir` are
+parameters, not implied — `_hash_inputs` silently defaults to the 10 GHz root, so a 77 GHz run
+that let it default would hash 10 GHz bytes under a 77 GHz label (C19/C22); an empty manifest
+is refused outright. Lineage is validated BEFORE any fitting: a source artifact whose
+`analysis_commit` or `config_hash` differs from this run's is refused by name.
+
+**Entrypoints.** `run_ordinal.py` follows `run_clock_decoupling.py`'s primary shape and adds
+`config_hash` (the same `exp_b.config_fingerprint` helper every run group uses) to its
+provenance `extra`, because that is what the frame split validates its source artifact
+against. `run_frame_split_exploratory.py` is a thin wrapper that deliberately does **not**
+call `record_run`. `run_baselines.py` carries the four Exp D modes; two readings had to be
+chosen and are recorded here: (i) `--subset 6subjects` is accepted for the CNN families as a
+fourth, local mechanism-only mode, because §1 step 10 requires a CPU smoke for *every* Exp D
+family while §2.11 lists only the three run-group flags; (ii) `--full-cohort` is **refused**
+for a CNN family with a message pointing at the run-group flow, since a single process
+iterating 16 folds costs their sum (the C11 mistake) and Step 0 item 3 makes the fold array
+the full-cohort path. `comparisons` additionally needs `--m7-reference-dir` (O-M9-5's
+bit-identity precondition takes it), which §2.11 does not name.
+
+**Contradiction found and NOT patched around:** §2.11 and §1 step 10 describe a
+`seed_set=[1]` smoke overlay, but `load_config` (config.py:852) refuses any seed set that is
+not exactly 5 distinct integers, so that overlay cannot be expressed in a config file at all.
+Nothing was changed to accommodate it — `_require_frozen_run_protocol` merely does not IMPOSE
+the frozen set in smoke mode (unit-tested directly on a replaced config), and the
+full-cohort refusal is tested with a same-size-but-different set `[1,2,3,4,6]`, which is the
+case `load_config`'s own rule cannot catch. Flagged for the owner: step 10's CNN smokes will
+either run all five seeds or need a config-validator amendment.
+
+**IBEX scripts.** `run_exp_c.sbatch` is a justified clone of `run_exp_b.sbatch` (16 cores /
+64 G / 04:00 — same store, comparable candidate count per fold: 72/9 Stage-1 plus 41 + 3
+Stage-2 against Exp B's 41, and Exp B measured ~1-1.3 h). `run_exp_d_cheap.sbatch` is 4 cores
+/ 16 G / 01:00 with a `FAMILY` switch covering both deterministic baselines and the
+separately-invoked comparison stage. `run_exp_d_cnn.sbatch` carries **no `#SBATCH` resource
+directive at all** (C24: the header is parsed before `STAGE` exists, and the three stages
+differ by more than a factor of ten and by whether a GPU is requested), and maps
+`SLURM_ARRAY_TASK_ID` 1..16 to the 0-based fold POSITION in exactly one place.
+`submit_exp_d_cnn.sh` is git-free from day one (the M8 step-10.5 lesson, e88fd33): repo root
+from `${BASH_SOURCE[0]}`, `REVISION` required, `DEHYD_GIT_*` unset, `sbatch --wait` on init so
+a failure never reaches the array (C23), `${var%%;*}` on every `--parsable` capture (C25),
+`--gres=gpu:1` on the fold stage only, and `ARRAY_TIME` defaulting to the pre-measurement
+placeholder 08:00:00 until the step-10 GPU smoke measures it.
+
+**Suite:** 1042 -> 1102 passed, 16 skipped. `tests/test_no_leakage.py` untouched
+(`git diff --exit-code` clean). One PRE-EXISTING environment failure, unrelated to this step
+and present on the step-8 tree too: `test_git_degrades_to_none_without_env` fails whenever a
+`REVISION` file sits at the repo root (there is one, containing the M8 commit e88fd33), since
+`_git_info`'s copied-tree fallback then answers where the test expects None. Left in place —
+deleting the owner's file is not this step's call — but it is stale and should be re-stamped
+before the next IBEX sync.
+
 ## 2026-07-31 — M9 step 8: `eval/exp_d.py` remaining — physics + session-index, per-family artifacts, shard/merge, comparisons. Succeeded.
 
 Per plan step 8 (`MILESTONE_9_PLAN.md` §2.8's cheap half; T-M9-physics, T-M9-expd-shard,

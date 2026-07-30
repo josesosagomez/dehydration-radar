@@ -385,6 +385,104 @@ def test_revision_file_reader_reads_first_line():
             rev.unlink()
 
 
+# ------------------------- M9 step 9: the byte-neutral build_provenance_payload extraction
+#
+# The exploratory frame-split writer must reuse the REAL payload builder rather than
+# re-deriving one from private helpers (plan §2.10, C21), so `record_run`'s body was split
+# into `build_provenance_payload(...)` + the write. The claim is that `record_run`'s output
+# is byte-identical afterwards, and the pin below is what makes that checkable: the
+# pre-extraction body, transcribed verbatim from provenance.py:200-239 at commit 2566b97
+# (the step-8 tree, before this edit). It is NOT a call into the code under test.
+
+
+def _pre_extraction_payload(config, manifest, folds=None, extra=None, data_dir=None) -> dict:
+    """`record_run`'s payload construction exactly as it read before the extraction."""
+    from datetime import datetime, timezone
+
+    from dehyd.config import config_to_dict
+    from dehyd.provenance import _git_info, _hash_inputs, _package_versions, fold_manifest
+
+    import os
+    import platform
+    import sys
+
+    now = datetime.now(timezone.utc)
+    git = _git_info()
+
+    payload = {
+        "timestamp_utc": now.isoformat(),
+        "config": config_to_dict(config),
+        "inputs": _hash_inputs(config, manifest, data_dir=data_dir),
+        "manifest": {
+            "n_frames": int(len(manifest)),
+            "n_subjects": int(manifest["subject"].nunique()),
+            "n_sessions": int(manifest.groupby(["subject", "session_idx"]).ngroups),
+        },
+        "folds": fold_manifest(folds),
+        "git": git,
+        "packages": _package_versions(),
+        "device": config.run.device,
+        "seed": config.run.seed,
+        "seed_set": list(config.run.seed_set),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "platform": {
+            "python": sys.version.split()[0],
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+        },
+    }
+    if extra:
+        payload["extra"] = extra
+    return payload
+
+
+@pytest.mark.parametrize("extra", [None, {"note": "smoke"}])
+@pytest.mark.parametrize("with_folds", [True, False])
+def test_build_provenance_payload_equals_the_pre_extraction_body(setup, extra, with_folds):
+    from dehyd.provenance import build_provenance_payload
+
+    config, manifest, folds = setup
+    folds = folds if with_folds else None
+    built = build_provenance_payload(config, manifest, folds, extra=extra)
+    pinned = _pre_extraction_payload(config, manifest, folds, extra=extra)
+    # only the wall clock may differ between two constructions of the same payload
+    assert built.pop("timestamp_utc") != ""
+    pinned.pop("timestamp_utc")
+    assert built == pinned
+
+
+def test_record_run_writes_exactly_the_built_payload_in_the_canonical_form(setup):
+    """The extraction is only byte-neutral if `record_run` still writes THIS payload with
+    THIS serialization — indent 2, sorted keys, one trailing newline."""
+    from dehyd.provenance import build_provenance_payload
+
+    config, manifest, folds = setup
+    out = record_run(config, manifest, folds, extra={"note": "smoke"})
+    text = out.read_text(encoding="utf-8")
+    written = json.loads(text)
+    assert text == json.dumps(written, indent=2, sort_keys=True) + "\n"
+
+    built = build_provenance_payload(config, manifest, folds, extra={"note": "smoke"})
+    written.pop("timestamp_utc")
+    built.pop("timestamp_utc")
+    assert written == built
+
+
+def test_run_directory_stamp_comes_from_the_payloads_own_timestamp(setup):
+    """One clock reading, not two: the directory name and `timestamp_utc` must describe the
+    same instant, or a run's record and its location could disagree."""
+    from datetime import datetime
+
+    from dehyd.provenance import RUN_STAMP_FORMAT
+
+    config, manifest, folds = setup
+    out = record_run(config, manifest, folds)
+    stamp = out.parent.name.split("_")[0]
+    payload_stamp = datetime.fromisoformat(load(out)["timestamp_utc"]).strftime(RUN_STAMP_FORMAT)
+    assert stamp == payload_stamp
+
+
 def test_env_dirty_parsing(monkeypatch):
     from dehyd.provenance import _env_dirty
 

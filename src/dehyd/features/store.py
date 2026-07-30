@@ -30,9 +30,20 @@ import numpy as np
 from ..config import Config, config_to_dict
 from ..provenance import _git_info, sha256_file
 
-STORE_VERSION = 1
+STORE_VERSION = 2
 POOLING_CONTRACT_VERSION = "pool_stats_v1"  # bump if the pooling element order ever changes
 FRAME_SELECTION = "qc_pass_frames_of_eligible_sessions"
+
+# Schema v2 (milestone 9): the per-frame SIGNAL arrays Experiment D consumes, stored in the
+# same canonical QC-passed frame order as the raw WST tensors. They are kept UNSTANDARDIZED
+# where the frozen input definition says "raw" — the physics baseline's power ratio is an
+# absolute-magnitude quantity that a robust z would destroy (MILESTONE_9_PLAN §5 trap 13).
+# The names are also written in `models/cnn.py::FRAME_INPUT` and
+# `eval/exp_d.py::PHYSICS_SIGNAL_KEY`; the two sources are cross-checked by test, never
+# derived from each other.
+SIG_RAW_BEAT_10GHZ = "sig__raw_beat"        # [N, 534] complex128
+SIG_RAW_SLOWTIME_77GHZ = "sig__raw_slowtime"  # [N, 256] float64
+SIG_MATCHED_IQ = "sig__matched_iq"          # 10 GHz [N, 2, 470]; 77 GHz [N, 2, 256]; float64
 
 
 class StoreError(RuntimeError):
@@ -221,6 +232,63 @@ def assert_clean_tree() -> None:
         raise StoreError("refusing to build a feature store with no git commit recorded")
 
 
+def session_signals_10ghz(sub: np.ndarray, config: Config) -> dict:
+    """The two 10 GHz Exp D signal arrays for one session's SELECTED frames.
+
+    `sub` is `cube[:, :, frame_ids]` — the QC-passed frames in canonical order — so both
+    outputs are row-aligned with `frame_ids` and with the raw WST tensors built from the
+    same `sub`.
+
+      * `sig__raw_beat` — the chirp mean (`reduce_option_a`) of the **raw, ungated** frame:
+        no bandpass, no EdgeTrim, no standardization, 534 complex samples. This is the
+        frozen "raw beat" input of baseline (i) *and* the physics baseline's input
+        (`implementation_plan.md:891-896`, `:921-935`); the physics power ratio needs
+        absolute magnitudes, which is why nothing is normalized here.
+      * `sig__matched_iq` — literally `preprocess_cube(..., reduction="a", channel="iq")` at
+        the DEFAULT model gate, i.e. the same bandpassed/trimmed/robust-standardized
+        470-sample I/Q signal the WST chain consumes (`:902-904`). One definition, two
+        consumers: the CNN ablation reads this array untouched.
+    """
+    from ..preprocess.pipeline import preprocess_cube
+    from ..preprocess.reduce import reduce_option_a
+
+    raw_beat = np.stack(
+        [reduce_option_a(sub[:, :, i]) for i in range(sub.shape[2])]
+    ).astype(np.complex128)
+    matched = preprocess_cube(sub, config.preprocess, reduction="a", channel="iq")
+    return {
+        SIG_RAW_BEAT_10GHZ: raw_beat,
+        SIG_MATCHED_IQ: np.asarray(matched, dtype=np.float64),
+    }
+
+
+def session_signals_77ghz(cube: np.ndarray, config: Config) -> dict:
+    """The two 77 GHz Exp D signal arrays for one session's eligible-frame cube
+    ([N, n_fast, n_chirp, n_rx] — the caller has already selected the frames).
+
+      * `sig__raw_slowtime` — A-M6-2 (i): a plain mean over the 256 fast-time bins and the
+        16 Rx of the RAW real cube, leaving the one axis the band's design rests on (chirp /
+        slow time). Unstandardized, for the same physics-baseline reason as 10 GHz.
+      * `sig__matched_iq` — A-M6-2 (i-ablation): chain steps 1-5 (`preprocess_frame_77`),
+        the single fixed representative **Rx 0**, mean over that Rx's 27 gate range bins,
+        as {real, imag}. Stored PRE-standardization: `models/cnn.py::matched_input_77`
+        applies the frozen robust per-channel z at load, and the physics path must never
+        see a standardized array.
+    """
+    from ..preprocess.pipeline_77 import preprocess_frame_77
+
+    cube = np.asarray(cube)
+    raw_slowtime = cube.mean(axis=(1, 3)).astype(np.float64)
+    matched = []
+    for i in range(cube.shape[0]):
+        gate_mean = preprocess_frame_77(cube[i], config.preprocess77)[:, :, 0].mean(axis=0)
+        matched.append(np.stack([gate_mean.real, gate_mean.imag]))
+    return {
+        SIG_RAW_SLOWTIME_77GHZ: raw_slowtime,
+        SIG_MATCHED_IQ: np.asarray(np.stack(matched), dtype=np.float64),
+    }
+
+
 def build_session_npz_10ghz(cube: np.ndarray, frame_ids, config: Config) -> dict:
     """Package one 10 GHz session's store arrays: per gate x reduction x channel x tiling the
     off/frozen pooled session vectors, the raw pre-log tensor, the pre-log scales, and the
@@ -245,6 +313,7 @@ def build_session_npz_10ghz(cube: np.ndarray, frame_ids, config: Config) -> dict
                     npz[raw_key(gi, r, c, ti)] = res.raw[ti]["S"]
                     npz[prelog_key(gi, r, c, ti)] = np.asarray(res.prelog_scale[ti], dtype=float)
                     npz[order_key(ti)] = res.raw[ti]["order"]
+    npz.update(session_signals_10ghz(sub, config))   # schema v2: the Exp D per-frame signals
     return npz
 
 
@@ -265,6 +334,7 @@ def build_session_npz_77ghz(cube: np.ndarray, config: Config) -> dict:
         npz[raw77_key(ti)] = res.raw[ti]["S"]
         npz[prelog77_key(ti)] = np.asarray(res.prelog_scale[(ti, fusion)], dtype=float)
         npz[order_key(ti)] = res.raw[ti]["order"]
+    npz.update(session_signals_77ghz(cube, config))  # schema v2: the Exp D per-frame signals
     return npz
 
 

@@ -187,26 +187,22 @@ def _hash_inputs(config, manifest, data_dir=None) -> dict:
     }
 
 
-def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir=None) -> Path:
-    """Write provenance.json for this run and return its path.
+def build_provenance_payload(config, manifest, folds=None, extra: dict | None = None,
+                             data_dir=None) -> dict:
+    """The provenance record for one run, as a dict — everything `record_run` writes.
 
-    Output goes to results_dir/runs/<stamp>_<git-shortrev>/provenance.json. If that
-    file already exists the call raises rather than overwriting: repeated runs must
-    never silently clobber the record of an earlier one.
+    Public (M9): the sanctioned exploratory frame-split path may not create a
+    `results_dir/runs/<stamp>_<rev>/` directory at all, so it cannot call `record_run` —
+    but it must still record the SAME provenance, from the same builder, rather than
+    re-deriving one out of private helpers that could drift (plan §2.10, C21). Factoring
+    this out is behaviour-neutral: `record_run` now calls it and writes the result, and the
+    clock/git reading happens once here, so the run directory's stamp and the payload's
+    `timestamp_utc` describe the same instant.
 
     `data_dir` selects which data root the manifest's rel_paths hash against; it defaults
-    to the 10 GHz root, and 77 GHz entrypoints pass require_77ghz_dir(config).
+    to the 10 GHz root, and 77 GHz callers pass require_77ghz_dir(config).
     """
     now = datetime.now(timezone.utc)
-    git = _git_info()
-    short_rev = (git["commit"] or "nogit")[:8]
-
-    run_dir = Path(config.paths.results_dir) / "runs" / f"{now.strftime(RUN_STAMP_FORMAT)}_{short_rev}"
-    out_path = run_dir / "provenance.json"
-    if out_path.exists():
-        raise ProvenanceError(f"provenance already exists, refusing to overwrite: {out_path}")
-    run_dir.mkdir(parents=True, exist_ok=True)
-
     payload = {
         "timestamp_utc": now.isoformat(),
         "config": config_to_dict(config),
@@ -217,7 +213,7 @@ def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir
             "n_sessions": int(manifest.groupby(["subject", "session_idx"]).ngroups),
         },
         "folds": fold_manifest(folds),
-        "git": git,
+        "git": _git_info(),
         "packages": _package_versions(),
         "device": config.run.device,
         "seed": config.run.seed,
@@ -232,6 +228,28 @@ def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir
     }
     if extra:
         payload["extra"] = extra
+    return payload
+
+
+def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir=None) -> Path:
+    """Write provenance.json for this run and return its path.
+
+    Output goes to results_dir/runs/<stamp>_<git-shortrev>/provenance.json. If that
+    file already exists the call raises rather than overwriting: repeated runs must
+    never silently clobber the record of an earlier one.
+
+    `data_dir` selects which data root the manifest's rel_paths hash against; it defaults
+    to the 10 GHz root, and 77 GHz entrypoints pass require_77ghz_dir(config).
+    """
+    payload = build_provenance_payload(config, manifest, folds, extra=extra, data_dir=data_dir)
+    now = datetime.fromisoformat(payload["timestamp_utc"])
+    short_rev = (payload["git"]["commit"] or "nogit")[:8]
+
+    run_dir = Path(config.paths.results_dir) / "runs" / f"{now.strftime(RUN_STAMP_FORMAT)}_{short_rev}"
+    out_path = run_dir / "provenance.json"
+    if out_path.exists():
+        raise ProvenanceError(f"provenance already exists, refusing to overwrite: {out_path}")
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     # sort_keys so byte-identical inputs give byte-identical JSON and diffs are useful.
     out_path.write_text(
