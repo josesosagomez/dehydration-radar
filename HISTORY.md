@@ -4,6 +4,72 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 9.6 unblocked and half done: 10 GHz store rebuilt as v2 (73 sessions, `--validate` clean); 77 GHz producer proven on one real session; both bands' IBEX stores still owner-run.
+
+Supersedes the BLOCKED entry two below. The owner confirmed the Codex review pass was finished and
+asked for the pending Exp D follow-up to be committed, which discharges the trap-18 freeze
+violation that stopped this step.
+
+**The commit that the stores now attest.** The follow-up was certified before committing, on a tree
+re-checked as static (no python processes; every touched file's mtime — 04:06 to 04:12 — predating
+the 04:15 run start, so the torn-tree failure of step 9.5 could not repeat): **full suite 1141
+passed, 16 skipped, 0 failed in 879.80 s**, `git diff --exit-code tests/test_no_leakage.py` clean.
+Ten tests more than step 9.5's 1131 — the follow-up's own corruption regressions. Committed as
+`a296e29`, which **supersedes `4b3d1bb` as the M9 analysis commit** for every store and run.
+
+**10 GHz: rebuilt, and it was not the store anyone thought was there.** Built locally rather than on
+IBEX, which `extract10.sbatch:11` itself sanctions ("the store build works fine locally, ~30 s/
+session"; the array exists for parallelism and to keep ~5 GB off the local disk), and which
+converts D6's 10 GHz half from an unexercised producer into a measured one before an 80-task
+array is spent on it. Result: **73 sessions**, 101 arrays each, `--validate` clean —
+
+    validate : 10ghz store OK — 73 sessions match this config/commit
+
+The stale store it replaced held **24** sessions at `store_version: 1` / commit `b6a72c8` (M7).
+That gap is worth recording: a 24-session local store was never the eligible 10 GHz cohort, so
+anything run locally against it was running on a third of the data. The v1→v2 bump would have
+caught it regardless — see the fail-closed evidence in the entry below — but the size difference
+was invisible until the rebuild.
+
+v2 contents verified against §2.9's literal spec rather than assumed from a green exit code, on
+`s1_10am` (98 QC-passed frames): `sig__raw_beat` `(98, 534) complex128` and `sig__matched_iq`
+`(98, 2, 470) float64`, both matching the frozen shapes/dtypes, and both row-counts equal to the
+sidecar's `n_frames` and to all 24 `raw__*` WST tensors — the frame-order alignment §2.9 requires.
+All 73 sidecars carry `store_version: 2`, `git.commit: a296e29`, `dirty: false`.
+
+**77 GHz: producer proven, store not built.** A full local rebuild is not feasible — 22 GB across
+80 files through the heavy `preprocess_frame_77` chain, which is exactly why `extract77.sbatch` is
+a 2 h × 80-task array. Instead the v2 producer was exercised on one real session in shard mode
+(`--subject 1 --session 8am`), where the manifest is filtered before QC so the task loads only its
+own file. It had only ever run on fixtures. `s1_8am`, 125 frames: `sig__raw_slowtime`
+`(125, 256) float64` and `sig__matched_iq` `(125, 2, 256) float64` — both exactly §2.9's spec,
+row-aligned with the 3 `raw__*` tensors, `store_version: 2` at `a296e29`. **The resulting
+`results/features/77ghz/` is a one-session smoke artifact, not a store**; a future session must not
+mistake it for one. It cannot back an analysis by accident: `validate_store` fails closed on the
+first missing session, so a partial store is structurally unusable.
+
+**What is still open, and why it is not codeable.** The full-cohort runs (steps 11-13) read the
+stores under `configs/ibex.yaml`'s `/ibex/user/<user>/dehyd/results`, so **both bands must still be
+built on IBEX by the owner** — this session has no ssh (blocked at the tool layer, matching
+`scripts/ibex/README.md:3`, "Claude has no ssh; the owner runs these"). The local 10 GHz store does
+not substitute for the IBEX one; it is a correctness gate and a local-smoke enabler.
+
+**The commit-ordering rule this step re-derived.** The M8 `e88fd33` lesson has a sharper form than
+trap 18 states. Trap 18 says code changes after 9.5 invalidate the stores and that journal files may
+still merge — but `_check_match` compares commit hashes by strict equality, so a **journal-only**
+commit invalidates a built store for local runs exactly as a code commit does (this is what M8
+recorded when its stores landed at `30c6d907`, one journal-only commit after `81cec63`). The
+operative rule is therefore ordering, not file type: **land every commit first, build the store
+last.** Hence this entry is committed *before* the 10 GHz store is rebuilt from the commit carrying
+it; the build that stands is the one attesting that commit, and `--validate` is re-run against it.
+On IBEX the question does not arise the same way: `submit_ibex.sh` exports `DEHYD_GIT_COMMIT` at
+submit time and the copied-tree path stamps `REVISION` once, so later local commits cannot move the
+revision an IBEX store/run pair agrees on.
+
+**Next.** Owner submits `extract10.sbatch` and `extract77.sbatch` on IBEX from the final commit and
+`--validate`s both bands; then step 10's smokes. The literal command sequence is in the BLOCKED
+entry below and unchanged.
+
 ## 2026-07-31 — M9 step 8 follow-up: merged-artifact and M7-reference validation hardened. Succeeded.
 
 The step-8 implementation review found four fail-open validation gaps and the owner asked for
