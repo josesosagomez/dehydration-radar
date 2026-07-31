@@ -4,6 +4,83 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 9.6 BLOCKED, not attempted: the step-9.5 freeze was broken by an uncommitted Exp D follow-up. The v2 fail-closed half of D6 verified locally in the meantime.
+
+Step 9.6 rebuilds both feature stores from the step-9.5 commit and `--validate`s them. It was not
+run, because its one precondition — a clean tree at the commit the stores must attest — does not
+hold, and the correct response to that is to stop rather than to build stores that trap 18 would
+immediately invalidate.
+
+**The state found.** HEAD is `4b3d1bb` (step 9.5, committed 03:50:14). At 04:06 the working tree
+acquired 285 uncommitted lines of **source** across `src/dehyd/eval/exp_d.py` (+191) and
+`tests/test_exp_d.py` (+114), written by a concurrent Codex review session (`pytest` processes
+under `C:\Users\josemsosag\.codex\...`, running at 04:07 and exited by 04:10). The session-start
+git snapshot recorded a clean tree, so the edits landed inside this session's window — the same
+concurrency that already cost step 9.5 one discarded suite run. Content, read for the record: a
+step-8 follow-up hardening the Exp D artifact layer — `_prediction_matrix` gains empty-input,
+non-finite, negative-frame-count and seed-invariant-metadata checks and a `seen` mask instead of
+NaN sentinels; new `_prediction_subject_by_fold`/`_selection_subject_by_fold` make the
+fold→subject mapping an agreement check between predictions and selection at both write and load;
+`load_family_artifacts` now recomputes the per-subject CSV rather than trusting it; the shard
+validator checks `test_subject` and the `selection` block; and the M7 reference `provenance.json`
+becomes mandatory in `load_exp_a_radar` instead of optional (O-M9-5). Green in isolation:
+`tests/test_exp_d.py` → **112 passed** in 38 s.
+
+**Why this blocks the step rather than merely delaying it.** Three independent gates, each doing
+its job:
+
+1. `store.assert_clean_tree()` (store.py:218) — both producers call it before writing a byte;
+   a dirty tree raises `StoreError` outright. `extract_features.py --validate` skips it (validation
+   is read-only), but the *build* cannot start.
+2. `scripts/ibex/submit_ibex.sh:26` — `git status --porcelain` non-empty ⇒ refuse to submit.
+3. §5 trap 18, the substantive one: the pending diff will land as a commit, and any commit after
+   9.5 moves the revision that `validate_store`'s commit-match requires. Stores built at `4b3d1bb`
+   today would be invalid the moment that follow-up is committed, and the remedy is a second
+   rebuild from the fix commit — never a waiver. Building now would buy exactly one wasted
+   IBEX array per band.
+
+Not fixed here on purpose: committing another session's in-flight work under a step-9.6 label is
+the move step 9.5 already refused, and reverting it would destroy work that is green. The tree had
+settled (no python processes, mtimes static) before this entry was written, so the decision is the
+owner's: certify and commit the follow-up, then run 9.6 from *that* commit.
+
+**What was verified, since it needed no rebuild.** D6's second half — "v1 stores fail closed" — is
+now proven against a real v1 store rather than a fixture. The local 10 GHz store
+(`results/features/10ghz`, 24 sessions, 1.7 GB) carries `store_version: 1` and
+`git.commit: b6a72c8` (the M7 revision) in every one of its 24 sidecars. Running
+`extract_features.py --config configs/exp_a_regression.yaml --band 10ghz --validate` against the
+M9 code raises on the first session:
+
+    StoreError: stale/mismatched store at 10ghz 1/10am: store_version is 1, expected 2
+    — refusing to run (fail-closed)
+
+`store_version` is checked in `_check_match`'s first loop, ahead of the commit comparison, so the
+v1→v2 bump alone is what closes the door — which is the §2.9 intent ("the `store_version` bump
+makes every v1 store fail closed"). No 77 GHz store exists locally to test the same way; both
+bands' full-cohort stores live on IBEX.
+
+**Who runs the rebuild.** Not this session: `scripts/ibex/README.md:3` is explicit ("Claude has no
+ssh; the owner runs these"), and the M8 step-8.6 precedent is the same. The literal sequence, once
+the tree is clean and committed — from `scripts/ibex/extract10.sbatch:14-18` and
+`extract77.sbatch:13-17`, both re-read rather than recalled:
+
+    # git checkout on IBEX
+    scripts/ibex/submit_ibex.sh scripts/ibex/extract10.sbatch      # --array=0-79, 4 cpus, 16G, 1 h
+    scripts/ibex/submit_ibex.sh scripts/ibex/extract77.sbatch      # --array=0-79, 4 cpus, 16G, 2 h
+    # copied tree (no .git): git rev-parse HEAD > REVISION, copy, then sbatch the two directly
+    # then, both bands:
+    uv run python experiments/extract_features.py --config configs/exp_a_regression.yaml \
+        --config configs/ibex.yaml --band 10ghz --validate
+    uv run python experiments/extract_features.py --config configs/exp_a_regression_77ghz.yaml \
+        --config configs/ibex.yaml --band 77ghz --validate
+
+Note the copied-tree branch re-stamps `REVISION` — the file step 9.5 deliberately cleared locally.
+That is correct there and only there: on IBEX `REVISION` *is* the provenance source, which is also
+why `test_git_degrades_to_none_without_env` still fails on IBEX (step 9.5's open item, unchanged).
+
+**Next.** Owner decides on the pending Exp D follow-up; 9.6 re-runs from the resulting commit. No
+store is built, and no further step starts, until then.
+
 ## 2026-07-31 — M9 step 9.5 done: clean M9 implementation commit on `v1_milestone9`; stale `REVISION` cleared. Full suite green (1131 passed, 16 skipped, 0 failed).
 
 Owner-triggered, per plan §1 row 9.5. This is the commit `validate_store` will require the step-9.6
