@@ -4,6 +4,51 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 9.6 DONE: both IBEX feature stores rebuilt as v2 at `4599ef3` and `--validate`-clean — 73 sessions (10 GHz) / 72 (77 GHz). D6 closed.
+
+Completes the step the two entries below opened. The owner ran both extraction arrays on IBEX and
+both bands validated:
+
+    validate : 10ghz store OK — 73 sessions match this config/commit
+    validate : 77ghz store OK — 72 sessions match this config/commit
+
+**Why those two numbers are the right ones.** Checked against the frozen cohort rather than
+accepted because the command exited 0: **73 sessions / 16 subjects at 10 GHz and 72 / 16 at
+77 GHz** is exactly the eligible cohort M5's IBEX QC pass established (90.4% frame survival,
+72/80 sessions eligible, zero flatline — entry of 2026-07-24) and exactly what Exp A and Exp B ran
+on at M7/M8 (SECOND_CHAPTER.md:892; HISTORY 2026-07-26). The v2 rebuild therefore reproduces the
+same analysis cohort as the A/B results it will be compared against — no session silently gained
+or lost across the schema bump. The 10 GHz count also matches the local rebuild exactly (73),
+which is the independent cross-check that the two venues agree.
+
+**Store/run commit agreement on IBEX.** Both stores attest `4599ef3` via the copied-tree
+`REVISION` stamp, since the IBEX tree has no `.git` (the owner cannot use git there at all). The
+runs will read the same `REVISION`, so `validate_store`'s commit-match holds for steps 11-13
+without any further action — and, importantly, **local journal commits after this point cannot
+break it**, because they never touch the IBEX tree's `REVISION`. This is the asymmetry the entry
+below derived: locally the strict hash equality makes any commit invalidate a built store, while
+on IBEX the stamp pins the pair. The one live constraint is the converse: **re-syncing code to
+IBEX with a fresh `REVISION` invalidates both stores and forces a rebuild** (trap 18, never a
+waiver).
+
+**Deployment detail worth keeping.** The IBEX tree is a hand-copied subset — `src/`, `configs/`,
+`experiments/`, `scripts/`, `pyproject.toml`, `uv.lock` (~2.5 MB) under
+`/ibex/user/sosagojm/dehy_radar/`, with `REVISION` written by `echo` rather than
+`git rev-parse`, and `configs/ibex.yaml` rewritten in place with the real absolute paths (the
+committed file ships `<user>` placeholders and the folder name `dehyd`, which is not the owner's
+actual root `dehy_radar`). `submit_ibex.sh` is unusable there for the same reason it was at M8 —
+it shells out to git — so both arrays were submitted with bare `sbatch`, the copied-tree path the
+script headers document.
+
+**D6 is closed:** v2 built and `--validate`-clean for both bands from the M9 commit, and v1 stores
+fail closed (proven earlier against the real 24-session v1 store, entry below). Nothing else in §4
+changes.
+
+**Next: step 10** — the local synthetic suite is already green (1141 passed at `a296e29`), so what
+remains is the mechanism-only smokes: Exp C both bands and every Exp D family both bands at
+`--subset 6subjects` on CPU, plus one GPU array-task smoke per CNN family to size `ARRAY_TIME`
+before step 13's fold arrays.
+
 ## 2026-07-31 — M9 step 9.6 unblocked and half done: 10 GHz store rebuilt as v2 (73 sessions, `--validate` clean); 77 GHz producer proven on one real session; both bands' IBEX stores still owner-run.
 
 Supersedes the BLOCKED entry two below. The owner confirmed the Codex review pass was finished and
