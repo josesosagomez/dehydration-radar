@@ -1225,6 +1225,56 @@ def test_load_family_artifacts_refuses_a_metrics_json_that_no_longer_recomputes(
         load_family_artifacts(tmp_path, "10ghz", "physics")
 
 
+def test_load_family_artifacts_refuses_a_per_subject_csv_that_no_longer_recomputes(
+    store_10, fast_ci_config, tmp_path
+):
+    """All four advertised family artifacts are validated, not merely required to exist."""
+    store_dir, sessions = store_10
+    results = run_physics(fast_ci_config, "10ghz", sessions, store_dir)
+    paths = _write_cheap_family(fast_ci_config, "10ghz", "physics", results, tmp_path)
+
+    path = paths["per_subject"]
+    rows = list(csv.DictReader(path.open(encoding="utf-8")))
+    fieldnames = list(rows[0])
+    rows[0]["seed_averaged_session_mae"] = str(
+        float(rows[0]["seed_averaged_session_mae"]) + 999.0
+    )
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ExpDError, match="per_subject_physics_10ghz.csv.*does not recompute"):
+        load_family_artifacts(tmp_path, "10ghz", "physics")
+
+
+@pytest.mark.parametrize(
+    "field, changed_value",
+    [
+        ("y_true_delta_m_pct", "12345.0"),
+        ("fold_id", "1"),
+        ("n_frames_aggregated", "99"),
+    ],
+)
+def test_prediction_matrix_refuses_session_metadata_that_changes_between_seeds(
+    field, changed_value
+):
+    rows = [
+        {
+            "fold_id": "0", "subject": "1", "session_idx": "0", "seed": "1",
+            "y_true_delta_m_pct": "-0.5", "y_pred": "-0.4", "n_frames_aggregated": "3",
+        },
+        {
+            "fold_id": "0", "subject": "1", "session_idx": "0", "seed": "2",
+            "y_true_delta_m_pct": "-0.5", "y_pred": "-0.6", "n_frames_aggregated": "3",
+        },
+    ]
+    rows[1][field] = changed_value
+
+    with pytest.raises(ExpDError, match=field):
+        exp_d._prediction_matrix(rows)
+
+
 def test_load_family_artifacts_refuses_a_selection_budget_that_is_not_its_own_median(
     tmp_path, fast_ci_config
 ):
@@ -1252,6 +1302,26 @@ def test_load_family_artifacts_refuses_a_selection_budget_that_is_not_its_own_me
 
     with pytest.raises(ExpDError, match="epoch budget"):
         load_family_artifacts(tmp_path, "77ghz", "cnn1d_raw")
+
+
+def test_load_family_artifacts_refuses_a_selection_fold_mapped_to_the_wrong_subject(
+    store_10, fast_ci_config, tmp_path
+):
+    store_dir, sessions = store_10
+    results = run_physics(fast_ci_config, "10ghz", sessions, store_dir)
+    paths = _write_cheap_family(fast_ci_config, "10ghz", "physics", results, tmp_path)
+
+    path = paths["selection"]
+    rows = list(csv.DictReader(path.open(encoding="utf-8")))
+    fieldnames = list(rows[0])
+    rows[0]["test_subject"] = rows[1]["test_subject"]
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ExpDError, match="fold-to-subject mapping"):
+        load_family_artifacts(tmp_path, "10ghz", "physics")
 
 
 # ------------------------------------------------------ the CNN fold-array shard/merge
@@ -1434,7 +1504,8 @@ def test_merge_distinguishes_a_noop_marker_from_a_missing_shard(tmp_path):
 @pytest.mark.parametrize(
     "field, value",
     [("analysis_commit", "deadbeef"), ("config_hash", "other"), ("band", "10ghz"),
-     ("family", "spec2d_raw"), ("fold_id", 3), ("run_group_id", "somewhere_else")],
+     ("family", "spec2d_raw"), ("fold_id", 3), ("run_group_id", "somewhere_else"),
+     ("test_subject", 2)],
 )
 def test_every_lineage_mismatch_field_is_rejected_by_name(tmp_path, field, value):
     frames = _tiny_frames()
@@ -1447,6 +1518,23 @@ def test_every_lineage_mismatch_field_is_rejected_by_name(tmp_path, field, value
     path.write_text(json.dumps(shard, indent=2, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(ExpDError, match=field):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+@pytest.mark.parametrize("field, value", [("fold_id", 3), ("test_subject", 2)])
+def test_a_shards_selection_row_must_match_its_authoritative_fold(
+    tmp_path, field, value
+):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    path = run_dir / "exp_d_cnn1d_raw_77ghz_fold0.json"
+    shard = json.loads(path.read_text(encoding="utf-8"))
+    shard["selection"][field] = value
+    path.write_text(json.dumps(shard, indent=2, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ExpDError, match=rf"selection\.{field}"):
         merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
 
 
@@ -1535,6 +1623,21 @@ def test_a_csv_missing_one_seed_of_one_session_is_rejected_by_the_cross_product(
     )
 
     with pytest.raises(ExpDError, match="seed"):
+        merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
+
+
+def test_a_predictions_csv_with_the_wrong_fold_id_is_rejected(tmp_path):
+    frames = _tiny_frames()
+    run_dir = _init_group(tmp_path, frames)
+    _write_all_shards(run_dir, frames)
+
+    def change_fold(rows):
+        for row in rows:
+            row["fold_id"] = "1"
+        return rows
+
+    _rewrite_fold_predictions(run_dir, 0, change_fold)
+    with pytest.raises(ExpDError, match="fold_id"):
         merge_exp_d_folds("77ghz", "cnn1d_raw", run_dir)
 
 
@@ -1712,6 +1815,15 @@ def test_load_exp_a_radar_refuses_a_run_at_the_wrong_commit_or_config(
     )
     with pytest.raises(ExpDProtocolError, match="model_grid"):
         load_exp_a_radar("10ghz", wrong_config, m7, analysis_commit="c0ffee1234")
+
+
+def test_load_exp_a_radar_requires_the_m7_reference_provenance(tmp_path):
+    m7 = _write_exp_a_run(tmp_path / "m7_without_provenance", "10ghz")
+    m9 = _write_exp_a_run(tmp_path / "m9", "10ghz")
+    (m7 / "provenance.json").unlink()
+
+    with pytest.raises(ExpDProtocolError, match="M7 reference.*provenance.json"):
+        load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234")
 
 
 def test_summarize_exp_d_refuses_a_radar_input_without_the_bit_identity_precondition(

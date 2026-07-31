@@ -4,6 +4,49 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 8 follow-up: merged-artifact and M7-reference validation hardened. Succeeded.
+
+The step-8 implementation review found four fail-open validation gaps and the owner asked for
+all four fixes. This changes only validation and regression tests: no signal processing, LOSO
+split, model, seed, bootstrap, or statistical parameter changed.
+
+1. `load_family_artifacts` previously required `per_subject_<family>_<band>.csv` to exist but
+   never parsed it. It now recomputes and checks every subject's ordered per-seed session MAE,
+   seed-averaged session MAE, and session count against the predictions CSV, rejecting missing
+   or duplicate subject rows and non-finite values.
+2. `_prediction_matrix` previously overwrote session truth once per seed. It now tracks cells
+   independently of floating-point sentinel values, rejects non-finite truth/predictions and
+   negative frame counts, and requires `y_true_delta_m_pct`, `fold_id`, and
+   `n_frames_aggregated` to be identical across all seed rows for a session.
+3. Fold identity is now checked end to end. Artifact writing/loading derives the held-out subject
+   from prediction rows and requires an exact match to the one-row-per-fold selection table;
+   prediction folds must be LOSO (one subject per fold and one fold per subject). Shard merge also
+   checks top-level `test_subject`, `selection.fold_id`, `selection.test_subject`, and every
+   prediction row's `fold_id` and held-out subject against the authoritative census.
+4. `load_exp_a_radar` now requires the M7 reference's `provenance.json`; a bare predictions file
+   can no longer satisfy O-M9-5 merely by matching bytes.
+
+Regression coverage mutates each formerly accepted field/file and proves rejection. The first
+test command failed before collection because bare `pytest` was not on this PowerShell session's
+PATH. Retrying with `.venv\Scripts\python.exe -m pytest` reached collection, but Windows denied
+pytest's default `%TEMP%\pytest-of-josemsosag` and repository cache directories; 3 fixture-free
+cases passed and 13 fixture setups errored. The successful runs therefore used an explicit
+writable `--basetemp` under the session scratch directory and `-p no:cacheprovider`:
+
+- focused corruption regressions: **16 passed / 96 deselected**;
+- `tests/test_exp_d.py` plus `tests/test_run_baselines.py`: **130 passed**;
+- final post-adjustment split rerun: **112 passed** in `test_exp_d.py` and **18 passed** in
+  `test_run_baselines.py`;
+- frozen invariants and supporting contracts
+  (`test_no_leakage.py`, `test_m9_pin.py`, `test_metrics.py`, `test_provenance.py`):
+  **90 passed / 1 skipped**.
+
+The only warnings were the existing unrecognized pytest `cache_dir` option and joblib's
+physical-core-count fallback. `tests/test_no_leakage.py` was not edited. Because this follow-up
+lands after the step-9.5 clean implementation checkpoint, its commit supersedes that analysis
+commit; any v2 feature store already built at step 9.6 must be rebuilt from the fix commit rather
+than accepted under stale provenance.
+
 ## 2026-07-31 — M9 step 9.6 BLOCKED, not attempted: the step-9.5 freeze was broken by an uncommitted Exp D follow-up. The v2 fail-closed half of D6 verified locally in the meantime.
 
 Step 9.6 rebuilds both feature stores from the step-9.5 commit and `--validate`s them. It was not
@@ -4391,4 +4434,3 @@ implementation-ready."
 **Outcome:** success (planning). **Next:** milestone 1 — repo scaffold, config system,
 manifest + nested-LOSO splitter + provenance, and `tests/test_no_leakage.py` green
 before any modeling.
-

@@ -1227,33 +1227,103 @@ def _write_csv(path, columns, rows) -> None:
 def _prediction_matrix(rows):
     """Canonical session rows + a (n_seeds, n_sessions) prediction matrix.
 
-    Fails closed on a duplicated or missing (session, seed) cell rather than quietly
-    reshaping around it — an incomplete matrix would silently change every seed-collapse.
+    Fails closed on duplicated/missing cells and on session metadata that changes between
+    seeds. An incomplete grid or seed-dependent truth/fold/frame count would silently change
+    every seed collapse.
     """
+    if not rows:
+        raise ExpDError("the predictions table is empty")
+
     seeds = sorted({int(r["seed"]) for r in rows})
     sessions = sorted({(int(r["subject"]), int(r["session_idx"])) for r in rows})
     session_at = {key: i for i, key in enumerate(sessions)}
     seed_at = {seed: k for k, seed in enumerate(seeds)}
 
     truth = np.full(len(sessions), np.nan)
+    fold_ids = np.full(len(sessions), -1, dtype=int)
+    n_frames = np.full(len(sessions), -1, dtype=int)
+    session_seen = np.zeros(len(sessions), dtype=bool)
     predictions = np.full((len(seeds), len(sessions)), np.nan)
+    prediction_seen = np.zeros((len(seeds), len(sessions)), dtype=bool)
     for row in rows:
-        i = session_at[(int(row["subject"]), int(row["session_idx"]))]
+        session = (int(row["subject"]), int(row["session_idx"]))
+        i = session_at[session]
         k = seed_at[int(row["seed"])]
-        if not math.isnan(predictions[k, i]):
+        truth_value = float(row["y_true_delta_m_pct"])
+        prediction_value = float(row["y_pred"])
+        fold_id = int(row["fold_id"])
+        frame_count = int(row["n_frames_aggregated"])
+        if not math.isfinite(truth_value) or not math.isfinite(prediction_value):
+            raise ExpDError(
+                f"non-finite truth or prediction for subject {session[0]} session "
+                f"{session[1]} seed {row['seed']}"
+            )
+        if frame_count < 0:
+            raise ExpDError(
+                f"negative n_frames_aggregated for subject {session[0]} session {session[1]}"
+            )
+        if prediction_seen[k, i]:
             raise ExpDError(
                 f"duplicate prediction row for subject {row['subject']} session "
                 f"{row['session_idx']} seed {row['seed']}"
             )
-        predictions[k, i] = float(row["y_pred"])
-        truth[i] = float(row["y_true_delta_m_pct"])
-    if np.isnan(predictions).any():
-        missing = [(sessions[i], seeds[k]) for k, i in zip(*np.nonzero(np.isnan(predictions)))]
+        prediction_seen[k, i] = True
+        predictions[k, i] = prediction_value
+
+        if session_seen[i]:
+            for field_name, expected, found in (
+                ("y_true_delta_m_pct", truth[i], truth_value),
+                ("fold_id", fold_ids[i], fold_id),
+                ("n_frames_aggregated", n_frames[i], frame_count),
+            ):
+                if found != expected:
+                    raise ExpDError(
+                        f"inconsistent {field_name} across seeds for subject {session[0]} "
+                        f"session {session[1]} (expected {expected}, found {found})"
+                    )
+        else:
+            session_seen[i] = True
+            truth[i] = truth_value
+            fold_ids[i] = fold_id
+            n_frames[i] = frame_count
+
+    if not prediction_seen.all():
+        missing = [(sessions[i], seeds[k])
+                   for k, i in zip(*np.nonzero(~prediction_seen))]
         raise ExpDError(
             f"the predictions are not a complete session x seed grid — missing {missing[:5]}"
         )
     return (np.array([s for s, _ in sessions], dtype=int),
             np.array([i for _, i in sessions], dtype=int), truth, predictions, seeds)
+
+
+def _prediction_subject_by_fold(rows, source) -> dict:
+    """Derive the held-out subject for each fold from prediction rows."""
+    subjects_by_fold = {}
+    for row in rows:
+        fold_id, subject = int(row["fold_id"]), int(row["subject"])
+        previous = subjects_by_fold.setdefault(fold_id, subject)
+        if previous != subject:
+            raise ExpDError(
+                f"{source} fold {fold_id} contains subjects {previous} and {subject}; "
+                "a LOSO fold must contain exactly one held-out subject"
+            )
+    if len(set(subjects_by_fold.values())) != len(subjects_by_fold):
+        raise ExpDError(
+            f"{source} maps multiple folds to the same held-out subject: {subjects_by_fold}"
+        )
+    return subjects_by_fold
+
+
+def _selection_subject_by_fold(rows, source) -> dict:
+    """Read a one-row-per-fold selection table without accepting duplicate folds."""
+    subjects_by_fold = {}
+    for row in rows:
+        fold_id, subject = int(row["fold_id"]), int(row["test_subject"])
+        if fold_id in subjects_by_fold:
+            raise ExpDError(f"{source} contains duplicate rows for fold {fold_id}")
+        subjects_by_fold[fold_id] = subject
+    return subjects_by_fold
 
 
 def _per_subject_session_mae(subjects, truth, predictions_by_seed) -> dict:
@@ -1287,12 +1357,23 @@ def write_family_artifacts(band, family, out_dir, *, prediction_rows, selection_
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    prediction_folds = sorted({int(r["fold_id"]) for r in prediction_rows})
-    selection_folds = sorted(int(r["fold_id"]) for r in selection_rows)
+    prediction_subjects = _prediction_subject_by_fold(
+        prediction_rows, f"{family} {band} predictions"
+    )
+    selection_subjects = _selection_subject_by_fold(
+        selection_rows, f"{family} {band} selection"
+    )
+    prediction_folds = sorted(prediction_subjects)
+    selection_folds = sorted(selection_subjects)
     if prediction_folds != selection_folds:
         raise ExpDError(
             f"{family} {band}: the predictions cover folds {prediction_folds} but the selection "
             f"table covers {selection_folds} — refusing to write an inconsistent family"
+        )
+    if prediction_subjects != selection_subjects:
+        raise ExpDError(
+            f"{family} {band}: fold-to-subject mapping differs between predictions "
+            f"{prediction_subjects} and selection {selection_subjects}"
         )
 
     subjects, _session_idx, truth, predictions, seeds = _prediction_matrix(prediction_rows)
@@ -1378,9 +1459,9 @@ def load_family_artifacts(run_dir, band, family) -> FamilyArtifacts:
 
     The comparison stage is not allowed to read a family that is incomplete or internally
     inconsistent, so the checks are here rather than in the caller: all four files present;
-    the metrics JSON's per-subject vector recomputes exactly from the predictions CSV; the
-    selection table's epoch budget is the median of the counts the row itself lists; the two
-    tables cover the same folds.
+    both per-subject summaries recompute exactly from the predictions CSV; session metadata is
+    seed-invariant; the selection table's epoch budget is the median of its own counts; and
+    predictions/selection/metrics agree on folds and held-out subjects.
     """
     run_dir = Path(run_dir)
     names = {
@@ -1398,6 +1479,9 @@ def load_family_artifacts(run_dir, band, family) -> FamilyArtifacts:
 
     prediction_rows = list(csv.DictReader((run_dir / names["predictions"]).open(encoding="utf-8")))
     selection_rows = list(csv.DictReader((run_dir / names["selection"]).open(encoding="utf-8")))
+    per_subject_rows = list(
+        csv.DictReader((run_dir / names["per_subject"]).open(encoding="utf-8"))
+    )
     metrics = json.loads((run_dir / names["metrics"]).read_text(encoding="utf-8"))
 
     subjects, session_idx, truth, predictions, seeds = _prediction_matrix(prediction_rows)
@@ -1414,20 +1498,68 @@ def load_family_artifacts(run_dir, band, family) -> FamilyArtifacts:
             f"session-MAE vector is {recorded} but the predictions give {recomputed}"
         )
 
-    prediction_folds = sorted({int(r["fold_id"]) for r in prediction_rows})
-    selection_folds = sorted(int(r["fold_id"]) for r in selection_rows)
+    recorded_per_subject = {}
+    for row in per_subject_rows:
+        subject = int(row["subject"])
+        if subject in recorded_per_subject:
+            raise ExpDError(f"{names['per_subject']} contains duplicate rows for subject {subject}")
+        per_seed = [float(value) for value in _parse_literal(row["per_seed_session_mae"])]
+        mean = float(row["seed_averaged_session_mae"])
+        n_sessions = int(row["n_sessions"])
+        if not math.isfinite(mean) or any(not math.isfinite(value) for value in per_seed):
+            raise ExpDError(f"{names['per_subject']} subject {subject} contains non-finite MAE")
+        recorded_per_subject[subject] = {
+            "per_seed": per_seed, "mean": mean, "n_sessions": n_sessions,
+        }
+    if set(recorded_per_subject) != set(per_subject):
+        raise ExpDError(
+            f"{names['per_subject']} covers subjects {sorted(recorded_per_subject)}, but "
+            f"{names['predictions']} covers {sorted(per_subject)}"
+        )
+    for subject, expected in per_subject.items():
+        found = recorded_per_subject[subject]
+        same_per_seed = (
+            len(found["per_seed"]) == len(expected["per_seed"])
+            and all(
+                math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+                for a, b in zip(found["per_seed"], expected["per_seed"])
+            )
+        )
+        if (
+            not same_per_seed
+            or not math.isclose(found["mean"], expected["mean"], rel_tol=1e-12, abs_tol=1e-12)
+            or found["n_sessions"] != expected["n_sessions"]
+        ):
+            raise ExpDError(
+                f"{names['per_subject']} subject {subject} does not recompute from "
+                f"{names['predictions']}: found {found}, expected {expected}"
+            )
+
+    prediction_subjects = _prediction_subject_by_fold(
+        prediction_rows, names["predictions"]
+    )
+    selection_subjects = _selection_subject_by_fold(
+        selection_rows, names["selection"]
+    )
+    prediction_folds = sorted(prediction_subjects)
+    selection_folds = sorted(selection_subjects)
     if prediction_folds != selection_folds or prediction_folds != sorted(metrics["fold_ids"]):
         raise ExpDError(
             f"Exp D family {family} ({band}) covers folds {prediction_folds} in "
             f"{names['predictions']}, {selection_folds} in {names['selection']} and "
             f"{sorted(metrics['fold_ids'])} in {names['metrics']} — they must agree exactly"
         )
+    if prediction_subjects != selection_subjects:
+        raise ExpDError(
+            f"Exp D family {family} ({band}) has fold-to-subject mapping "
+            f"{prediction_subjects} in {names['predictions']} but {selection_subjects} in "
+            f"{names['selection']} — they must agree exactly"
+        )
 
-    inner_score_by_fold, test_subject_by_fold = {}, {}
+    inner_score_by_fold = {}
     for row in selection_rows:
         fold_id = int(row["fold_id"])
         inner_score_by_fold[fold_id] = float(row["inner_score"])
-        test_subject_by_fold[fold_id] = int(row["test_subject"])
         counts = _parse_literal(row["selected_epoch_counts"])
         if row["epoch_budget"] not in ("", None) and counts:
             if int(row["epoch_budget"]) != epoch_budget_from(counts):
@@ -1444,7 +1576,7 @@ def load_family_artifacts(run_dir, band, family) -> FamilyArtifacts:
         predictions_by_seed=predictions, seeds=seeds,
         per_subject_mae={s: per_subject[s]["mean"] for s in per_subject},
         n_seeds_by_subject={s: len(per_subject[s]["per_seed"]) for s in per_subject},
-        fold_ids=prediction_folds, test_subject_by_fold=test_subject_by_fold,
+        fold_ids=prediction_folds, test_subject_by_fold=selection_subjects,
         inner_score_by_fold=inner_score_by_fold, metrics=metrics,
     )
 
@@ -1565,16 +1697,38 @@ def _validate_shard(shard, *, band, family, fold_id, run_group_id, analysis_comm
     check("run_group_id", run_group_id, shard.get("run_group_id"))
     check("analysis_commit", analysis_commit, shard.get("analysis_commit"))
     check("config_hash", config_hash, shard.get("config_hash"))
+    check("test_subject", census["test_subject"], shard.get("test_subject"))
 
     realized = shard.get("census") or {}
     for key in ("test_subject", "n_frame_rows", "n_session_rows", "frame_rows_sha256",
                 "session_rows_sha256", "seed_set"):
         check(key, census[key], realized.get(key))
 
+    selection = shard.get("selection")
+    if not isinstance(selection, dict):
+        raise ExpDError(
+            f"Exp D shard fold {fold_id} ({family}, {band}): selection is not a mapping"
+        )
+    check("selection.fold_id", int(fold_id), selection.get("fold_id"))
+    check("selection.test_subject", census["test_subject"], selection.get("test_subject"))
+
 
 def _validate_fold_predictions(rows, census, *, fold_id, family, band, deterministic) -> None:
     """The predictions CSV must recompute the fold's own session identities and be the exact
     `session identities x seed_set` cross product — no duplicates, no absences."""
+    found_fold_ids = sorted({int(r["fold_id"]) for r in rows})
+    if found_fold_ids != [int(fold_id)]:
+        raise ExpDError(
+            f"Exp D fold {fold_id} ({family}, {band}) predictions CSV: fold_id values are "
+            f"{found_fold_ids}, expected [{fold_id}]"
+        )
+    found_subjects = sorted({int(r["subject"]) for r in rows})
+    if found_subjects != [int(census["test_subject"])]:
+        raise ExpDError(
+            f"Exp D fold {fold_id} ({family}, {band}) predictions CSV: subjects are "
+            f"{found_subjects}, expected held-out subject {census['test_subject']}"
+        )
+
     identities = sorted({f"{int(r['subject'])}|{int(r['session_idx'])}" for r in rows})
     if _sha256_lines(identities) != census["session_rows_sha256"]:
         raise ExpDError(
@@ -1760,11 +1914,14 @@ def load_exp_a_radar(band, exp_a_run_dir, m7_reference_dir, *, analysis_commit) 
             f"commit {analysis_commit!r} — the comparison's radar side must be the M9 re-run"
         )
     reference_provenance = reference / "provenance.json"
-    if reference_provenance.is_file():
-        _assert_config_sections_match(
-            provenance.get("config") or {},
-            json.loads(reference_provenance.read_text(encoding="utf-8")).get("config") or {},
+    if not reference_provenance.is_file():
+        raise ExpDProtocolError(
+            f"the M7 reference dir {reference} has no provenance.json to validate (O-M9-5)"
         )
+    _assert_config_sections_match(
+        provenance.get("config") or {},
+        json.loads(reference_provenance.read_text(encoding="utf-8")).get("config") or {},
+    )
 
     predictions = run_dir / f"predictions_{band}.csv"
     reference_predictions = reference / f"predictions_{band}.csv"
