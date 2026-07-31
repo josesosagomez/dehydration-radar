@@ -96,9 +96,15 @@ FROZEN_BASELINE_WEIGHT_DECAYS = (0.0, 1e-4)
 # The frozen training protocol this path implements, literally and only.
 FROZEN_OPTIMIZER = "adam"
 FROZEN_LOSS = "mse"
+FROZEN_ADAM_BETAS = (0.9, 0.999)
+FROZEN_WEIGHT_INIT = "framework_default"
+FROZEN_BATCH_SIZE = 16
 FROZEN_FRAME_TO_SESSION = "median"
 FROZEN_CHECKPOINT_METRIC = "inner_val_session_mae"
 FROZEN_CHECKPOINT_DIRECTION = "minimize"
+FROZEN_RAW_MATCHED_STANDARDIZE = "robust_per_channel"
+FROZEN_SPECTROGRAM_STANDARDIZE = "train_only_per_frequency_mean_std"
+FROZEN_MATCHED_REFERENCE_RX_77GHZ = 0
 
 # Per-fit RNG derivation (plan §2.8, §5 trap 8). EVERY fit gets its own generator built from
 # this integer — a shared generator would make fit k's data order depend on fits 1..k-1, so a
@@ -153,16 +159,29 @@ def baseline_config_grid(model_grid) -> list[dict]:
 
 
 def require_frozen_training_protocol(baselines) -> None:
-    """The optimizer, loss, frame->session rule and checkpoint metric are frozen values, not
-    switches. This path implements exactly one of each, so a config that names a different
-    one must stop rather than be silently ignored."""
+    """Fail closed if a BaselineConfig field this path implements as a literal drifts.
+
+    `max_epochs` and early-stopping patience remain config-driven so the same code path can
+    run the sanctioned local smoke budget. Architecture/STFT literals are checked by
+    `cnn.assert_frozen_constants`; the fields below either change this training path
+    directly or describe an input rule the implementation would otherwise silently ignore.
+    """
     for name, frozen, configured in (
         ("optimizer", FROZEN_OPTIMIZER, baselines.optimizer),
         ("loss", FROZEN_LOSS, baselines.loss),
+        ("adam_betas", FROZEN_ADAM_BETAS, tuple(baselines.adam_betas)),
+        ("weight_init", FROZEN_WEIGHT_INIT, baselines.weight_init),
+        ("batch_size", FROZEN_BATCH_SIZE, baselines.batch_size),
         ("frame_to_session_aggregation", FROZEN_FRAME_TO_SESSION,
          baselines.frame_to_session_aggregation),
         ("checkpoint_metric", FROZEN_CHECKPOINT_METRIC, baselines.checkpoint_metric),
         ("checkpoint_direction", FROZEN_CHECKPOINT_DIRECTION, baselines.checkpoint_direction),
+        ("raw_matched_standardize", FROZEN_RAW_MATCHED_STANDARDIZE,
+         baselines.raw_matched_standardize),
+        ("spectrogram_standardize", FROZEN_SPECTROGRAM_STANDARDIZE,
+         baselines.spectrogram_standardize),
+        ("matched_reference_rx_index_77ghz", FROZEN_MATCHED_REFERENCE_RX_77GHZ,
+         baselines.matched_reference_rx_index_77ghz),
     ):
         if frozen != configured:
             raise ExpDProtocolError(
@@ -325,6 +344,25 @@ def epoch_budget_from(selected_epoch_counts) -> int:
     non-integral epoch count.
     """
     return int(np.median(np.asarray(selected_epoch_counts, dtype=float)))
+
+
+def cnn_config_score_statistics(scores_by_fold_and_seed) -> tuple[float, float]:
+    """Return (mean inner score, population std across inner-fold seed means).
+
+    The frozen stochastic-model rule first averages the fixed seeds *within each inner
+    fold*. The primary score is then the mean of those fold scores, and the final
+    tie-break is their inner-fold variance. Flattening the matrix before taking the std
+    would mix seed sensitivity into a quantity explicitly named `inner_fold_variance` and
+    can reverse an otherwise tied selection.
+    """
+    scores = np.asarray(scores_by_fold_and_seed, dtype=float)
+    if scores.ndim != 2 or scores.shape[0] == 0 or scores.shape[1] == 0:
+        raise ExpDError(
+            "CNN config scores must be a non-empty [inner_fold, seed] matrix, "
+            f"got shape {scores.shape}"
+        )
+    per_fold = scores.mean(axis=1)
+    return float(per_fold.mean()), float(per_fold.std(ddof=0))
 
 
 def _session_groups(frames: FramesD, rows) -> tuple[np.ndarray, np.ndarray]:
@@ -590,14 +628,15 @@ def run_cnn_family(config, band, family, fold, seeds, frames: FramesD, *,
     """One outer fold of one CNN family — the unit of work of the GPU fold array.
 
     Inner: the frozen 6 configs x the fold's inner folds x the seed set, each fit early-
-    stopping on the inner-val session MAE. Selection: per-config score = mean over (inner
-    fold x seed) of the best-checkpoint score, winner via `select_candidate` (one family, so
-    the simplicity and dimension rungs are constant and only the variance can break a
-    residual tie). Budget: the median over the winner's (inner fold x seed) selected epoch
-    counts — the seed dimension is IN the population, because batching makes every seed's
-    trajectory distinct (§5 trap 7). Refit: per seed, all outer-training frames, exactly the
-    budget, no early stopping and no validation subject; the held-out subject's frames are
-    aggregated to sessions by the median and each seed is scored separately.
+    stopping on the inner-val session MAE. Selection: average seeds within each inner fold,
+    then take the mean across fold scores; winner via `select_candidate` (one family, so the
+    simplicity and dimension rungs are constant and only the population std across those
+    fold scores can break a residual tie). Budget: the median over the winner's (inner fold
+    x seed) selected epoch counts — unlike the selection-variance rung, the seed dimension
+    is IN this population because batching makes every seed's trajectory distinct (§5 trap
+    7). Refit: per seed, all outer-training frames, exactly the budget, no early stopping
+    and no validation subject; the held-out subject's frames are aggregated to sessions by
+    the median and each seed is scored separately.
     """
     baselines = config.baselines
     require_frozen_training_protocol(baselines)
@@ -632,7 +671,9 @@ def run_cnn_family(config, band, family, fold, seeds, frames: FramesD, *,
     ]
 
     inner_results: list = []
-    scores_by_config: dict = {ci: [] for ci in range(len(grid))}
+    scores_by_config: dict = {
+        ci: [[] for _ in prepared_inner] for ci in range(len(grid))
+    }
     epochs_by_config: dict = {ci: [] for ci in range(len(grid))}
     for ci, params in enumerate(grid):
         for fj, inner, prepared in prepared_inner:
@@ -647,7 +688,7 @@ def run_cnn_family(config, band, family, fold, seeds, frames: FramesD, *,
                                         config_index=ci, inner_fold=fj, seed=seed),
                     device=device, val=prepared.val_bundle(),
                 )
-                scores_by_config[ci].append(outcome.val_score)
+                scores_by_config[ci][fj].append(outcome.val_score)
                 epochs_by_config[ci].append(outcome.n_epochs_selected)
                 inner_results.append(CnnInnerCell(
                     config_index=ci, lr=params["lr"], weight_decay=params["weight_decay"],
@@ -674,18 +715,21 @@ def run_cnn_family(config, band, family, fold, seeds, frames: FramesD, *,
                     ],
                 ))
 
-    per_config_scores = [
-        CandidateScore(
-            candidate_id=f"cfg{ci}_lr{params['lr']:g}_wd{params['weight_decay']:g}",
-            inner_val_mae=float(np.mean(scores_by_config[ci])),
-            # one family and one input size: the simplicity and dimension rungs are constant
-            # here and can never decide a comparison; the variance rung can.
-            simplicity_rank=0,
-            feature_dimension=feature_dimension,
-            inner_fold_variance=float(np.std(scores_by_config[ci], ddof=0)),
+    per_config_scores = []
+    for ci, params in enumerate(grid):
+        mean_score, fold_variance = cnn_config_score_statistics(scores_by_config[ci])
+        per_config_scores.append(
+            CandidateScore(
+                candidate_id=f"cfg{ci}_lr{params['lr']:g}_wd{params['weight_decay']:g}",
+                inner_val_mae=mean_score,
+                # one family and one input size: the simplicity and dimension rungs are
+                # constant here and can never decide a comparison; only the variance
+                # across inner-fold seed means can.
+                simplicity_rank=0,
+                feature_dimension=feature_dimension,
+                inner_fold_variance=fold_variance,
+            )
         )
-        for ci, params in enumerate(grid)
-    ]
     winner = select_candidate(per_config_scores)             # the single tie-break source
     ci_win = next(i for i, s in enumerate(per_config_scores) if s.candidate_id == winner.candidate_id)
     selected_epoch_counts = list(epochs_by_config[ci_win])

@@ -267,6 +267,34 @@ def test_arm_active_records_carry_the_base_family_and_arm_b_carries_none(config)
         assert set(dict(c.active)) == exp_c.REQUIRED_ACTIVE_KEYS_C["10ghz"]
 
 
+def test_fit_guard_binds_active_model_family_to_the_actual_wrapper(config, monkeypatch):
+    """A legal active value is not enough: it must name the regressor actually being fit."""
+    candidate = _authorized_arm_a_candidate(config)
+    bad_active = tuple(
+        (key, "ridge" if key == "model_family" else value)
+        for key, value in candidate.active
+    )
+    mismatched = dataclasses.replace(candidate, active=bad_active)
+
+    built = []
+
+    def forbidden_build(*args, **kwargs):
+        built.append((args, kwargs))
+        raise AssertionError("build_estimator must not be reached")
+
+    monkeypatch.setattr(harness, "build_estimator", forbidden_build)
+    with pytest.raises(ExpCProtocolError, match=r"active\.model_family"):
+        harness._fit_once(
+            mismatched,
+            np.zeros((1, 1)),
+            np.zeros((1, 2)),
+            np.array([True]),
+            0,
+            exp_c._before_fit_c(config, "a"),
+        )
+    assert built == []
+
+
 def test_stage1_reuses_exp_as_enumeration_with_the_family_swapped(config):
     """A-M9-1 = ONE enumeration of the frozen space: Stage 1 must be Exp A's candidate list
     with the family swapped, never a second hand-written enumeration."""
@@ -479,11 +507,39 @@ def test_qwk_undefined_cells_are_skipped_and_counted_not_propagated():
     stage = StageOutcome(candidates, inner_scores, cells,
                          [CandidateScore("cand", float("nan"), 0, 12, float("nan"))])
 
-    scores, n_qwk_nan = exp_c._ordinal_candidate_scores(stage, sessions)
+    scores, exposure = exp_c._ordinal_candidate_scores(stage, sessions)
     assert scores[0].inner_val_class_mae == pytest.approx(1.5)   # BOTH folds count for the MAE
     assert scores[0].n_evaluable_inner_folds == 2
     assert scores[0].inner_val_qwk == pytest.approx(1.0)         # only the defined fold
-    assert n_qwk_nan == 1
+    assert exposure.nan_inner_folds == frozenset({(6,)})
+    assert exposure.n_nan_evaluation_cells == 1
+    assert exposure.n_evaluation_cells == 2
+
+
+def test_qwk_exposure_deduplicates_folds_but_retains_candidate_cell_counts():
+    """Two candidates can produce two undefined values on one validation fold; the report's
+    `n_qwk_nan` unit is still the fold, with candidate-cell exposure recorded separately."""
+    sessions = [_session_record(6, 0)]
+    candidates = [
+        Candidate(f"cand{i}", "ord_a_ridge", (("alpha", 1.0),),
+                  feature_key=(0, "A", "mag", 0, "off"))
+        for i in (1, 2)
+    ]
+    cells = [
+        _cell(candidate.candidate_id, {2, 3}, {6}, 0.0, {6: np.array([0.0])})
+        for candidate in candidates
+    ]
+    stage = StageOutcome(
+        candidates,
+        np.zeros((2, 1)),
+        cells,
+        [CandidateScore(c.candidate_id, 0.0, 0, 12, 0.0) for c in candidates],
+    )
+
+    _, exposure = exp_c._ordinal_candidate_scores(stage, sessions)
+    assert exposure.nan_inner_folds == frozenset({(6,)})
+    assert exposure.n_nan_evaluation_cells == 2
+    assert exposure.n_evaluation_cells == 2
 
 
 def test_a_candidate_with_no_evaluable_inner_fold_is_incomparable():
@@ -516,6 +572,12 @@ def test_single_class_truth_inner_val_counter_is_candidate_independent():
 
 def _run_fold(sessions, store_dir, config, test_subject, band="10ghz", seeds=(0,)):
     return exp_c._run_single_fold_c(
+        config, band, sessions, store_dir, _fold_for(sessions, test_subject), seeds
+    )
+
+
+def _run_fold_trace(sessions, store_dir, config, test_subject, band="10ghz", seeds=(0,)):
+    return exp_c._run_single_fold_c_trace(
         config, band, sessions, store_dir, _fold_for(sessions, test_subject), seeds
     )
 
@@ -627,33 +689,82 @@ def test_outer_mutation_property_end_to_end(tmp_path, config):
     held_out = 1
     sessions_a = _make_sessions_c(n_subjects=4)
     _write_store(tmp_path / "base", sessions_a, config)
-    base = _run_fold(sessions_a, tmp_path / "base", config, held_out)
+    base_trace = _run_fold_trace(sessions_a, tmp_path / "base", config, held_out)
+    base = base_trace.result
 
     sessions_b = _make_sessions_c(n_subjects=4)
     _write_store(tmp_path / "mut", sessions_b, config)
     _mutate_features_on_disk(tmp_path / "mut", sessions_b, held_out)
     _mutate_targets_and_classes(sessions_b, held_out)
-    mut = _run_fold(sessions_b, tmp_path / "mut", config, held_out)
+    mut_trace = _run_fold_trace(sessions_b, tmp_path / "mut", config, held_out)
+    mut = mut_trace.result
+
+    def assert_fit_records_identical(lhs, rhs):
+        assert len(lhs) == len(rhs)
+        for fb, fm in zip(lhs, rhs, strict=True):
+            assert fb.quantity == fm.quantity
+            assert fb.role == fm.role
+            assert fb.subjects == fm.subjects
+            assert set(fb.params) == set(fm.params)
+            for key in fb.params:
+                assert fb.params[key].tobytes() == fm.params[key].tobytes()
+
+    def assert_stage_identical(lhs, rhs):
+        assert lhs.inner_scores.tobytes() == rhs.inner_scores.tobytes()
+        assert [c.candidate_id for c in lhs.candidates] == [
+            c.candidate_id for c in rhs.candidates
+        ]
+        assert len(lhs.inner_results) == len(rhs.inner_results)
+        for lb, lm in zip(lhs.inner_results, rhs.inner_results, strict=True):
+            assert lb.inner_train == lm.inner_train
+            assert lb.inner_val == lm.inner_val
+            assert lb.candidate_id == lm.candidate_id
+            assert lb.reason == lm.reason
+            assert set(lb.val_predictions) == set(lm.val_predictions)
+            for subject in lb.val_predictions:
+                assert (
+                    lb.val_predictions[subject].tobytes()
+                    == lm.val_predictions[subject].tobytes()
+                )
+            assert_fit_records_identical(lb.fits, lm.fits)
+
+    # The full inner search, not only its selected winner, is held-out-subject invariant.
+    assert_stage_identical(base_trace.stage1, mut_trace.stage1)
+    for arm in ARMS:
+        assert_stage_identical(
+            base_trace.stage2_by_arm[arm], mut_trace.stage2_by_arm[arm]
+        )
 
     assert base.stage1_feature_key == mut.stage1_feature_key
+    assert base.stage1_selected_params == mut.stage1_selected_params
     assert base.stage1_n_evaluable_inner_folds == mut.stage1_n_evaluable_inner_folds
+    assert base.stage1_viability_reason_counts == mut.stage1_viability_reason_counts
     assert base.n_single_class_truth_inner_val == mut.n_single_class_truth_inner_val
     assert base.n_qwk_nan_inner == mut.n_qwk_nan_inner
+    assert (
+        base.n_qwk_nan_inner_evaluation_cells
+        == mut.n_qwk_nan_inner_evaluation_cells
+    )
+    assert base.n_qwk_inner_evaluation_cells == mut.n_qwk_inner_evaluation_cells
+    held_out_output_moved = False
     for arm in ARMS:
         lhs, rhs = base.arm_result(arm), mut.arm_result(arm)
         assert lhs.selected_feature_key == rhs.selected_feature_key
         assert lhs.selected_family == rhs.selected_family
         assert lhs.selected_params == rhs.selected_params
         assert lhs.n_evaluable_inner_folds == rhs.n_evaluable_inner_folds
-        for fb, fm in zip(lhs.final_fits, rhs.final_fits, strict=True):
-            assert fb.quantity == fm.quantity
-            assert fb.subjects == fm.subjects
-            for k in fb.params:
-                assert fb.params[k].tobytes() == fm.params[k].tobytes()
+        assert lhs.viability_reason_counts == rhs.viability_reason_counts
+        assert_fit_records_identical(lhs.final_fits, rhs.final_fits)
         for sb, sm in zip(lhs.seed_outcomes, rhs.seed_outcomes, strict=True):
             assert sb.train_predictions.tobytes() == sm.train_predictions.tobytes()
-    # power: the held-out subject's own class prediction is free to move (its X moved).
+            held_out_output_moved |= (
+                sb.test_predictions.tobytes() != sm.test_predictions.tobytes()
+                or sb.test_score != sm.test_score
+            )
+    # Power: the fixture genuinely moves a held-out prediction or score. Comparing only the
+    # deliberately mutated truth would make the no-leakage assertions above vacuous.
     assert base.test_classes.tolist() != mut.test_classes.tolist()
+    assert held_out_output_moved
 
 
 # ----------------------------------------------------------------------- T-M9-parallel
@@ -725,7 +836,8 @@ def _fake_arm(arm, classes_pred_by_seed, *, family="ord_a_ridge", n_evaluable=5)
 
 
 def _fake_result_c(test_subject, true_classes, preds_a_by_seed, preds_b_by_seed, *,
-                   n_single_class_truth_inner_val=0, n_qwk_nan_inner=0):
+                   n_single_class_truth_inner_val=0, n_qwk_nan_inner=0,
+                   n_qwk_nan_inner_evaluation_cells=0, n_qwk_inner_evaluation_cells=0):
     true_classes = np.array(true_classes, dtype=int)
     return ExpCFoldResult(
         test_subject=test_subject,
@@ -740,6 +852,8 @@ def _fake_result_c(test_subject, true_classes, preds_a_by_seed, preds_b_by_seed,
         test_session_idx=true_classes.copy(),
         n_single_class_truth_inner_val=n_single_class_truth_inner_val,
         n_qwk_nan_inner=n_qwk_nan_inner,
+        n_qwk_nan_inner_evaluation_cells=n_qwk_nan_inner_evaluation_cells,
+        n_qwk_inner_evaluation_cells=n_qwk_inner_evaluation_cells,
     )
 
 
@@ -804,18 +918,31 @@ def test_summarize_exp_c_reports_the_o_m9_8_counters_at_both_cv_levels(config):
     """Exactly one single-class-truth validation fold at each level: one inner fold carries
     the flag, and subject 4 contributes a single S0 test row at the outer level."""
     results = _fake_results_c()
-    results[0] = dataclasses.replace(results[0], n_single_class_truth_inner_val=1, n_qwk_nan_inner=2)
+    results[0] = dataclasses.replace(
+        results[0],
+        n_single_class_truth_inner_val=1,
+        n_qwk_nan_inner=1,
+        n_qwk_nan_inner_evaluation_cells=2,
+        n_qwk_inner_evaluation_cells=10,
+    )
     results[3] = _fake_result_c(4, [0], [[0], [0]], [[3], [3]])   # single-class outer truth
 
     summary = summarize_exp_c(results, config)
     counters = summary["qwk_undefinedness"]
 
     assert counters["inner"]["n_single_class_truth_val_folds"] == 1
-    assert counters["inner"]["n_qwk_nan"] == 2
+    assert counters["inner"]["n_qwk_nan"] == 1
+    assert counters["inner"]["n_qwk_nan_evaluation_cells"] == 2
+    assert counters["inner"]["n_qwk_evaluation_cells"] == 10
+    assert counters["inner"]["evaluation_cell"] == "stage_x_candidate_x_inner_fold"
     assert counters["outer"]["n_single_class_truth_val_folds"] == 1
     # subject 4's outer QWK: arm (a) predicts the same single class (both marginals on one
-    # class -> undefined), arm (b) predicts a different class (defined, κ = 0).
+    # class -> undefined) for two realized seeds, arm (b) predicts a different class
+    # (defined, κ = 0). The fold count is one; the arm-seed cell count is two.
     assert counters["outer"]["n_qwk_nan"] == 1
+    assert counters["outer"]["n_qwk_nan_evaluation_cells"] == 2
+    assert counters["outer"]["n_qwk_evaluation_cells"] == 16
+    assert counters["outer"]["evaluation_cell"] == "arm_x_realized_seed_x_outer_fold"
 
 
 def test_summarize_exp_c_selection_frequency_carries_the_per_fold_evaluability(config):

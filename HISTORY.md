@@ -4,6 +4,146 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-07-31 — M9 step 9.5 done: clean M9 implementation commit on `v1_milestone9`; stale `REVISION` cleared. Full suite green (1131 passed, 16 skipped, 0 failed).
+
+Owner-triggered, per plan §1 row 9.5. This is the commit `validate_store` will require the step-9.6
+store rebuild to match, so the whole point of the step is a tree that is simultaneously **green and
+static**. Getting there took three suite runs, and the two that did not certify are recorded here
+because each one failed for a reason worth remembering.
+
+**The step's one substantive action: clearing the stale `REVISION` file.** The first full run came
+back `1121 passed / 1 failed`, on
+`tests/test_provenance.py::test_git_degrades_to_none_without_env`: `payload["git"]["commit"]` was
+`e88fd338a8225403d1e3926d4d141fa5784067fd` instead of `None`. Not a new defect — this is the
+failure diagnosed at step 1 and again at step 0.5, and step 0.5's entry deferred the fix to exactly
+here ("worth clearing before the step-9.5 clean commit, since the same file will otherwise stamp
+local runs with a stale revision"). Cause: a 42-byte, gitignored `REVISION` file at the repo root
+holding the **M8** commit `e88fd33` ("M8: git-free Exp B variant wrapper"), a leftover of the M8
+step-10.5 git-free-wrapper work, which `provenance._revision_file_commit()` reads as the
+last-resort fallback in `_git_info`'s `git -> DEHYD_GIT_* -> REVISION` precedence chain.
+
+Two sessions had flagged it and declined to touch it as out of their step's scope. It is in scope
+here, because a stale `REVISION` at the repo root is a live provenance hazard for M9: any local run
+whose live `git` call fails would self-attest `e88fd33` — an M8 commit — into `provenance["git"]`,
+which is precisely the commit-match doctrine the milestone is built on. Cleared rather than
+deleted: the file was copied to the session scratchpad as `REVISION.stale-m8-backup` before
+removal, and its content is in any case reproduced verbatim above and regenerable with the
+documented `git rev-parse HEAD > REVISION`. No tracked file changed — `REVISION` is gitignored, so
+this cannot and does not appear in the commit.
+
+**Why the second run did not certify either.** With `REVISION` cleared the suite went green
+(1122 passed / 16 skipped / 0 failed, 938 s) — but that number certifies nothing, because a
+concurrent Codex-review session was editing the same working tree during the run: `exp_c.py` was
+rewritten at 02:35 and `test_exp_c.py` at 02:37, inside the 02:29-02:45 window, and the two diffs
+this step was originally going to commit were committed out from under it as `5e2f5d4` and
+`d9f0b8a` at 02:13-02:14. A pass measured against a torn tree is not attributable to any commit, so
+it was discarded rather than reported, and the step was stopped and handed back to the owner rather
+than committing another session's in-flight work under a step-9.5 label. The governing reason is
+§5 trap 18: nothing merges after 9.5 except run artifacts and journal files, so a 9.5 commit made
+mid-review would have been invalidated by every follow-up still to land, taking both bands' store
+rebuilds with it.
+
+**The certifying run.** After the owner confirmed the review pass was complete, the tree was
+re-checked as static (no python processes; every pending file's mtime predating the run start of
+03:32:24) and the suite re-run: **1131 passed, 16 skipped, 0 failed in 968.91 s**, with
+`git diff --exit-code tests/test_no_leakage.py` clean. Nine more tests than the 1122 of the torn
+run — the step-6/7 follow-ups' additions. Step-1 pins re-run explicitly alongside the touched
+modules earlier in the step (`test_m9_pin`, `test_m8_pin`, `test_no_leakage`, `test_ordinal`,
+`test_regressors`, `test_selection`, `test_exp_b`): 185 passed, 1 skipped.
+
+**What the commit carries.** Not new implementation work — steps 0.5-9 were each committed as they
+resolved. This commit lands what was still uncommitted at the review pass's end: the step-6
+follow-up (`eval/exp_c.py` + `tests/test_exp_c.py` — the `active.model_family == base_family` fit
+guard, the `_run_single_fold_c_trace` mutation proof, and `n_qwk_nan` corrected from a cell count
+to a distinct-fold count with `n_qwk_nan_evaluation_cells`/`n_qwk_evaluation_cells` retained as the
+candidate-level exposure), the step-7 follow-up (`eval/exp_d.py` + `tests/test_exp_d.py` — the
+two-stage seeds-within-fold-then-std-across-folds `inner_fold_variance`, the widened fail-closed
+frozen-value guard, and the held-out mutation helper corrected to mutate
+`session_delta_m_pct` rather than only the frame-broadcast copy), the matching `MILESTONE_9_PLAN.md`
+§2.6/§3 updates, and the HISTORY entries for both follow-ups plus this one.
+
+**Next: step 9.6, and nothing else may land first.** Both feature stores rebuild from this commit
+(`extract10.sbatch` / `extract77.sbatch`, `--validate` both). Per trap 18 the freeze is now in
+force: any further code change moves the commit and invalidates the rebuilt v2 stores, and the
+remedy is a second rebuild from the fix commit, never a waiver.
+
+**Open item, deliberately not fixed here (out of step scope).**
+`test_git_degrades_to_none_without_env` asserts "neither a live git nor the env vars => commit is
+`None`", but the real precedence chain has a third rung. Its `no_live_git` fixture stubs live git
+and deletes `DEHYD_GIT_*` but never neutralizes `_revision_file_commit`, so the test silently
+depends on no `REVISION` file existing at the repo root — meaning **it will fail on IBEX**, where
+`REVISION` legitimately exists and is the whole point of the copied-tree path. Clearing the local
+file makes it pass today; the real fix is to monkeypatch `_revision_file_commit` in the fixture, the
+pattern already used at `tests/test_provenance.py:361`. Left for the owner to schedule, since a
+source/test change now would move the commit this step exists to fix.
+
+## 2026-07-31 — M9 step 7 follow-up: fold-level variance, frozen guards, and mutation proof fixed. Succeeded.
+
+A read-only audit found three localized gaps in the Exp D CNN path. First, the primary inner score
+correctly averaged every inner-fold/seed cell, but `inner_fold_variance` took the population std
+over that flattened cell set. That contradicts the shared stochastic-model harness: average the
+fixed seeds within each inner fold, then compute the population std across the fold means.
+`cnn_config_score_statistics` now names and implements that two-stage reduction. A discriminating
+fixture pins the consequence: candidate A scores `[[0,2],[0,2]]` and candidate B
+`[[0.9,0.9],[1.1,1.1]]`; both mean 1.0, but the correct fold-mean stds are 0.0 vs 0.1 and prefer A,
+whereas flattened stds are 1.0 vs 0.1 and would incorrectly prefer B. Epoch-budget selection is
+unchanged: it remains the median over every winning `(inner fold, seed)` epoch count.
+
+Second, the fail-closed guard covered the optimizer/loss/aggregation names but accepted several
+frozen values that either alter the implemented training path or would otherwise be silently
+ignored. Independent literals now pin Adam betas `(0.9, 0.999)`, framework-default initialization,
+batch size 16, robust raw/matched standardization, train-only per-frequency spectrogram
+standardization, and the 77 GHz matched reference Rx index 0. The local-smoke controls
+`max_epochs` and early-stopping patience deliberately remain config-driven, so smoke and IBEX use
+the same code path with different budgets. The zero-optimizer-step test now calls `_train_cnn`
+directly with `batch_size=1000`, preserving coverage of that internal guard while the public path
+correctly rejects a drift from batch size 16 before fitting.
+
+Third, the held-out mutation helper changed only the frame-broadcast `y`, while scoring reads the
+authoritative `session_delta_m_pct`; it therefore had not mutated the actual held-out labels. It
+now mutates the held-out session targets and keeps every frame's broadcast copy coherent. The test
+compares all final CNN states (one per seed), not the first matching `FitRecord`, and requires every
+seed's held-out predictions and score to move while selection, inner scores, epoch counts, sampler
+weights, inner states, and every final state remain byte-identical.
+
+Verification: focused discriminating/guard/mutation tests passed (**14 passed**);
+`test_cnn.py + test_exp_d.py` passed (**142 passed**); the frozen leakage, M9 pin, shared harness,
+and selection suites passed (**97 passed, 1 skipped**). The only warnings were the pre-existing
+unknown `cache_dir` pytest option and joblib's Windows physical-core probe fallback. The first
+review-time run using pytest's default user temp root failed before fixtures with a Windows
+`PermissionError`; rerunning with an isolated writable `--basetemp` produced the green results
+above and confirmed it was environmental, not a code failure.
+
+## 2026-07-31 — M9 step 6 follow-up: fit guard, mutation trace, and QWK counters fixed. Succeeded.
+
+A read-only audit found three gaps in the Exp C composition. First, the fit guard validated the
+ordinal wrapper's actual `base_family` and separately validated that the `active.model_family`
+value was legal, but never required the two to agree. Reproduced by changing an authorized
+`ord_a_svr` candidate's active record to `model_family="ridge"`: `_before_fit_c` returned normally.
+`assert_exp_c_fit_authorized` now requires `active.model_family == base_family` for every
+`ord_a_*` fit, before `build_estimator` can be reached.
+
+Second, the end-to-end outer-mutation test claimed to compare both inner-search stages but
+`_run_single_fold_c` discarded their `StageOutcome`s. The shared computation now lives in
+`_run_single_fold_c_trace`; the multiprocessing worker returns only `trace.result`, so production
+results and training are unchanged. The test uses the trace to compare every Stage-1/Stage-2 inner
+score, stored validation prediction, fit subject set, and fitted parameter bytewise, then compares
+both winners, final fits, and outer-training predictions. Its power assertion now requires a
+held-out prediction or score to move; comparing only the deliberately mutated truth was removed as
+the purported power check.
+
+Third, `n_qwk_nan` was documented as a fold count but counted candidate cells at the inner level
+and first-seed arm cells at the outer level. It now counts distinct validation folds with at least
+one undefined evaluated QWK. Candidate-dependent exposure is retained explicitly as
+`n_qwk_nan_evaluation_cells / n_qwk_evaluation_cells`, with units recorded as
+stage × candidate × inner fold and arm × realized seed × outer fold. A two-candidate, one-fold
+fixture pins `n_qwk_nan = 1` and `n_qwk_nan_evaluation_cells = 2`.
+
+Verification: all **42** `test_exp_c.py` tests passed, including the full mutation, viability, and
+serial-vs-two-worker bit-identity cases. `test_run_ordinal.py` plus the M8/M9 pins and frozen leakage
+suite passed (**36 passed, 1 skipped**). The only warnings were the pre-existing unknown
+`cache_dir` pytest option and joblib's Windows physical-core probe fallback.
+
 ## 2026-07-31 — M9 step 5 specification clarification: Exp D uses SLURM fold arrays. Succeeded.
 
 Read-only verification of step 5 found stale acceptance text in `MILESTONE_9_PLAN.md`: it required

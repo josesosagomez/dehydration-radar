@@ -283,6 +283,12 @@ def assert_exp_c_fit_authorized(candidate: Candidate, config, *, arm: str) -> No
                 f"{where}: the wrapper's base_family {model.base_family!r} disagrees with the "
                 f"candidate's family {family!r}"
             )
+        active_model_family = dict(candidate.active or ()).get("model_family")
+        if active_model_family != base_family:
+            raise ExpCProtocolError(
+                f"{where}: active.model_family={active_model_family!r} does not match the "
+                f"wrapper's base_family {base_family!r}"
+            )
         base_params = dict(model.base_params)
         if arm == "stage1":
             anchor = _stage1_anchor(config, candidate)
@@ -389,9 +395,24 @@ def _cell_qwk(cell, classes_by_subject) -> float:
     return M.quadratic_weighted_kappa(np.concatenate(y_true), _as_classes(np.concatenate(y_pred)))
 
 
-def _ordinal_candidate_scores(stage, sessions) -> tuple[list[OrdinalCandidateScore], int]:
+@dataclass(frozen=True)
+class QWKExposure:
+    """Undefined-QWK accounting for one search stage.
+
+    `nan_inner_folds` counts distinct validation folds that produced at least one undefined
+    candidate QWK. The cell counts retain the candidate-level exposure needed to interpret
+    that fold count: one fold can legitimately produce several undefined QWK values because
+    undefinedness depends on both its truth and each candidate's predictions.
+    """
+
+    nan_inner_folds: frozenset[tuple[int, ...]]
+    n_nan_evaluation_cells: int
+    n_evaluation_cells: int
+
+
+def _ordinal_candidate_scores(stage, sessions) -> tuple[list[OrdinalCandidateScore], QWKExposure]:
     """`StageOutcome` -> the ordinal selection scores, aggregated over EVALUABLE inner folds
-    only, plus the count of cells whose QWK came out undefined (the O-M9-8 exposure counter).
+    only, plus explicit fold- and candidate-cell-level QWK exposure accounting (O-M9-8).
 
     `stage.candidate_scores` (the harness's plain-mean aggregation) is deliberately ignored
     for the MAE and the variance; only `feature_dimension` is read from it, since that is a
@@ -401,7 +422,10 @@ def _ordinal_candidate_scores(stage, sessions) -> tuple[list[OrdinalCandidateSco
     n_candidates = len(stage.candidates)
     n_inner = stage.inner_scores.shape[1]
 
-    scores, n_qwk_nan = [], 0
+    scores = []
+    nan_inner_folds: set[tuple[int, ...]] = set()
+    n_nan_evaluation_cells = 0
+    n_evaluation_cells = 0
     for ci, candidate in enumerate(stage.candidates):
         per_fold = stage.inner_scores[ci, :]
         evaluable = np.isfinite(per_fold)
@@ -419,11 +443,13 @@ def _ordinal_candidate_scores(stage, sessions) -> tuple[list[OrdinalCandidateSco
             cell = stage.inner_results[fj * n_candidates + ci]
             if cell.reason is not None:
                 continue
+            n_evaluation_cells += 1
             kappa = _cell_qwk(cell, classes_by_subject)
             if math.isfinite(kappa):
                 qwks.append(kappa)
             else:
-                n_qwk_nan += 1
+                n_nan_evaluation_cells += 1
+                nan_inner_folds.add(tuple(sorted(int(s) for s in cell.inner_val)))
 
         scores.append(
             OrdinalCandidateScore(
@@ -436,7 +462,11 @@ def _ordinal_candidate_scores(stage, sessions) -> tuple[list[OrdinalCandidateSco
                 n_evaluable_inner_folds=n_evaluable,
             )
         )
-    return scores, n_qwk_nan
+    return scores, QWKExposure(
+        nan_inner_folds=frozenset(nan_inner_folds),
+        n_nan_evaluation_cells=n_nan_evaluation_cells,
+        n_evaluation_cells=n_evaluation_cells,
+    )
 
 
 def _missing_classes_by_inner_fold(fold, classes_by_subject) -> tuple:
@@ -472,7 +502,7 @@ def _reason_counts(stage) -> dict:
 def _select_ordinal(stage, sessions, fold, stage_label):
     """Score -> `select_candidate_ordinal` -> the winning Candidate. Every Exp C selection
     routes through `selection.py`; nothing here re-implements a tie-break."""
-    scores, n_qwk_nan = _ordinal_candidate_scores(stage, sessions)
+    scores, qwk_exposure = _ordinal_candidate_scores(stage, sessions)
     try:
         winner_score = select_candidate_ordinal(scores)
     except SelectionError as err:
@@ -488,7 +518,7 @@ def _select_ordinal(stage, sessions, fold, stage_label):
             f"per_inner_fold(val_subjects, missing)={per_inner}"
         ) from err
     by_id = {c.candidate_id: c for c in stage.candidates}
-    return by_id[winner_score.candidate_id], winner_score, n_qwk_nan
+    return by_id[winner_score.candidate_id], winner_score, qwk_exposure
 
 
 # ----------------------------------------------------------------------------- staged run
@@ -522,19 +552,30 @@ class ExpCFoldResult:
     test_targets: np.ndarray              # ... and its L = -Δm%
     test_session_idx: np.ndarray
     n_single_class_truth_inner_val: int
-    n_qwk_nan_inner: int
+    n_qwk_nan_inner: int                  # distinct inner folds with >=1 undefined QWK
+    n_qwk_nan_inner_evaluation_cells: int = 0
+    n_qwk_inner_evaluation_cells: int = 0
     reason: str | None = None             # non-None: this fold contributes no out-of-fold rows
 
     def arm_result(self, arm: str) -> ExpCArmResult:
         return self.arm_a if arm == "a" else self.arm_b
 
 
-def _run_single_fold_c(config, band, sessions, store_dir, fold, seeds) -> ExpCFoldResult:
-    """Run ONE outer fold end to end: Stage 1 (feature axes at the family-(a) ridge anchor,
-    scored ordinally) -> the winning feature key shared by BOTH Stage-2 arms -> refit each
-    arm's winner. Top-level + picklable so it can run in a worker process; builds its OWN
-    provider (open npz handles are not shareable across processes) and pins single-threaded
-    math, mirroring `exp_a._run_single_fold` / `exp_b._run_single_fold_b`."""
+@dataclass
+class _ExpCFoldTrace:
+    """The full inner-search trace retained only long enough for regression tests to audit it."""
+
+    result: ExpCFoldResult
+    stage1: harness.StageOutcome
+    stage2_by_arm: dict[str, harness.StageOutcome]
+
+
+def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> _ExpCFoldTrace:
+    """Run one fold and retain both search stages for the load-bearing mutation tests.
+
+    Production calls `_run_single_fold_c`, which returns only `trace.result`; no additional
+    search is run and no trace is serialized into normal result artifacts.
+    """
     from threadpoolctl import threadpool_limits
 
     with threadpool_limits(1):
@@ -548,19 +589,26 @@ def _run_single_fold_c(config, band, sessions, store_dir, fold, seeds) -> ExpCFo
             stage1_candidates_c(config, band, anchor), fold, seeds,
             _before_fit_c(config, "stage1"), provider.data_for, score_fn=ordinal_class_mae_score,
         )
-        w1, w1_score, n_qwk_nan = _select_ordinal(stage1, sessions, fold, "Stage 1")
+        w1, w1_score, stage1_qwk = _select_ordinal(stage1, sessions, fold, "Stage 1")
 
         arms = {}
+        stage2_by_arm = {}
+        nan_inner_folds = set(stage1_qwk.nan_inner_folds)
+        n_nan_evaluation_cells = stage1_qwk.n_nan_evaluation_cells
+        n_evaluation_cells = stage1_qwk.n_evaluation_cells
         for arm, build_candidates in (("a", stage2_candidates_a), ("b", stage2_candidates_b)):
             before_fit = _before_fit_c(config, arm)
             stage2 = harness._score_candidates_on_fold(
                 build_candidates(config, band, w1.feature_key, dict(w1.active)), fold, seeds,
                 before_fit, provider.data_for, score_fn=ordinal_class_mae_score,
             )
-            winner, winner_score, n_nan = _select_ordinal(
+            stage2_by_arm[arm] = stage2
+            winner, winner_score, qwk_exposure = _select_ordinal(
                 stage2, sessions, fold, f"Stage 2 arm ({arm})"
             )
-            n_qwk_nan += n_nan
+            nan_inner_folds.update(qwk_exposure.nan_inner_folds)
+            n_nan_evaluation_cells += qwk_exposure.n_nan_evaluation_cells
+            n_evaluation_cells += qwk_exposure.n_evaluation_cells
             final_fits, _, test_pred, _, seed_outcomes = harness._final_refit(
                 winner, fold, seeds, before_fit, provider.data_for,
                 score_fn=ordinal_class_mae_score,
@@ -578,21 +626,39 @@ def _run_single_fold_c(config, band, sessions, store_dir, fold, seeds) -> ExpCFo
             )
 
         test_rows = np.isin(provider.subjects, [fold.test_subject])
-        return ExpCFoldResult(
-            test_subject=fold.test_subject,
-            stage1_feature_key=w1.feature_key,
-            stage1_selected_params=w1.params(),
-            stage1_n_evaluable_inner_folds=w1_score.n_evaluable_inner_folds,
-            stage1_viability_reason_counts=_reason_counts(stage1),
-            arm_a=arms["a"],
-            arm_b=arms["b"],
-            test_classes=provider.classes[test_rows],
-            test_targets=provider.loss_l[test_rows],
-            test_session_idx=provider.session_idx[test_rows],
-            n_single_class_truth_inner_val=_n_single_class_truth_inner_val(fold, classes_by_subject),
-            n_qwk_nan_inner=n_qwk_nan,
-            reason=None,
+        return _ExpCFoldTrace(
+            result=ExpCFoldResult(
+                test_subject=fold.test_subject,
+                stage1_feature_key=w1.feature_key,
+                stage1_selected_params=w1.params(),
+                stage1_n_evaluable_inner_folds=w1_score.n_evaluable_inner_folds,
+                stage1_viability_reason_counts=_reason_counts(stage1),
+                arm_a=arms["a"],
+                arm_b=arms["b"],
+                test_classes=provider.classes[test_rows],
+                test_targets=provider.loss_l[test_rows],
+                test_session_idx=provider.session_idx[test_rows],
+                n_single_class_truth_inner_val=_n_single_class_truth_inner_val(
+                    fold, classes_by_subject
+                ),
+                n_qwk_nan_inner=len(nan_inner_folds),
+                n_qwk_nan_inner_evaluation_cells=n_nan_evaluation_cells,
+                n_qwk_inner_evaluation_cells=n_evaluation_cells,
+                reason=None,
+            ),
+            stage1=stage1,
+            stage2_by_arm=stage2_by_arm,
         )
+
+
+def _run_single_fold_c(config, band, sessions, store_dir, fold, seeds) -> ExpCFoldResult:
+    """Run ONE outer fold end to end.
+
+    Top-level + picklable so it can run in a worker process; builds its own provider and pins
+    single-threaded math, mirroring Exp A/B. The internal trace is discarded after returning
+    the ordinary result.
+    """
+    return _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds).result
 
 
 def run_exp_c(config, band, sessions, store_dir, *, seeds, n_workers=1) -> list[ExpCFoldResult]:
@@ -673,7 +739,9 @@ def summarize_exp_c(results, config) -> dict:
     seed = config.run.seed
 
     arms: dict = {}
-    outer_qwk_nan = 0
+    outer_qwk_nan_folds: set[int] = set()
+    outer_qwk_nan_evaluation_cells = 0
+    outer_qwk_evaluation_cells = 0
     cohort = {}                # the out-of-fold shape (identical across arms), for the header
     for arm in ARMS:
         subjects, _session_idx, y_true, pred_by_seed = _oof_matrix_c(usable, arm)
@@ -705,11 +773,14 @@ def summarize_exp_c(results, config) -> dict:
             per_subject = {}
 
         for r in usable:
-            kappa = M.quadratic_weighted_kappa(
-                r.test_classes, _as_classes(r.arm_result(arm).test_predictions)
-            )
-            if not math.isfinite(kappa):
-                outer_qwk_nan += 1
+            for outcome in r.arm_result(arm).seed_outcomes:
+                outer_qwk_evaluation_cells += 1
+                kappa = M.quadratic_weighted_kappa(
+                    r.test_classes, _as_classes(outcome.test_predictions)
+                )
+                if not math.isfinite(kappa):
+                    outer_qwk_nan_evaluation_cells += 1
+                    outer_qwk_nan_folds.add(int(r.test_subject))
 
         arm_results = [r.arm_result(arm) for r in usable]
         arms[arm] = {
@@ -740,13 +811,21 @@ def summarize_exp_c(results, config) -> dict:
             "inner": {
                 "n_single_class_truth_val_folds": sum(r.n_single_class_truth_inner_val for r in usable),
                 "n_qwk_nan": sum(r.n_qwk_nan_inner for r in usable),
+                "n_qwk_nan_evaluation_cells": sum(
+                    r.n_qwk_nan_inner_evaluation_cells for r in usable
+                ),
+                "n_qwk_evaluation_cells": sum(r.n_qwk_inner_evaluation_cells for r in usable),
+                "evaluation_cell": "stage_x_candidate_x_inner_fold",
             },
             "outer": {
                 "n_single_class_truth_val_folds": sum(
                     1 for r in usable
                     if r.test_classes.size and len(set(r.test_classes.tolist())) == 1
                 ),
-                "n_qwk_nan": outer_qwk_nan,
+                "n_qwk_nan": len(outer_qwk_nan_folds),
+                "n_qwk_nan_evaluation_cells": outer_qwk_nan_evaluation_cells,
+                "n_qwk_evaluation_cells": outer_qwk_evaluation_cells,
+                "evaluation_cell": "arm_x_realized_seed_x_outer_fold",
             },
         },
         "stage1": {

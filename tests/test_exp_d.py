@@ -55,6 +55,7 @@ from dehyd.eval.exp_d import (
     cheap_selection_row,
     cnn_prediction_rows,
     cnn_selection_row,
+    cnn_config_score_statistics,
     expected_test_rows_by_fold,
     fit_seed,
     half_spectrum_power,
@@ -159,16 +160,37 @@ def _mutate_held_out(frames, subject, seed=99):
     """Eligibility-preserving value mutation of the held-out subject's frames AND targets —
     the T18 pattern. Membership (subject/session/frame ids) is untouched."""
     rng = np.random.default_rng(seed)
-    mutated = dataclasses.replace(frames, X=frames.X.copy(), y=frames.y.copy())
-    rows = mutated.subjects == subject
-    mutated.X[rows] = rng.normal(size=mutated.X[rows].shape) * 10 + 5
-    mutated.y[rows] = rng.normal(size=int(rows.sum())) * 10 + 5
+    mutated = dataclasses.replace(
+        frames,
+        X=frames.X.copy(),
+        y=frames.y.copy(),
+        session_delta_m_pct=frames.session_delta_m_pct.copy(),
+    )
+    frame_rows = mutated.subjects == subject
+    mutated.X[frame_rows] = rng.normal(size=mutated.X[frame_rows].shape) * 10 + 5
+
+    # `run_cnn_family` scores against the session-level target, not the broadcast frame
+    # copy. Mutate that authoritative target and then keep the training copy coherent:
+    # every frame in a session still carries exactly its session's Δm%.
+    session_positions = np.flatnonzero(mutated.session_subjects == subject)
+    new_targets = rng.normal(size=len(session_positions)) * 10 + 5
+    for position, target in zip(session_positions, new_targets, strict=True):
+        mutated.session_delta_m_pct[position] = target
+        mutated.y[mutated.session_row == position] = target
     return mutated
+
+
+def _record_bytes(record):
+    return b"".join(k.encode() + v.tobytes() for k, v in sorted(record.params.items()))
 
 
 def _state_bytes(fits, quantity):
     record = next(f for f in fits if f.quantity == quantity)
-    return b"".join(k.encode() + v.tobytes() for k, v in sorted(record.params.items()))
+    return _record_bytes(record)
+
+
+def _all_state_bytes(fits, quantity):
+    return tuple(_record_bytes(f) for f in fits if f.quantity == quantity)
 
 
 # ----------------------------------------------------------- the frozen 6-config grid
@@ -361,16 +383,43 @@ def test_config_selection_routes_through_selection_py(cnn_result):
     assert result.selected_config == result.config_grid[result.selected_config_index]
 
 
-def test_per_config_score_is_the_mean_over_inner_folds_times_seeds(cnn_result):
-    """Trap 7's population, at the scoring end: the score averages every (inner fold, seed)
-    cell, and the tie-break variance is the population std over that same set — not over
-    fold means, which would be a different number."""
+def test_per_config_score_averages_seeds_within_fold_before_inner_fold_variance(cnn_result):
+    """The stochastic-model rule first averages seeds within each inner fold. The primary
+    mean is then the mean of those fold scores; the tie-break is the population std across
+    fold means, matching the shared harness rather than mixing seed spread into a quantity
+    named `inner_fold_variance`."""
     _frames, _fold, result = cnn_result
     for ci, score in enumerate(result.per_config_scores):
-        cells = [c.val_session_mae for c in result.inner_results if c.config_index == ci]
-        assert len(cells) == 3 * len(SEEDS)
-        assert score.inner_val_mae == pytest.approx(float(np.mean(cells)))
-        assert score.inner_fold_variance == pytest.approx(float(np.std(cells, ddof=0)))
+        matrix = np.array([
+            [
+                c.val_session_mae
+                for c in result.inner_results
+                if c.config_index == ci and c.inner_fold == inner_fold
+            ]
+            for inner_fold in range(result.n_inner_folds)
+        ])
+        assert matrix.shape == (3, len(SEEDS))
+        per_fold = matrix.mean(axis=1)
+        assert score.inner_val_mae == pytest.approx(float(per_fold.mean()))
+        assert score.inner_fold_variance == pytest.approx(float(per_fold.std(ddof=0)))
+
+
+def test_fold_level_variance_does_not_confuse_seed_spread_with_fold_spread():
+    """Same overall mean, opposite ordering under the correct and flattened variances.
+
+    A has seed variability but identical fold means; B has no seed variability but
+    different fold means. The frozen lower-inner-fold-variance tie-break must prefer A.
+    """
+    candidate_a = np.array([[0.0, 2.0], [0.0, 2.0]])
+    candidate_b = np.array([[0.9, 0.9], [1.1, 1.1]])
+
+    mean_a, variance_a = cnn_config_score_statistics(candidate_a)
+    mean_b, variance_b = cnn_config_score_statistics(candidate_b)
+
+    assert mean_a == pytest.approx(mean_b)
+    assert variance_a == 0.0
+    assert variance_b == pytest.approx(0.1)
+    assert candidate_a.std(ddof=0) > candidate_b.std(ddof=0)  # flattened gives the wrong order
 
 
 def test_epoch_budget_is_the_median_over_the_winners_inner_folds_times_seeds(cnn_result):
@@ -418,7 +467,9 @@ def test_two_runs_of_the_same_fold_are_bit_identical(cnn_result, config):
     again = run_cnn_family(config, "77ghz", "cnn1d_raw", fold, SEEDS, frames)
     assert again.epoch_budget == result.epoch_budget
     assert again.selected_config == result.selected_config
-    assert _state_bytes(again.final_fits, "cnn_state") == _state_bytes(result.final_fits, "cnn_state")
+    assert _all_state_bytes(again.final_fits, "cnn_state") == _all_state_bytes(
+        result.final_fits, "cnn_state"
+    )
     for a, b in zip(again.seed_outcomes, result.seed_outcomes, strict=True):
         assert a.session_predictions.tobytes() == b.session_predictions.tobytes()
 
@@ -447,15 +498,22 @@ def test_held_out_mutation_moves_only_the_held_out_subjects_predictions(cnn_resu
         assert _state_bytes(mut_cell.fits, "sampler_weights") == _state_bytes(
             base_cell.fits, "sampler_weights"
         )
-    assert _state_bytes(mutated.final_fits, "cnn_state") == _state_bytes(base.final_fits, "cnn_state")
+    mutated_states = _all_state_bytes(mutated.final_fits, "cnn_state")
+    base_states = _all_state_bytes(base.final_fits, "cnn_state")
+    assert len(mutated_states) == len(base_states) == len(SEEDS)
+    assert mutated_states == base_states
     assert _state_bytes(mutated.final_fits, "sampler_weights") == _state_bytes(
         base.final_fits, "sampler_weights"
     )
-    # ... and only the held-out subject's predictions move (the power companion)
-    assert (
-        mutated.seed_outcomes[0].session_predictions.tobytes()
-        != base.seed_outcomes[0].session_predictions.tobytes()
-    )
+    # ... while the authoritative held-out labels, every seed's predictions, and every
+    # seed's score move. These are the only quantities scoring is allowed to depend on.
+    assert mutated.test_session_truth.tobytes() != base.test_session_truth.tobytes()
+    for mutated_seed, base_seed in zip(mutated.seed_outcomes, base.seed_outcomes, strict=True):
+        assert (
+            mutated_seed.session_predictions.tobytes()
+            != base_seed.session_predictions.tobytes()
+        )
+        assert mutated_seed.session_mae != base_seed.session_mae
 
 
 def test_spectrogram_norm_is_fit_inside_the_fold_and_audited_at_both_levels(store, config):
@@ -557,10 +615,19 @@ def test_a_fold_with_fewer_training_frames_than_one_batch_is_refused(store, conf
     """`drop_last=True` means such a fit would take zero optimizer steps — a silent no-op
     rather than a trained model."""
     store_dir, sessions = store
+    from dehyd.eval.exp_d import _train_cnn
+
     frames = build_frames_d(config, "77ghz", "cnn1d_raw", sessions, store_dir)
-    tiny = dataclasses.replace(config, baselines=dataclasses.replace(config.baselines, batch_size=1000))
+    rows = np.isin(frames.subjects, [2, 3, 4])
     with pytest.raises(ExpDError, match="batch_size"):
-        run_cnn_family(tiny, "77ghz", "cnn1d_raw", _fold(1), SEEDS, frames)
+        _train_cnn(
+            np.ascontiguousarray(frames.X[rows], dtype=np.float32),
+            np.ascontiguousarray(frames.y[rows], dtype=np.float32),
+            session_sampler_weights(frames.session_row[rows]),
+            family="cnn1d_raw", lr=1e-3, weight_decay=0.0, max_epochs=1,
+            batch_size=1000, betas=config.baselines.adam_betas, patience=2,
+            min_delta=1e-4, seed_value=7, device="cpu",
+        )
 
 
 # --------------------------------------------- the optimizer never sees validation data
@@ -660,8 +727,18 @@ def test_an_off_grid_learning_rate_is_refused_before_any_fit(store, config):
 
 @pytest.mark.parametrize(
     "field, value",
-    [("optimizer", "sgd"), ("loss", "mae"), ("frame_to_session_aggregation", "mean"),
-     ("checkpoint_metric", "inner_val_frame_mae")],
+    [
+        ("optimizer", "sgd"),
+        ("loss", "mae"),
+        ("adam_betas", (0.5, 0.9)),
+        ("weight_init", "custom"),
+        ("batch_size", 8),
+        ("frame_to_session_aggregation", "mean"),
+        ("checkpoint_metric", "inner_val_frame_mae"),
+        ("raw_matched_standardize", "none"),
+        ("spectrogram_standardize", "global"),
+        ("matched_reference_rx_index_77ghz", 7),
+    ],
 )
 def test_a_drifted_training_protocol_constant_is_refused(store, config, field, value):
     """The frozen training protocol is not re-implementable by a config edit: this path
