@@ -334,8 +334,19 @@ def test_git_commit_env_fallback_when_git_fails(setup, no_live_git):
     assert out.parent.name.endswith("deadbeef")
 
 
-def test_git_degrades_to_none_without_env(setup, no_live_git):
-    """With neither a live git nor the env vars, git fields are None (dir uses 'nogit')."""
+def test_git_degrades_to_none_without_env(setup, no_live_git, monkeypatch):
+    """With no live git, no env vars AND no REVISION file, git fields are None ('nogit' dir).
+
+    The REVISION source is neutralized explicitly rather than assumed absent: the copied-tree
+    workflow stamps `git rev-parse HEAD > REVISION` at the repo root BEFORE copying to IBEX,
+    so a real checkout legitimately has one sitting there for hours at a time, and without
+    this patch the test fails with the stamped hash instead of None. `no_live_git` itself must
+    not neutralize it — a copied-tree compute node genuinely has both conditions at once,
+    which is what `test_revision_file_fallback_when_git_and_env_absent` covers.
+    """
+    import dehyd.provenance as prov
+
+    monkeypatch.setattr(prov, "_revision_file_commit", lambda: None)
     config, manifest, folds = setup
     out = record_run(config, manifest, folds)
     payload = load(out)

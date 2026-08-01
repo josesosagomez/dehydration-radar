@@ -4,6 +4,85 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-01 — M9 step 10 (part 2): the GPU path was dead on arrival — PyPI ships torch as a CUDA 13 build, IBEX runs a CUDA 12.8 driver. Repinned to the cu126 build of the SAME torch version; scientific stack verified unmoved.
+
+Found while running the cheap pre-flight gate from part 1 (`torch.cuda.is_available()`), which
+is exactly what that one-line check was added for — it cost seconds instead of eight wasted
+GPU-hours in step 13.
+
+**The failure.** On a GPU node the import aborts:
+
+    RuntimeError: The NVIDIA driver on your system is too old (found version 12080).
+
+`nvidia-smi` on both the generic and `a100` partitions reports **driver 570.86.15 = CUDA 12.8**
+(`h100` did not resolve as a gres name). The installed wheel was `2.13.0+cu130` — PyPI's
+default linux `torch` wheel is the CUDA 13 build. PyTorch tolerates minor driver skew but not
+the 12 -> 13 major jump, so the wheel could never initialise on this cluster. **No `module
+load` can fix it**: the driver is a kernel module, not an environment module — and loading
+IBEX's `machine_learning/2024.01` stack would have been actively harmful, since it shadows the
+`uv.lock`-pinned environment the whole reproducibility claim rests on.
+
+Note that `torch.cuda.is_available()` returning `False` on the LOGIN node was a red herring —
+login nodes have no GPU. The `+cu130` suffix in the version string was the real signal, and the
+diagnosis only became certain inside an `srun` allocation.
+
+**Why cu126 and not cu128/cu129.** Enumerated against the real indices rather than assumed:
+
+| index | has torch 2.13.0? | usable on a 12.8 driver? |
+|---|---|---|
+| cu128 | **no** — that index stops at 2.11.0 | n/a |
+| cu129 | yes (incl. `cp314` x86_64) | only via minor-version FORWARD compatibility |
+| cu126 | yes (incl. `cp314` x86_64) | yes — driver newer than toolkit, plain backward compat |
+
+cu128 would have meant downgrading torch two minor versions against the explicit
+`torch>=2.13.0` pin, risking both the `scipy<1.17` bound `kymatio 0.3.0` needs and the M4
+numpy-vs-torch cross-backend tolerance — a bad trade to save ~5 h on one array. cu129 would
+have worked in all likelihood but leans on forward compatibility, which would have needed its
+own empirical test; cu126 needs none. **The torch VERSION is unchanged at 2.13.0**, so the
+pin and the M4 tolerance both stand and only the bundled CUDA runtime differs. The `cp314`
+wheel check was not skipped as a formality: the IBEX venv is Python 3.14, and the first
+listings returned `cp310` only because of truncation.
+
+**Implementation.** `[[tool.uv.index]]` for `download.pytorch.org/whl/cu126` plus a
+`[tool.uv.sources]` entry scoped `marker = "sys_platform == 'linux'"`, so a non-IBEX checkout
+resolves from PyPI exactly as before and the Windows dev environment is untouched.
+
+**The verification that mattered.** Re-locking can silently move transitive pins, and this
+project has one that is load-bearing for the SCIENCE, not just the baselines: reported WST
+features come from the numpy backend, so a `scipy` move past `<1.17` would change feature
+values themselves. Full locked package set diffed before/after (61 -> 62 packages):
+
+- `numpy` (2.4.6 / 2.5.1), `scipy` **1.16.3**, `kymatio` 0.3.0, `pandas` 3.0.3,
+  `scikit-learn` 1.9.0, `h5py` 3.16.0, `matplotlib` 3.11.1 — **all unchanged**;
+- the ONLY differences are the CUDA runtime packages flipping from their `cu13`/unsuffixed
+  form to the `*-cu12` variants, plus the added `torch==2.13.0+cu126` linux entry alongside
+  the unchanged `torch==2.13.0`.
+
+So the store contents cannot be affected by this change, and the rebuild that follows is still
+a pure re-stamp of identical arrays.
+
+**Consequence for sequencing.** This lands in the SAME commit as part 1's amendments, before
+any extraction, so both stores are rebuilt exactly once. Had the extraction run first (as
+originally sequenced) it would have been thrown away — the reason the arrays were explicitly
+held.
+
+**One test fixed, and it was a latent trap in this project's own workflow.** The post-relock
+suite failed on `test_provenance.py::test_git_degrades_to_none_without_env` — not from the
+relock, but because stamping `REVISION` at the repo root (the copied-tree step, done before
+committing) gives `_revision_file_commit()` something to find, so the "no git, no env" path
+returned the stamped hash instead of `None`. The `no_live_git` fixture neutralizes live git
+and the env vars but not the third source. Fixed in that ONE test with an explicit
+`_revision_file_commit -> None` patch, not in the fixture: a copied-tree compute node
+genuinely has no-git AND a REVISION file simultaneously, which is exactly what
+`test_revision_file_fallback_when_git_and_env_absent` covers, so neutralizing it fixture-wide
+would have deleted real coverage. Verified to pass both with `REVISION` present and absent.
+Worth recording because the stamp-then-commit cycle recurs at every IBEX hand-off, and the
+failure looks like a relock regression when it is nothing of the kind.
+
+**Still to verify on IBEX**, and it is a gate, not a formality: after `uv sync --frozen`,
+`torch.cuda.is_available()` must print `True` INSIDE an `srun --gres=gpu:1` allocation. Only
+then are the fold arrays worth submitting.
+
 ## 2026-08-01 — M9 step 10 (part 1): local suite + 10 GHz CPU smokes green; two frozen-text gaps found and closed by owner decision (1-seed overlay, GPU device overlay). Remaining smokes handed to IBEX.
 
 Step 10 is a gate, not a feature: the local synthetic suite plus mechanism-only smokes before

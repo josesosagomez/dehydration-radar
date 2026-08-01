@@ -34,6 +34,31 @@ dependencies = [
 [dependency-groups]
 dev = ["pytest>=8.0", "packaging>=21.0"]
 
+# --- CUDA variant pin for the Exp D deep-learning baselines (milestone 9 step 10) -----
+# PyPI's default linux `torch` wheel is the CUDA 13 build (`2.13.0+cu130`). IBEX's GPU
+# nodes run driver 570.86.15 = CUDA 12.8 (measured 2026-08-01 on the generic and a100
+# partitions), and PyTorch tolerates minor driver skew but not the 12 -> 13 major jump, so
+# the default wheel aborts with "NVIDIA driver on your system is too old (found version
+# 12080)" the moment it touches a GPU.
+#
+# cu126 rather than cu128/cu129: 2.13.0 ships no cu128 build (that index stops at 2.11.0),
+# and a cu129 build on a 12.8 driver would lean on CUDA minor-version FORWARD compatibility.
+# A cu126 build on a 12.8 driver is plain backward compatibility — driver newer than
+# toolkit — which is unambiguous. The torch VERSION is unchanged at 2.13.0, so the
+# `torch>=2.13.0` pin above and the M4 cross-backend tolerance both stand; only the bundled
+# CUDA runtime differs.
+#
+# Scoped to linux so a non-IBEX checkout resolves from PyPI exactly as before. The
+# `scipy<1.17` bound above is the thing this must not disturb: re-locking was verified to
+# leave numpy/scipy/kymatio at their previous versions (HISTORY 2026-08-01).
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'linux'" }]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
