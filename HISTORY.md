@@ -4,6 +4,88 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-01 — M7 reference artifacts recovered after a local `results/runs/` wholesale-replace deleted them; recovered from the Windows Recycle Bin and byte-verified.
+
+While preparing HANDOFF.md, the owner replaced local `results/runs/` wholesale with a copy of
+IBEX's current run folder (to get the 16 step-10 smoke dirs locally). `results/runs/` is
+gitignored, so this is not a git-tracked directory, and the replace deleted the two M7
+reference dirs step 12's O-M9-5 bit-identity check needs
+(`results/runs/*_f36c4fb2/predictions_{band}.csv`) — they were not present in whatever the
+owner copied from IBEX.
+
+**Recovered, not lost.** Both dirs were soft-deleted (moved to the Windows Recycle Bin, not
+purged), found there, restored, and verified byte-identical to the values already on record
+before the deletion:
+
+    predictions_10ghz.csv  sha256=4bd21201cb87a62aed32b19e7f5fbb478fd7354a6a2c08040cfad6a377145c57  6360 bytes
+    predictions_77ghz.csv  sha256=c80001c57085c5ab430a63bb6549352a0a6dc407b72971463b07adf9a3287d19  3903 bytes
+    both provenance.json -> git.commit = f36c4fb2428127f590c415d0799fe677faa12c14
+
+Restored to their original paths: `results/runs/20260727T111437230187Z_f36c4fb2/` (10 GHz),
+`results/runs/20260727T115046533408Z_f36c4fb2/` (77 GHz). `results/runs/` now holds 18 dirs: the
+16 from step 10's smokes plus these two.
+
+**Resolved:** the owner confirmed both dirs are present on IBEX's `results/runs/` — the local
+copy the owner ran simply didn't reach that path (an owner-side sync-scope slip, not an IBEX
+data loss). So M7's reference artifacts are safe on IBEX regardless; this session's Recycle-Bin
+recovery only restored the LOCAL convenience copy. Worth remembering for any future
+`results/runs/` sync: pull the specific dirs needed rather than a wholesale replace, since local
+`results/runs/` is gitignored and has no other safety net beyond whatever Windows keeps.
+
+## 2026-08-01 — M9 step 10 CLOSED: every D7 smoke green on IBEX at `f9dee54`; GPU fold wall-times measured; ARRAY_TIME sized for step 13.
+
+Both v2 stores rebuilt from `f9dee54` (part 2's commit) and validated on IBEX — the 10 GHz
+`--validate` was run standalone and passed; the 77 GHz `--validate` is confirmed transitively
+rather than by a standalone log, since every entrypoint below calls `store_mod.validate_store`
+internally and fails closed before doing any work, and every 77 GHz smoke below succeeded.
+
+**D7 smoke matrix, all green, all mechanism-only (no metric surfaced), all stamped `f9dee54e`:**
+
+| smoke | band(s) | evidence |
+|---|---|---|
+| Exp C both arms | 10 GHz (local, part 1), 77 GHz (IBEX) | 6/6 folds each; run twice on IBEX by the owner (jobs 49742248/49742249), both green — harmless duplication, not a bug |
+| physics, session_index | 10 GHz (local), 77 GHz (IBEX, job 49750880) | mechanism-only run_log, empty stderr |
+| 4 CNN families x CPU (`STAGE=smoke`) | both bands, 8 jobs total (49742263-270) | all green, empty stderr, `configs/smoke.yaml` loaded (visible in each log's `config:` line) |
+| 4 CNN families x single-fold GPU (`init`/`fold`/`merge`) | 10 GHz only (jobs 49742275-292, 499/500) | `merge` reports `state=partial_non_reportable, completed_folds=[0]` for all four — EXACTLY the designed trap-14 outcome for a 1-task array, not a failure |
+
+**GPU fold wall-times** (`sacct`, real hardware, the FROZEN 5-seed set — the GPU smoke
+deliberately did not use the `[1]` overlay, since it is a timing measurement for the real
+arrays, not a mechanism check):
+
+| family | elapsed (1 fold, 10 GHz) |
+|---|---|
+| `cnn1d_raw` | 01:19:34 |
+| `cnn1d_matched` | 00:57:05 |
+| `spec2d_raw` | 00:51:23 |
+| `spec2d_matched` | 00:46:51 |
+
+A job-ID gap on `spec2d_matched`'s fold task (49742499 vs its siblings' 49742275-292) looked
+like a possible long queue wait and was checked rather than assumed: `Submit`/`Start` were 2 s
+apart, identical to the others. Not a queuing issue — just other users' jobs landing in
+between the IDs on a shared cluster.
+
+**ARRAY_TIME for step 13**, sized from these measurements with margin for cross-fold variance
+(only one fold was measured per family; the 16 real outer folds have different training-subject
+counts, hence different inner-CV costs) — not measured, so not "verified," recorded as a sizing
+decision:
+
+| family | ARRAY_TIME |
+|---|---|
+| `cnn1d_raw` | `03:00:00` |
+| `cnn1d_matched` | `02:00:00` |
+| `spec2d_raw` | `02:00:00` |
+| `spec2d_matched` | `02:00:00` |
+
+**These numbers are 10 GHz only, reused for 77 GHz rather than separately measured** —
+disclosed as an assumption, not a second measurement: step 10 (§1) does not require a
+per-band GPU timing, the CNN architecture/grid/epoch-budget is identical across bands, and the
+77 GHz input tensors are, if anything, smaller (256 raw-slowtime samples vs 470-534 at 10 GHz),
+so 77 GHz training cost is expected to be equal or lower. If a 77 GHz fold times out under
+these values at step 13, that assumption is what to revisit first.
+
+**D7 is now CLOSED.** Step 10 in full: D1 (suite), D2 (pins), D6 (both stores v2, validated at
+`f9dee54`) and D7 (this entry) all satisfied. Nothing left before step 11.
+
 ## 2026-08-01 — M9 step 10 (part 2): the GPU path was dead on arrival — PyPI ships torch as a CUDA 13 build, IBEX runs a CUDA 12.8 driver. Repinned to the cu126 build of the SAME torch version; scientific stack verified unmoved.
 
 Found while running the cheap pre-flight gate from part 1 (`torch.cuda.is_available()`), which
