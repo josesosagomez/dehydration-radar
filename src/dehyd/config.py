@@ -28,6 +28,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 VALID_DEVICES = ("cpu", "cuda")
 
+# The two legal `run.seed_set` shapes. FROZEN_SEED_SET is the reporting protocol: five
+# distinct seeds for the stochastic models, each scored separately at the outer level.
+# SMOKE_SEED_SET is the mechanism-only overlay of MILESTONE_9_PLAN.md §1 step 10 / §2.11
+# (configs/smoke.yaml) — one seed instead of five divides an Exp D CNN family's fit count
+# from 930 to 186, which is the difference between a smoke that runs and one that does not.
+# It is pinned to its LITERAL value rather than to a length, so an arbitrary single seed
+# cannot ride in under the overlay's licence; the entrypoints refuse it for any reporting
+# run (run_baselines._require_frozen_run_protocol, run_ordinal._require_frozen_seed_set).
+FROZEN_SEED_SET = (1, 2, 3, 4, 5)
+SMOKE_SEED_SET = (1,)
+
 # Band-gate implementations and standardization methods. The first of each is the
 # primary; the second is a PRE-DECLARED ABLATION (never an inner-CV candidate).
 GATE_METHODS = ("butterworth", "fft")
@@ -849,16 +860,20 @@ def _build_run(raw: dict) -> RunConfig:
         isinstance(s, int) and not isinstance(s, bool) for s in seed_set
     ):
         raise ConfigError("run.seed_set must be a list of integers")
-    if len(seed_set) != 5:
-        raise ConfigError(
-            f"run.seed_set must contain exactly 5 seeds, got {len(seed_set)} "
-            "(the protocol fixes a 5-seed set for stochastic models)"
-        )
-    if len(set(seed_set)) != 5:
-        raise ConfigError(
-            f"run.seed_set must contain 5 DISTINCT seeds, got {seed_set} — "
-            "duplicates would silently give fewer than 5 effective repeats"
-        )
+    # The mechanism-only smoke overlay is the one reduced set that loads; everything else
+    # must be the frozen 5-seed reporting shape.
+    if tuple(seed_set) != SMOKE_SEED_SET:
+        if len(seed_set) != 5:
+            raise ConfigError(
+                f"run.seed_set must contain exactly 5 seeds, got {len(seed_set)} "
+                f"(the protocol fixes a 5-seed set for stochastic models; the only reduced "
+                f"set that loads is the mechanism-only smoke overlay {list(SMOKE_SEED_SET)})"
+            )
+        if len(set(seed_set)) != 5:
+            raise ConfigError(
+                f"run.seed_set must contain 5 DISTINCT seeds, got {seed_set} — "
+                "duplicates would silently give fewer than 5 effective repeats"
+            )
 
     device = section["device"]
     if device not in VALID_DEVICES:

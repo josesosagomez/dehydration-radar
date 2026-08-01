@@ -1,0 +1,21 @@
+# Run-level SMOKE overlay — pass as the LAST --config on a mechanism-only smoke.
+#
+# CLAUDE.md's smoke rule is that the same code runs as a fast local smoke and as the full
+# IBEX job, differing ONLY by run-level config (data subset, seeds, device) and never by a
+# separate code path. This file is that difference for the seed dimension.
+#
+# Why it exists: at the frozen five seeds one Exp D CNN family's 6-subject smoke is
+#   6 outer folds x (6 configs x 5 inner folds x 5 seeds + 1 refit x 5 seeds) = 930 fits,
+# measured at >2.5 h on 16 CPU cores for cnn1d_raw (milestone 9 step 10). One seed makes it
+# 186 fits. The smoke's job is to prove the MECHANISM runs end to end, and the fifth seed
+# proves nothing the first did not.
+#
+# It touches `run` ONLY. Every milestone-6-frozen section (search_*, model_grid, baselines,
+# exp_b, exp_c, stats, protocol_freeze) is absent, so each keeps its frozen value and
+# protocol_freeze_guard sees an identical config in both modes. max_epochs stays 200, with
+# early stopping doing the shortening.
+#
+# It is refused by every REPORTING path: run_baselines._require_frozen_run_protocol and
+# run_ordinal._require_frozen_seed_set both demand (1, 2, 3, 4, 5) outside smoke mode.
+run:
+  seed_set: [1]

@@ -352,6 +352,24 @@ def test_fold_task_refuses_a_run_group_it_does_not_belong_to(tmp_path, monkeypat
         rb.main(args + ["--family", "cnn1d_raw"])
 
 
+def test_a_fold_task_naming_a_different_device_than_init_is_refused(tmp_path, monkeypatch):
+    """`run.device` is inside `config_to_dict`, so it is hashed into `config_fingerprint` —
+    which means a GPU overlay applied to the FOLD stage alone (the obvious way to wire
+    `device: cuda`, §5 trap 11) makes every array task fail lineage validation AFTER init
+    already succeeded. This test pins that failure so the sbatch's uniform-overlay structure
+    cannot be "simplified" back into the broken shape.
+    """
+    sessions = _sessions()
+    run_dir, _, overlay = _init_group(tmp_path, monkeypatch, sessions)   # init: device cpu
+    device = tmp_path / "gpu.yaml"
+    device.write_text("run:\n  device: cuda\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="config_hash"):
+        rb.main(CONFIG_ARGS + ["--config", str(overlay), "--config", str(device),
+                               "--family", "cnn1d_raw", "--fold", "0",
+                               "--run-dir", str(run_dir)])
+
+
 def test_a_fold_index_beyond_the_selectable_list_is_a_named_no_op(tmp_path, monkeypatch):
     """(§5 trap 14) The array is a fixed 16 tasks while N_eval can be smaller; the extra tasks
     must exit 0 with a marker the merge can tell apart from a crash."""

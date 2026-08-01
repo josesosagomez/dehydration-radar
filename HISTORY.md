@@ -4,6 +4,170 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-01 — M9 step 10 (part 1): local suite + 10 GHz CPU smokes green; two frozen-text gaps found and closed by owner decision (1-seed overlay, GPU device overlay). Remaining smokes handed to IBEX.
+
+Step 10 is a gate, not a feature: the local synthetic suite plus mechanism-only smokes before
+any large IBEX spend. Both halves ran; the smokes exposed two gaps that made parts of the step
+literally unexecutable as written, and both were decided by the owner mid-step rather than
+improvised around.
+
+**Local suite, before any change.** `1141 passed, 16 skipped in 967.19 s`, and
+`git diff --exit-code tests/test_no_leakage.py` clean — identical to the `a296e29` baseline, so
+the 9.6 store rebuild moved nothing in the code under test.
+
+**The local 10 GHz store had to be rebuilt first, and why that is not busywork.** It attested
+`4599ef3` while HEAD was `dab8f70`, and `_check_match` compares commit hashes by strict
+equality, so every local run failed closed. `git diff --name-only 4599ef3 HEAD` is exactly
+`HISTORY.md` — a journal-only commit — which is the sharpened form of trap 18 this project
+already recorded on 2026-07-31: **the operative rule is ordering, not file type.** Rebuilt at
+`dab8f70` (73 sessions, ~40 min, `--validate` clean). Byte-content identical by construction,
+since no code changed; only the sidecar stamp moved.
+
+**Smokes that ran locally (10 GHz, real store, `--subset 6subjects`):**
+
+| smoke | wall time | outcome |
+|---|---|---|
+| Exp D `physics` | 43 s | green, mechanism-only |
+| Exp D `session_index` | 42 s | green, mechanism-only |
+| Exp C (both arms, 6 fold workers) | 1791 s | green, 6/6 folds |
+| Exp D `cnn1d_raw` | **killed at 5 h 08 m** | see below |
+
+Every one wrote only a structural `run_log`, no metric — the reporting boundary held. Exp C
+completing on 6 subjects is the substantive result here, because trap 3 predicted that a
+6-subject cohort can genuinely leave an inner-training set without a class; the run finished,
+which means the evaluable-folds-only aggregation degraded as designed instead of NaN-ing every
+candidate.
+
+**GAP 1 — the `seed_set=[1]` smoke overlay was inexpressible.** §1 step 10 and §2.11 both
+specify it, but `config.py::_build_run` required exactly 5 distinct seeds, so `load_config`
+refused it outright. This had already been found and flagged at step 9 (entry below:
+"step 10's CNN smokes will either run all five seeds or need a config-validator amendment") —
+step 10 is where it came due. Measured cost of running without it: one family's smoke is
+`6 outer folds x (6 configs x 5 inner folds x 5 seeds + 1 refit x 5 seeds) = 930 fits`, which
+is the 5 h 08 m above, unfinished, on 16 CPU cores. With the overlay it is 186 fits.
+
+**Owner decision (2026-08-01): amend the validator.** `run.seed_set` now accepts the frozen
+`(1,2,3,4,5)` **or** the literal `SMOKE_SEED_SET = (1,)`, and nothing else. Pinned to the
+literal value rather than to `len(seed_set) in (1, 5)` deliberately: a length rule would let an
+arbitrary single seed ride in under the overlay's licence, and the regression test uses `[3]`
+to fail against exactly that weaker form. The error message keeps the substring
+`exactly 5 seeds` so the pre-existing size/distinctness tests pass unedited.
+
+Containment, because relaxing a loader rule removes a protection that reporting paths were
+leaning on: `run_baselines._require_frozen_run_protocol` already refused a non-frozen seed set
+outside smoke mode, and `run_ordinal.py` gained the same guard (`_require_frozen_seed_set`).
+**`run_regression.py` was deliberately NOT given one** — O-M9-5 requires the Exp A re-run to be
+byte-unchanged code — so its 1-seed exposure is caught downstream instead, by step 12's
+bit-identity assert against the M7 predictions (D9), which is milestone-stopping by design.
+`run_clock_decoupling.py` (Exp B) is likewise unguarded and is left so: Exp B is complete and
+reported, and editing it would put the M8 pins at risk for no live benefit. **Recorded as a
+known residual, not a silent omission.**
+
+**GAP 2 — nothing ever set `device: cuda`, so the GPU path trained on CPU.** Trap 11 says "the
+CNN full-cohort config must set it explicitly"; no config did. `exp_a_regression{,_77ghz}.yaml`
+and `exp_77ghz.yaml` all pin `cpu`, `ibex.yaml` is paths-only by design, and neither
+`run_exp_d_cnn.sbatch` nor `submit_exp_d_cnn.sh` passed a device overlay — while the wrapper
+*does* request `--gres=gpu:1` for the fold stage. The failure mode is invisible: the job
+allocates a GPU, trains on the CPU, succeeds, and produces correct numbers. It would have hit
+step 10's GPU smoke and all eight of step 13's fold arrays.
+
+**Owner decision (2026-08-01): add `configs/gpu.yaml` (`run.device: cuda`, run-level only).**
+The non-obvious part, found by measurement rather than reasoning: `run.device` is inside
+`config_to_dict`, so it is hashed into `exp_b.config_fingerprint`
+(`cpu -> 1d8f08ad96962e2a`, `cuda -> 0ca0471838134238`). Applying the overlay to the fold stage
+alone — the obvious wiring, since that is the only stage touching a GPU — makes **every array
+task abort in `_validate_group_lineage` on `config_hash`, after the init job has already
+succeeded**. The sbatch therefore folds it into one `GROUP_ARGS` loaded identically by
+init/fold/merge; init and merge never build a tensor, so naming cuda there costs nothing.
+`STAGE=smoke` is excluded (it joins no run group, and step 10 specifies the CPU smokes).
+A regression test pins the broken shape so it cannot be "simplified" back.
+
+**Also added, both needed to execute the step at all:** `configs/smoke.yaml` (the `seed_set:
+[1]` overlay, `run:` only, so every M6-frozen section keeps its frozen value and
+`protocol_freeze_guard` sees an identical config in both modes); a `STAGE=smoke` branch in
+`run_exp_d_cnn.sbatch`, because step 10 requires a CPU smoke for every Exp D family in **both**
+bands and the 77 GHz store exists only on IBEX — that half cannot be smoked locally at all. The
+smoke stage takes no `--run-dir` on purpose: a smoke writing into a real run group would leave
+mechanism-only artifacts where `--merge-folds` looks for shards. And `ARRAY_SPEC` in
+`submit_exp_d_cnn.sh` (default `1-16`, unchanged) so step 10's single-fold GPU measurement can
+be submitted through the same wrapper; the default stays the full span because a forgotten
+`ARRAY_SPEC` must over-run, never silently under-run the cohort.
+
+A useful property of both overlays, not designed for but worth recording: because
+`config_fingerprint` hashes the whole config dict, a smoke run's `config_hash` differs from a
+reporting run's, so a smoke artifact cannot satisfy the lineage checks in `--merge-folds` or
+`comparisons` even by accident.
+
+**Suite after the amendments:** `1150 passed, 16 skipped in 929.49 s` (+9), then the GPU-wiring
+group on top; `tests/test_no_leakage.py` byte-clean throughout. No harness, provider, model,
+split, seed, bootstrap or statistical parameter was touched — the diff is two run-level config
+files, one loader rule, one entrypoint guard, and shell wiring.
+
+**Why the rest of step 10 moves to IBEX (owner instruction, 2026-08-01).** The owner's
+constraint is wall-clock, not allocation: run everything there, concurrently, GPUs included.
+That settles the fork this step raised — the amendment ships to IBEX, `REVISION` is re-stamped
+to the step-10 commit, and **both stores are rebuilt from it**, per trap 18, cost acknowledged.
+The `torch` pin was checked before committing to a GPU plan: on `sys_platform == 'linux'`
+`torch 2.13.0` resolves with `cuda-toolkit` / `nvidia-cudnn-cu13`, so the IBEX venv is
+CUDA-capable (the M5 README's "CPU wheel" note is platform-specific and does not apply there).
+
+**What remains for D7,** all owner-run (this session has no ssh — `scripts/ibex/README.md:3`):
+77 GHz Exp C smoke; both cheap baselines x 77 GHz; all four CNN families x both bands as
+`STAGE=smoke` CPU jobs; and one single-fold GPU array task per CNN family, whose measured
+wall-time becomes step 13's `ARRAY_TIME` (the C8 rule).
+
+**Literal IBEX sequence (owner-run).** Every command below is literal; `<step10-commit>` is
+this entry's commit. Stages 2-4 are mutually independent and are meant to be submitted
+together — the wall-clock floor is the 77 GHz store rebuild.
+
+```bash
+# 1. re-sync the tree and RE-STAMP the revision, then rebuild BOTH stores (trap 18).
+#    Nothing below is valid until this completes: the v2 stores attest 4599ef3 and every
+#    run's commit-match is strict equality.
+#    On the machine WITH git:  git rev-parse HEAD > REVISION
+#    Copy src/ configs/ experiments/ scripts/ pyproject.toml uv.lock REVISION to IBEX, then
+#    re-apply the two local IBEX edits: configs/ibex.yaml's real absolute paths (the shipped
+#    file has <user> placeholders and the folder name `dehyd`, not `dehy_radar`).
+cd /ibex/user/<user>/dehy_radar
+.venv/bin/python -c "import torch; print(torch.__version__, torch.cuda.is_available())"  # cheap GPU gate
+sbatch scripts/ibex/extract10.sbatch     # 80-task array, ~01:00 each
+sbatch scripts/ibex/extract77.sbatch     # 80-task array, ~02:00 each  <- the long pole
+.venv/bin/python experiments/extract_features.py --config configs/exp_a_regression.yaml      --band 10ghz --validate
+.venv/bin/python experiments/extract_features.py --config configs/exp_a_regression_77ghz.yaml --band 77ghz --validate
+
+# 2. Exp C mechanism smoke, 77 GHz (10 GHz already green locally; re-run it here if desired)
+BAND=77ghz MODE=smoke sbatch scripts/ibex/run_exp_c.sbatch
+
+# 3. cheap baselines, 77 GHz (10 GHz already green locally)
+BAND=77ghz MODE=smoke FAMILY=cheap sbatch scripts/ibex/run_exp_d_cheap.sbatch
+
+# 4. the eight CNN CPU smokes -- all independent, submit together
+for BAND in 10ghz 77ghz; do
+  for FAMILY in cnn1d_raw cnn1d_matched spec2d_raw spec2d_matched; do
+    STAGE=smoke BAND=$BAND FAMILY=$FAMILY sbatch \
+      --cpus-per-task=16 --mem=64G --time=04:00:00 \
+      --output=logs/exp_d_smoke_${FAMILY}_${BAND}_%j.out \
+      --error=logs/exp_d_smoke_${FAMILY}_${BAND}_%j.err \
+      --export=ALL,STAGE,BAND,FAMILY scripts/ibex/run_exp_d_cnn.sbatch
+  done
+done
+
+# 5. the single-fold GPU smokes -- ONE real fold on a real GPU per family; the measured
+#    wall-time is what step 13's ARRAY_TIME gets sized from, and nothing else is.
+#    ARRAY_SPEC=1-1 runs fold 0 only; merge still runs and reports the partial
+#    completed_folds as a NAMED non-reportable state (trap 14), which is correct for a smoke.
+for FAMILY in cnn1d_raw cnn1d_matched spec2d_raw spec2d_matched; do
+  FAMILY=$FAMILY BAND=10ghz ARRAY_SPEC=1-1 ARRAY_TIME=02:00:00 \
+    bash scripts/ibex/submit_exp_d_cnn.sh
+done
+# then: grep the fold logs for elapsed wall-time and record it here before step 13.
+```
+
+Note on step 5: unlike the CPU smokes it uses the **full frozen 5-seed set**, because it is a
+timing measurement for the real fold arrays — a 1-seed timing would under-size `ARRAY_TIME` by
+about 5x. It is still mechanism-only in the sense that matters (its artifacts are shards in a
+throwaway run group, not a reported result).
+
 ## 2026-07-31 — M9 step 9.6 DONE: both IBEX feature stores rebuilt as v2 at `4599ef3` and `--validate`-clean — 73 sessions (10 GHz) / 72 (77 GHz). D6 closed.
 
 Completes the step the two entries below opened. The owner ran both extraction arrays on IBEX and

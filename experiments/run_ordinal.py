@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from dehyd.config import load_config, require_77ghz_dir  # noqa: E402
+from dehyd.config import FROZEN_SEED_SET, load_config, require_77ghz_dir  # noqa: E402
 from dehyd.data.ground_truth import load_ground_truth  # noqa: E402
 from dehyd.data.manifest import apply_qc, build_manifest  # noqa: E402
 from dehyd.data.manifest_77 import apply_qc_77, build_manifest_77  # noqa: E402
@@ -40,6 +40,22 @@ from dehyd.eval import exp_a, exp_b, exp_c  # noqa: E402
 from dehyd.eval.splits import nested_loso_splits  # noqa: E402
 from dehyd.features.protocol_freeze import protocol_freeze_guard  # noqa: E402
 from dehyd.provenance import _git_info, record_run  # noqa: E402
+
+
+def _require_frozen_seed_set(config, mode) -> None:
+    """Outside the mechanism-only smoke, the seed set is not a free run-level knob.
+
+    `configs/smoke.yaml`'s `seed_set: [1]` became expressible at milestone 9 step 10, so the
+    loader alone no longer protects a REPORTING run from it — this is the same guard
+    `run_baselines._require_frozen_run_protocol` carries, applied to Exp C.
+    """
+    if mode == "smoke":
+        return
+    if tuple(config.run.seed_set) != FROZEN_SEED_SET:
+        raise SystemExit(
+            f"run.seed_set is {tuple(config.run.seed_set)} but a full Exp C run is frozen at "
+            f"{FROZEN_SEED_SET} — the reduced seed set is a SMOKE-only overlay"
+        )
 
 
 def _build_manifest_qc(config, band):
@@ -65,6 +81,7 @@ def main(argv=None) -> int:
 
     sessions = exp_c.build_sessions_c(config, args.band)
     mode = "full" if args.full_cohort else "smoke"
+    _require_frozen_seed_set(config, mode)
     if mode == "smoke":
         keep = set(exp_a.select_subset_subjects(exp_c.evaluable_subjects_c(sessions), k=6))
         sessions = [s for s in sessions if s["subject"] in keep]

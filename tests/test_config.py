@@ -226,6 +226,33 @@ def test_seed_set_must_be_distinct(tmp_path, overlay):
         load_config(EXP_A, overlay, bad)
 
 
+def test_the_single_smoke_seed_is_the_one_legal_reduced_seed_set(tmp_path, overlay):
+    """MILESTONE_9_PLAN.md §1 step 10 / §2.11 specify a `seed_set: [1]` overlay for the
+    mechanism-only smokes (it divides an Exp D CNN family's fit count by five). Before this
+    amendment the loader's flat "exactly 5" rule made that overlay inexpressible, so the
+    smokes had no cheap path at all — flagged at step 9 (HISTORY.md), owner-decided at
+    step 10."""
+    smoke = write_yaml(tmp_path / "smoke.yaml", {"run": {"seed_set": [1]}})
+    assert load_config(EXP_A, overlay, smoke).run.seed_set == (1,)
+
+
+def test_a_reduced_seed_set_that_is_not_the_smoke_seed_is_still_refused(tmp_path, overlay):
+    """The narrow shape is the point. A rule that accepted ANY length-1 list would let an
+    arbitrary single seed ride in under the smoke overlay's licence, so the reduced form is
+    pinned to its literal value — this fails against `len(seed_set) in (1, 5)`."""
+    bad = write_yaml(tmp_path / "bad.yaml", {"run": {"seed_set": [3]}})
+    with pytest.raises(ConfigError, match="exactly 5 seeds"):
+        load_config(EXP_A, overlay, bad)
+
+
+@pytest.mark.parametrize("seeds", [[1, 2], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6]])
+def test_every_other_seed_set_size_is_still_refused(tmp_path, overlay, seeds):
+    """The amendment opens exactly one new shape and no others."""
+    bad = write_yaml(tmp_path / "bad.yaml", {"run": {"seed_set": seeds}})
+    with pytest.raises(ConfigError, match="exactly 5 seeds"):
+        load_config(EXP_A, overlay, bad)
+
+
 def test_device_must_be_valid(tmp_path, overlay):
     bad = write_yaml(tmp_path / "bad.yaml", {"run": {"device": "tpu"}})
     with pytest.raises(ConfigError, match="run.device"):

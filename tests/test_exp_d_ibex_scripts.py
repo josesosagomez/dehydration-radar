@@ -66,10 +66,70 @@ def test_cnn_fold_stage_maps_the_array_task_id_to_a_zero_based_fold():
     assert '--fold "$FOLD"' in text
 
 
+def test_cnn_sbatch_carries_a_cpu_smoke_stage_that_never_touches_a_run_group():
+    """Step 10 requires a CPU mechanism smoke for every Exp D family in BOTH bands, but the
+    77 GHz store lives only on IBEX — so the smoke needs a batch path, and the STAGE-dispatch
+    file is where it belongs. It runs `--subset 6subjects` in one process, so it must NOT
+    accept or write a --run-dir: a smoke that landed inside a real run group would put
+    mechanism-only artifacts where the merge looks for shards."""
+    text = CNN_SBATCH.read_text(encoding="utf-8")
+    smoke = text.split("smoke)")[1].split(";;")[0]
+    assert "--subset" in smoke and "6subjects" in smoke
+    assert "--run-dir" not in smoke and "RUN_DIR" not in smoke
+    assert "configs/smoke.yaml" in smoke      # the seed_set=[1] overlay, or it costs 5x
+
+
+def test_the_gpu_overlay_is_applied_to_every_run_group_stage_and_to_no_other():
+    """(§5 trap 11 + the config_hash coupling) `ibex.yaml` is paths-only and nothing else sets
+    `device: cuda`, so the fold array would allocate a GPU and train on CPU. The overlay fixes
+    that — but because `run.device` is hashed into `config_fingerprint`, init/fold/merge must
+    ALL load it or the array fails `_validate_group_lineage` on config_hash. The smoke is
+    standalone (it joins no run group) and step 10 specifies it on CPU, so it must NOT."""
+    text = CNN_SBATCH.read_text(encoding="utf-8")
+    body = text.split("case \"$STAGE\" in")[1]
+    stages = {name: body.split(f"{name})")[1].split(";;")[0]
+              for name in ("init", "fold", "merge", "smoke")}
+    group_args = {name: ("GROUP_ARGS" in stage) for name, stage in stages.items()}
+    assert group_args == {"init": True, "fold": True, "merge": True, "smoke": False}
+    assert "GROUP_ARGS=(\"${CONFIG_ARGS[@]}\" --config configs/gpu.yaml)" in text
+    assert "configs/gpu.yaml" not in stages["smoke"]
+
+
+def test_gpu_overlay_names_only_the_device():
+    import yaml
+
+    from dehyd.config import M6_SECTIONS
+
+    overlay = yaml.safe_load((REPO_ROOT / "configs" / "gpu.yaml").read_text(encoding="utf-8"))
+    assert set(overlay) == {"run"} and overlay["run"] == {"device": "cuda"}
+    assert not set(overlay) & set(M6_SECTIONS)
+
+
+def test_the_smoke_overlay_config_reduces_run_level_fields_only():
+    """CLAUDE.md's smoke rule: a smoke differs from the full job by run-level config alone.
+    Any M6-frozen section appearing here would make the smoke exercise different science."""
+    import yaml
+
+    from dehyd.config import M6_SECTIONS
+
+    overlay = yaml.safe_load((REPO_ROOT / "configs" / "smoke.yaml").read_text(encoding="utf-8"))
+    assert set(overlay) == {"run"}
+    assert overlay["run"] == {"seed_set": [1]}
+    assert not set(overlay) & set(M6_SECTIONS)
+
+
 def test_submit_script_requests_a_gpu_for_the_fold_stage_only():
     text = SUBMIT_SH.read_text(encoding="utf-8")
     gpu_lines = [line for line in text.splitlines() if "--gres=gpu" in line]
-    assert len(gpu_lines) == 1 and "--array=1-16" in gpu_lines[0]
+    assert len(gpu_lines) == 1 and "--array=" in gpu_lines[0]
+
+
+def test_the_array_span_defaults_to_all_sixteen_folds():
+    """Step 10 needs a SINGLE-fold GPU task to measure ARRAY_TIME from (the C8 rule: size the
+    array from measurement, never a guess), so the span is an env knob — but its DEFAULT must
+    stay the full 16, or a forgotten ARRAY_SPEC would silently under-run step 13's cohort."""
+    text = SUBMIT_SH.read_text(encoding="utf-8")
+    assert '--array="${ARRAY_SPEC:-1-16}"' in text
 
 
 def test_submit_script_normalizes_every_parsable_job_id():

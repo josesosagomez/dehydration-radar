@@ -1,0 +1,22 @@
+# Run-level GPU overlay for the Exp D deep-learning baselines — pass as a LATER --config.
+#
+# Why it has to exist (MILESTONE_9_PLAN.md §5 trap 11): `configs/ibex.yaml` is a PATHS-ONLY
+# overlay by design, and every experiment config pins `device: cpu`, so nothing in the chain
+# ever selected a GPU. `submit_exp_d_cnn.sh` requests `--gres=gpu:1` for the fold stage, which
+# means that without this file the array allocates a GPU and then trains on the CPU — the
+# failure is invisible, since the job still succeeds and still produces correct numbers.
+#
+# Why it is a SEPARATE file rather than a line in ibex.yaml: the four CNN families are the
+# ONLY authorized GPU consumers (implementation_plan.md:1326-1329). The frozen numpy-backend
+# policy for reported WST features is untouched, and `run_baselines._require_frozen_run_protocol`
+# refuses `device: cuda` for every non-CNN family, so this overlay must be opt-in per job
+# rather than ambient on IBEX.
+#
+# IMPORTANT — apply it to ALL THREE run-group stages or none. `run.device` is part of the
+# dict `config_to_dict` builds, so it is hashed into `exp_b.config_fingerprint`. An overlay
+# loaded by the fold tasks but not by `--init-run-group` makes every array task abort in
+# `_validate_group_lineage` on `config_hash`, after the init job has already succeeded.
+# `run_exp_d_cnn.sbatch` therefore folds it into one `GROUP_ARGS` used by init, fold and
+# merge alike; `tests/test_exp_d_ibex_scripts.py` pins that.
+run:
+  device: cuda

@@ -141,6 +141,39 @@ def test_smoke_keeps_the_six_lowest_subjects_and_surfaces_no_performance_value(t
     assert not list(results.rglob("metrics_exp_c_*"))
 
 
+def test_full_cohort_refuses_the_single_smoke_seed(tmp_path, monkeypatch):
+    """The `seed_set: [1]` overlay is expressible in a config file from step 10 onward, so
+    Exp C's REPORTING path needs its own guard — exactly the one `run_baselines.py` already
+    carries. Without it the loader amendment would silently let a full-cohort Exp C run at one
+    seed, which is a protocol change no artifact would record.
+
+    `run_regression.py` deliberately gains no such guard: O-M9-5 requires the Exp A re-run to
+    be byte-unchanged code, and its 1-seed exposure is caught downstream instead, by the
+    step-12 bit-identity assert against the M7 predictions (D9).
+    """
+    overlay, data_10, _ = _overlay(tmp_path)
+    seeds = tmp_path / "smoke_seeds.yaml"
+    seeds.write_text("run:\n  seed_set: [1]\n", encoding="utf-8")
+    _patch(monkeypatch, _sessions(), data_10, {})
+
+    with pytest.raises(SystemExit, match="seed_set"):
+        ro.main(CONFIG_ARGS + ["--config", str(overlay), "--config", str(seeds),
+                               "--full-cohort"])
+
+
+def test_the_smoke_accepts_the_single_seed_overlay(tmp_path, monkeypatch):
+    """...and the same overlay is fine in smoke mode — that is the whole point of it."""
+    overlay, data_10, _ = _overlay(tmp_path)
+    seeds = tmp_path / "smoke_seeds.yaml"
+    seeds.write_text("run:\n  seed_set: [1]\n", encoding="utf-8")
+    captured = {}
+    _patch(monkeypatch, _sessions(), data_10, captured)
+
+    assert ro.main(CONFIG_ARGS + ["--config", str(overlay), "--config", str(seeds),
+                                  "--subset", "6subjects"]) == 0
+    assert captured["mode"] == "smoke"
+
+
 def test_77ghz_run_hashes_against_the_77ghz_root(tmp_path, monkeypatch):
     """(C22) `_hash_inputs` defaults to the 10 GHz root; the entrypoint must pass
     `require_77ghz_dir(config)`. Two roots holding same-named files with different bytes make

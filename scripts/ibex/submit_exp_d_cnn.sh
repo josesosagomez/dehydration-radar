@@ -18,6 +18,14 @@
 # 01:00:00 (record_run's raw-file hashing plus one full spine build is genuine I/O work, never
 # a login-node step, C23).
 #
+# ARRAY_SPEC is that measurement's own knob: it defaults to the full 1-16, and step 10's
+# single-fold GPU smoke sets it to 1-1 so ONE real fold runs on a real GPU and its wall-time
+# becomes ARRAY_TIME for step 13. The default stays 1-16 deliberately -- a forgotten
+# ARRAY_SPEC must over-run, never silently under-run the cohort.
+#   FAMILY=cnn1d_raw BAND=10ghz ARRAY_SPEC=1-1 ARRAY_TIME=02:00:00 bash scripts/ibex/submit_exp_d_cnn.sh
+# The merge stage still runs after a 1-task array; it reports the partial `completed_folds`
+# as a NAMED non-reportable state (trap 14), which is the correct outcome for a smoke.
+#
 # STAGE=init runs on its own sized allocation and this script BLOCKS on it (`sbatch --wait`)
 # before ever submitting the array -- a failed init means the array is never submitted (set -e
 # plus the exit-code check below). STAGE=fold is the REAL cross-fold concurrency: 16 tasks, one
@@ -59,8 +67,8 @@ run_dir=$(tail -n1 "logs/exp_d_cnn_init_${tag}_${init_job_id}.out")
 [ -d "$run_dir" ] || { echo "ERROR: init did not produce a valid run_dir: '${run_dir}'" >&2; exit 1; }
 echo "init OK, run_dir=${run_dir}"
 
-echo "submitting exp_d_cnn STAGE=fold (--array=1-16), time=${ARRAY_TIME:-08:00:00}"
-array_raw=$(sbatch --parsable --array=1-16 --gres=gpu:1 --cpus-per-task=4 --mem=32G \
+echo "submitting exp_d_cnn STAGE=fold (--array=${ARRAY_SPEC:-1-16}), time=${ARRAY_TIME:-08:00:00}"
+array_raw=$(sbatch --parsable --array="${ARRAY_SPEC:-1-16}" --gres=gpu:1 --cpus-per-task=4 --mem=32G \
     --time="${ARRAY_TIME:-08:00:00}" \
     --output="logs/exp_d_cnn_fold_${tag}_%A_%a.out" --error="logs/exp_d_cnn_fold_${tag}_%A_%a.err" \
     --export=ALL,STAGE=fold,BAND,FAMILY,RUN_DIR="$run_dir" \
