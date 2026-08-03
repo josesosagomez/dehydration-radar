@@ -4,6 +4,52 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-03 — IBEX redeployed as a git CLONE (repo made public), `configs/ibex.yaml` paths committed instead of hand-edited. Accepted cost: the commit moves, so BOTH v2 feature stores are invalidated and must be rebuilt (trap 18, no waiver).
+
+**Why anything changed.** The owner made the GitHub repo public and wiped the IBEX tree except
+`data/` and `results/features/` — the two large, regenerable-but-expensive folders — to replace the
+hand-copied-subset deployment with a real clone. That kills three standing problems at once: the
+copied tree had no `.git`, so (a) `submit_ibex.sh` was unusable there (it shells out to git; see the
+step-9.6 entry), (b) provenance depended on an `echo`-written `REVISION` file, and (c)
+`configs/ibex.yaml` was rewritten in place on IBEX with the real absolute paths, an edit that lived
+nowhere in version control and had to be re-applied by hand after every sync.
+
+No SSH key is involved: a public repo clones and pulls over HTTPS with no credentials. IBEX is
+read-only with respect to the repo — development and pushes happen on the Windows machine.
+
+**What was edited.** `configs/ibex.yaml`: all four `paths.*` entries changed from the shipped
+`<user>` placeholders under `/ibex/user/<user>/dehyd` to the owner's literal root
+`/ibex/user/floresge/dehy_radar`. Note this is a **different username** from the `sosagojm` recorded
+in the step-9.6 deployment entry; `floresge` is what the owner gave for the current account and is
+where `data/` and `results/features/` now live. `scripts/ibex/README.md` was updated to match (clone
+URL, the four `rsync` lines, and the setup step, which now says *do not* edit `ibex.yaml` on IBEX and
+explains why). `plans/MILESTONE_5_PLAN.md` and earlier HISTORY entries keep their placeholders —
+they are dated records, not live config.
+
+**The cost, accepted deliberately.** `configs/ibex.yaml` is tracked, so this commit moves HEAD past
+`f9dee54`. `store.py:_check_match` compares the sidecar's `git.commit` against the run's
+`analysis_commit` under **strict equality** — it does not care that the diff is paths-only — so both
+v2 stores (10 GHz 73 sessions, 77 GHz 72) are now stale and every experiment would fail closed
+against them. Two alternatives were put to the owner and rejected:
+
+1. bundle the config change into the O-M9-5 amendment, which forces a rebuild anyway — rejected
+   because that amendment is still undecided and this deployment should not wait on it;
+2. keep HEAD at `f9dee54` on IBEX and hide the local edit with
+   `git update-index --skip-worktree configs/ibex.yaml` — rejected because it makes the working tree
+   diverge from the commit it attests, which is exactly the class of untracked-environment-drift that
+   made the O-M9-5 failure unreconstructible in the first place.
+
+Choosing the rebuild trades ~a few hours of extraction-array wall-clock for a deployment whose
+revision is fully attributable to a public commit. Given that the open O-M9-5 question is *itself* an
+unreconstructible-environment problem, paying for provenance here is the consistent call.
+
+**Consequences to carry.** The stores must be rebuilt at this entry's commit before anything else
+runs (`extract10.sbatch` / `extract77.sbatch`, then `--validate` per band). Step 11's Exp C results
+and step 12's Exp A re-runs were produced at `f9dee54` and are therefore no longer commit-matched;
+whether they need re-running is subsumed by the O-M9-5 decision, which already implies re-running
+both. The `REVISION` file is now redundant on the login node (live git answers) but is still written
+because compute nodes cannot answer git — `safe.directory` does not take there.
+
 ## 2026-08-01 — M9 step 12 STOPPED: the O-M9-5 bit-identity gate FAILED on 10 GHz (77 GHz passed). Cause is last-ulp float noise, not protocol drift — but trap 17 says escalate, so the milestone is halted pending an owner decision.
 
 Both Exp A full-cohort re-runs completed on IBEX at `f9dee54` (jobs 49779546 / 49779550, empty

@@ -5,9 +5,11 @@
 # config. Because it changes only paths.*, an axis certificate stays valid across the
 # rsync (axis_spec_hash excludes environment fields).
 #
-# The owner fills in the literal <user> paths once on IBEX.
+# The owner's literal IBEX root. Committed rather than hand-edited on IBEX: since M9 the tree
+# there is a git CLONE, so a local edit would leave it dirty and `assert_clean_tree` /
+# `submit_ibex.sh` would refuse to run.
 paths:
-  data_10ghz_dir: /ibex/user/<user>/dehyd/data/10ghz
-  data_77ghz_dir: /ibex/user/<user>/dehyd/data/77ghz
-  weight_xlsx:    /ibex/user/<user>/dehyd/data/weight/metadata_subjects_info.xlsx
-  results_dir:    /ibex/user/<user>/dehyd/results
+  data_10ghz_dir: /ibex/user/floresge/dehy_radar/data/10ghz
+  data_77ghz_dir: /ibex/user/floresge/dehy_radar/data/77ghz
+  weight_xlsx:    /ibex/user/floresge/dehy_radar/data/weight/metadata_subjects_info.xlsx
+  results_dir:    /ibex/user/floresge/dehy_radar/results
