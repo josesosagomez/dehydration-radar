@@ -4,6 +4,80 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-03 — Steps 11 and 12 re-run at `f0a46aa`: the O-M9-5 gate PASSES BOTH BANDS **bit-identically** — the 5.14e-14 divergence is GONE. Root cause localized to the IBEX environment. Exp C 10 GHz arm b moved by one inner-CV tie-break.
+
+**The headline.** `predictions_10ghz.csv` from the `f0a46aa` Exp A re-run hashes to
+`4bd21201cb87a62aed32b19e7f5fbb478fd7354a6a2c08040cfad6a377145c57` — **byte-for-byte the M7
+artifact's hash**. The `f9dee54` runs hashed `453a22ba...`. 77 GHz matches M7 exactly too
+(`c80001c5...`). The amended gate reports `max |Δy_pred| = 0.000e+00` on both bands, so the
+ORIGINAL bit-identity criterion would also have passed. The amendment was, in the event, not
+needed for this run.
+
+**This finally localizes the root cause: the environment.** Every other candidate had already
+been eliminated by direct test — raw data, splits, seeds, model selection, node hardware,
+run-to-run nondeterminism, declared package versions, the store rebuild (M7's own code
+reproduces the store bit-for-bit across all five SVR subjects), the Exp A code path, and core
+count. The one thing that changed today was the environment itself: the IBEX tree became a
+fresh clone with a `.venv` built fresh from `uv sync --frozen`, replacing one that had been
+accumulated incrementally across M5→M9. Rebuilding from the lockfile restored M7's numerics
+exactly. That is the first hypothesis that *predicts* the observed pattern instead of merely
+tolerating it, and it is consistent with the earlier finding that `uv.lock`'s declared versions
+were unchanged: what differed was the realized environment, not the declared one. It remains
+formally unproven — the old venv is gone and was never fingerprinted — but the gap it names is
+exactly the one the post-M9 list already records (store sidecars record what a store was built
+FROM, never what it was built WITH).
+
+**The same shift moved Exp C 10 GHz arm b, in the opposite direction.** Diffed against the
+step-11 originals (`results/runs/step11/20260801T133513697136Z_f9dee54e`) rather than against
+the transcribed table:
+
+    selection_table_10ghz.csv  line 25:  8,b,"(1, 'A', 'iq', 0, 'off')",ord_b_frank_hall,
+                                         {'C': 1.0}  ->  {'C': 10.0}
+    predictions_10ghz.csv      line 115: 8,b,1,2,2,1  ->  8,b,1,2,2,4
+
+One inner-CV tie-break on subject 8 flipped Frank-Hall's `C` from 1.0 to 10.0 — same feature
+key, same family, same 5 evaluable inner folds — which moved exactly one prediction from class
+1 to class 4. Everything downstream follows arithmetically: adjacent accuracy 39/73 -> 38/73
+(0.534 -> 0.521), class-unit MAE +1/73 (1.644 -> 1.658), QWK -0.198 -> -0.197.
+
+| band / arm | step 11 (`f9dee54`) | now (`f0a46aa`) | |
+|---|---|---|---|
+| 10 GHz a | -0.2124500866 | -0.2124500866 | **byte-identical** |
+| 10 GHz b | -0.1980386270 | -0.1966027831 | one tie-break, one row |
+| 77 GHz a | | | **byte-identical** |
+| 77 GHz b | | | **byte-identical** |
+
+The new values are authoritative: current commit, validated store. **Correction to the step-11
+entry below:** its table records 10 GHz arm a's QWK as `-0.213`; the artifact says
+`-0.2124500866`, which rounds to `-0.212`. That was a transcription slip, not a result — arm a
+never moved.
+
+**What this says about the amendment's premise.** Part 1 assumes that a changed model selection
+indicates genuine drift. Exp C just produced a counter-example: selection changed with a
+bit-identical store and unchanged analysis code. That does not undermine the gate — part 1
+firing on float noise is a *conservative* failure, which is the safe direction, and part 2
+cannot fire without part 1 passing — but §8 should state the limitation rather than claim part 1
+detects only real drift. What it detects is *any* change in a discrete decision, whatever its
+origin.
+
+**Decision taken: keep the amended gate as-is** rather than tightening part 2 back to zero now
+that bit-identity holds. Tightening would be strictly stronger and would remove the post-hoc
+disclosure, but today demonstrated that these numerics move with the environment, and the 1e-10
+tolerance is exactly the insurance against that recurring; a strict gate would stop the
+milestone again on the next environment shift. Tightening would also cost another commit, store
+rebuild and re-run for zero scientific gain. §8 discloses the amendment in full **and** reports
+that the original criterion is met exactly on both bands in the final runs.
+
+**Run dirs (all at `f0a46aa`, nodes now recorded — the new provenance fields working):**
+
+    20260803T143704568296Z_f0a46aa6  Exp A 10 GHz  cn604-10  AMD EPYC 9655
+    20260803T143705048534Z_f0a46aa6  Exp C 10 GHz  cn604-11
+    20260803T151715023672Z_f0a46aa6  Exp A 77 GHz  cn604-09
+    20260803T160645780475Z_f0a46aa6  Exp C 77 GHz  cn604-10
+
+`n_seeds` now reads per arm (a=5, b=1) instead of the old arm-b-only top-level `1` — the
+bundled fix confirmed on real output.
+
 ## 2026-08-03 — O-M9-5 AMENDED (post-hoc, disclosed): bit-identity replaced by `selection_table` byte-identity AND `max |Δy_pred| <= 1e-10`. Four rebuild-priced fixes bundled in while the rebuild was already being paid. Full suite 1157 passed / 16 skipped.
 
 **The amendment.** `load_exp_a_radar` (`exp_d.py`) previously required `predictions_{band}.csv`
