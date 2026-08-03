@@ -9,7 +9,7 @@
 # there is a git CLONE, so a local edit would leave it dirty and `assert_clean_tree` /
 # `submit_ibex.sh` would refuse to run.
 paths:
-  data_10ghz_dir: /ibex/user/floresge/dehy_radar/data/10ghz
-  data_77ghz_dir: /ibex/user/floresge/dehy_radar/data/77ghz
-  weight_xlsx:    /ibex/user/floresge/dehy_radar/data/weight/metadata_subjects_info.xlsx
-  results_dir:    /ibex/user/floresge/dehy_radar/results
+  data_10ghz_dir: /ibex/user/floresge/dehy_radar_new/data/10ghz
+  data_77ghz_dir: /ibex/user/floresge/dehy_radar_new/data/77ghz
+  weight_xlsx:    /ibex/user/floresge/dehy_radar_new/data/weight/metadata_subjects_info.xlsx
+  results_dir:    /ibex/user/floresge/dehy_radar_new/results

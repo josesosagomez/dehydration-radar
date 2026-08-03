@@ -18,7 +18,7 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"   # this session; the inst
                                                         # never source (see the note below)
 
 # clone + the pinned environment (uv.lock pins scipy <1.17; the torch CPU wheel rides along)
-git clone https://github.com/josesosagomez/dehydration-radar.git dehy_radar && cd dehy_radar
+git clone https://github.com/josesosagomez/dehydration-radar.git dehy_radar_new && cd dehy_radar_new
 git checkout v1_milestone_5
 uv sync --frozen          # creates .venv/ — the batch jobs use it directly
 
@@ -26,7 +26,7 @@ uv sync --frozen          # creates .venv/ — the batch jobs use it directly
 .venv/bin/python -c "from kymatio.numpy import Scattering1D; print('kymatio ok')"
 ```
 
-`configs/ibex.yaml` now carries the owner's literal root (`/ibex/user/floresge/dehy_radar`), so
+`configs/ibex.yaml` now carries the owner's literal root (`/ibex/user/floresge/dehy_radar_new`), so
 there is nothing to edit on IBEX. Keep it that way: since M9 the IBEX tree is a git **clone**, and
 a hand-edit there would leave the tree dirty, which `assert_clean_tree` and `submit_ibex.sh` both
 refuse. If the root ever moves, change it here, commit, and pull — do not edit it on IBEX.
@@ -42,9 +42,9 @@ refuse. If the root ever moves, change it here, commit, and pull — do not edit
 ## 1. Stage the data (once)
 
 ```bash
-rsync -av --progress data/77ghz/  floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar/data/77ghz/   # ~22 GB
-rsync -av --progress data/10ghz/  floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar/data/10ghz/
-rsync -av --progress data/weight/ floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar/data/weight/
+rsync -av --progress data/77ghz/  floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar_new/data/77ghz/   # ~22 GB
+rsync -av --progress data/10ghz/  floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar_new/data/10ghz/
+rsync -av --progress data/weight/ floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar_new/data/weight/
 ```
 
 ## 2. Cohort QC + axis certification (the authoritative eligibility gate)
@@ -71,7 +71,7 @@ chain diagnostics: `sbatch scripts/ibex/preprocess77.sbatch`.
 ## 4. Bring results back and merge
 
 ```bash
-rsync -av floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar/results/ results/
+rsync -av floresge@ilogin.ibex.kaust.edu.sa:/ibex/user/floresge/dehy_radar_new/results/ results/
 uv run python experiments/run_wst77.py --config configs/exp_77ghz.yaml --merge-shards
 ```
 
