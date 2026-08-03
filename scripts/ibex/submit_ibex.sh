@@ -29,6 +29,11 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# Slurm opens the --output/--error files BEFORE the job script runs, so the `mkdir -p logs`
+# inside the .sbatch files is too late: on a fresh clone with no logs/ every array task dies
+# instantly. Create it here, on the login node, where it is still in time.
+mkdir -p logs
+
 export DEHYD_GIT_COMMIT="$(git rev-parse HEAD)"
 export DEHYD_GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 export DEHYD_GIT_DIRTY="false"

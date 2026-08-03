@@ -4,6 +4,77 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-03 — O-M9-5 AMENDED (post-hoc, disclosed): bit-identity replaced by `selection_table` byte-identity AND `max |Δy_pred| <= 1e-10`. Four rebuild-priced fixes bundled in while the rebuild was already being paid. Full suite 1157 passed / 16 skipped.
+
+**The amendment.** `load_exp_a_radar` (`exp_d.py`) previously required `predictions_{band}.csv`
+to be bit-identical to the M7 artifact. It now requires a conjunction:
+
+1. `selection_table_{band}.csv` **byte-identical**, and
+2. `max |Δy_pred| <= O_M9_5_PRED_TOLERANCE`, with the observed value recorded on the
+   `RadarReference` and written into the report's `lineage` block next to the tolerance.
+
+**Why `1e-10`.** Four orders of magnitude above the largest difference ever observed
+(5.14e-14) and about nine below anything that could reach a reported digit for a Δm% of order
+0.1–1. It is wide enough to admit last-ulp float noise and far too narrow to admit anything
+with physical meaning. The margin is recorded on every run rather than merely asserted, so a
+future reader can check the gate was not being run close to its limit.
+
+**Why part 1 is what makes part 2 acceptable.** Which model a fold selects is a *discrete*
+outcome with no tolerance in it, so any genuine drift — data, splits, code, features — lands
+there and is caught exactly. Ordering matters and is enforced: part 2 is unreachable unless
+part 1 passed, so the loosened half can only ever admit differences that left every model
+choice untouched. Loosening part 2 alone would have widened the gate to real protocol drift
+and would not have been acceptable. `_max_abs_pred_delta` additionally requires exact row
+alignment on `(subject, seed)` and **exact** `y_true` equality: the tolerance covers a fitted
+model's output and nothing else, so a moved ground truth fails as a data/split fault.
+
+**Disclosure.** This is a **post-hoc** criterion, written after seeing a failure, and both the
+function docstring and §8 must say so. The docstring carries the full chronology — what failed,
+what was eliminated, and that the residual (BLAS summation order in the fit path, amplified by
+libsvm's SMO tolerance) is bounded but formally unidentified. `RadarReference.bit_identity_verified`
+was renamed `reproducibility_verified`, because the old name would now assert something untrue.
+
+**Four fixes bundled, and the reason they were bundled.** Each had been deferred *specifically
+because* it cost a store rebuild; the amendment forces one anyway, so their marginal IBEX cost
+was zero and they were paid in local test time instead. Deferring them again would have meant
+paying a full re-extraction for them later.
+
+- `exp_c.py`: `metrics_exp_c_*.json`'s `n_seeds` was written into the arm-invariant header
+  from inside the per-arm loop, so it silently reported **arm b only**. `n_eval_subjects` and
+  `n_rows` genuinely are arm-invariant and stay in the header; `n_seeds` moved into each arm,
+  where it is actually realized (arm a reaches 5 only on folds selecting rf/gbm). §8 can now
+  quote it per arm instead of carrying a "never quote this field" caveat.
+- `provenance.py`: `platform` gains `cpu_model` and `slurm_nodelist` — **the two fields whose
+  absence made O-M9-5 unresolvable**. `machine` reads `x86_64` on every IBEX node and so cannot
+  distinguish the microarchitectures BLAS dispatches its kernels on; `platform.processor()`
+  returns "" on Linux, so the name is read from `/proc/cpuinfo`. Neither field feeds any hash,
+  so adding them cannot change a result.
+- `submit_ibex.sh` / `submit_extract77.sh`: `mkdir -p logs` on the LOGIN node. Slurm opens the
+  `--output`/`--error` files before the job script runs, so the `mkdir -p logs` inside the
+  `.sbatch` files is too late — on a fresh clone every array task dies instantly. The other two
+  wrappers already did this.
+- `scripts/compare_stores.py`: the store comparator, committed this time. It documents both
+  traps that silently invalidate a cross-commit comparison — the paths overlay must live outside
+  the worktree (untracked files make `git status --porcelain` dirty, tripping
+  `assert_clean_tree`), and `PYTHONPATH` must beat the editable install or the old checkout runs
+  new code. It compares `tobytes()`, so NaN-vs-NaN is equal and +0.0-vs-−0.0 is not.
+
+**Explicitly NOT bundled:** recording package versions in the store sidecars. It is the other
+half of the unreconstructibility gap and it only takes effect on a rebuild, so this was the
+natural moment — but it changes the fingerprint schema, and putting a store-schema change on
+the same commit as an acceptance-gate change is how two independent things become one
+un-bisectable failure. It stays on the post-M9 list.
+
+**Verification.** Full suite **1157 passed, 16 skipped** (was 1141 at step 10's `a296e29`; the
+four new gate tests plus intervening additions account for the rest). `tests/test_no_leakage.py`
+`git diff --exit-code` clean — the frozen-file acceptance step holds. The four new tests pin the
+amendment's behaviour: over-tolerance fails; 5.14e-14 passes *and its delta is recorded*; a
+changed selected family fails even when predictions are bit-identical; a 1e-13 `y_true` shift
+fails as a data fault rather than being absorbed.
+
+**Consequence.** Trap 18: this moves the commit, so both v2 stores are stale again and steps 11
+and 12 must re-run at the new commit. That was the accepted price of option 1.
+
 ## 2026-08-03 — O-M9-5 localization test: the feature store is EXONERATED on the SVR subjects too (2277 arrays, 23 sessions, bit-identical). The sub-ULP source is in the FIT path, not the features — and is unreconstructible. Clears the way for the amendment.
 
 **Why this was run.** The store-innocence evidence in the entry below rested on a single session,

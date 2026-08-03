@@ -411,7 +411,9 @@ def _pre_extraction_payload(config, manifest, folds=None, extra=None, data_dir=N
     from datetime import datetime, timezone
 
     from dehyd.config import config_to_dict
-    from dehyd.provenance import _git_info, _hash_inputs, _package_versions, fold_manifest
+    from dehyd.provenance import (
+        _cpu_model, _git_info, _hash_inputs, _package_versions, fold_manifest,
+    )
 
     import os
     import platform
@@ -441,6 +443,11 @@ def _pre_extraction_payload(config, manifest, folds=None, extra=None, data_dir=N
             "system": platform.system(),
             "release": platform.release(),
             "machine": platform.machine(),
+            # M9: `machine` reads x86_64 on every IBEX node, so it cannot distinguish the
+            # microarchitectures BLAS dispatches on. These two are what O-M9-5 needed and
+            # did not have.
+            "cpu_model": _cpu_model(),
+            "slurm_nodelist": os.environ.get("SLURM_JOB_NODELIST"),
         },
     }
     if extra:

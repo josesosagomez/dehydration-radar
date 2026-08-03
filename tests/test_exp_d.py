@@ -60,6 +60,7 @@ from dehyd.eval.exp_d import (
     fit_seed,
     half_spectrum_power,
     load_exp_a_radar,
+    O_M9_5_PRED_TOLERANCE,
     load_family_artifacts,
     median_frame_to_session,
     merge_exp_d_folds,
@@ -1747,7 +1748,7 @@ def _write_comparison_family(root, band, family, config, *, error_fn=_family_err
 RADAR_ERRORS = {1: 0.30, 2: 0.55, 3: 0.25, 4: 0.80}
 
 
-def _write_exp_a_run(path, band, *, commit="c0ffee1234", config=None):
+def _write_exp_a_run(path, band, *, commit="c0ffee1234", config=None, selected_family="svr"):
     path.mkdir(parents=True, exist_ok=True)
     (path / "provenance.json").write_text(json.dumps({
         "git": {"commit": commit},
@@ -1760,6 +1761,13 @@ def _write_exp_a_run(path, band, *, commit="c0ffee1234", config=None):
             for seed in (1, 2, 3, 4, 5):
                 for k, truth in enumerate(COMPARE_TRUTH[subject]):
                     writer.writerow([subject, seed, truth, truth + RADAR_ERRORS[subject]])
+    # O-M9-5 part 1 reads this: which model each fold picked. Byte-identity here is the
+    # tolerance-free half of the gate, so every Exp A run fixture must carry one.
+    with (path / f"selection_table_{band}.csv").open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["subject", "selected_family"])
+        for subject in COMPARE_SUBJECTS:
+            writer.writerow([subject, selected_family])
     return path
 
 
@@ -1782,23 +1790,77 @@ def comparison_summary(comparison_inputs, fast_ci_config):
     return summarize_exp_d("10ghz", fast_ci_config, family_runs, radar)
 
 
-def test_load_exp_a_radar_refuses_predictions_that_are_not_bit_identical_to_m7(
+def _perturb_prediction(run_dir, band, delta):
+    """Shift exactly one y_pred by `delta`, leaving every other byte alone."""
+    path = run_dir / f"predictions_{band}.csv"
+    rows = list(csv.reader(path.open(encoding="utf-8")))
+    rows[1][3] = repr(float(rows[1][3]) + delta)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        csv.writer(fh).writerows(rows)
+    return run_dir
+
+
+def test_load_exp_a_radar_refuses_predictions_beyond_the_o_m9_5_tolerance(
     comparison_inputs, tmp_path
 ):
     """O-M9-5 / trap 17: a mismatch STOPS the milestone. Comparing against the fresh
     predictions anyway would convert a detected fault into a silent protocol change."""
     _root, _family_runs, m9, m7 = comparison_inputs
-    drifted = _write_exp_a_run(tmp_path / "drifted", "10ghz")
-    path = drifted / "predictions_10ghz.csv"
+    drifted = _perturb_prediction(
+        _write_exp_a_run(tmp_path / "drifted", "10ghz"), "10ghz", 1e-9
+    )
+    with pytest.raises(ExpDProtocolError, match="above the O-M9-5 tolerance"):
+        load_exp_a_radar("10ghz", drifted, m7, analysis_commit="c0ffee1234")
+
+    # and the clean pair passes, with a delta of exactly zero recorded
+    clean = load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234")
+    assert clean.reproducibility_verified
+    assert clean.max_abs_pred_delta == 0.0
+
+
+def test_load_exp_a_radar_admits_last_ulp_noise_and_records_the_observed_delta(
+    comparison_inputs, tmp_path
+):
+    """The amended part 2: a difference far below the tolerance passes, but is REPORTED
+    rather than silently swallowed. This is the case the M9 10 GHz re-run actually hit
+    (max |Δy_pred| = 5.14e-14), and the recorded value is what makes the margin auditable."""
+    _root, _family_runs, _m9, m7 = comparison_inputs
+    noisy = _perturb_prediction(
+        _write_exp_a_run(tmp_path / "noisy", "10ghz"), "10ghz", 5.14e-14
+    )
+    radar = load_exp_a_radar("10ghz", noisy, m7, analysis_commit="c0ffee1234")
+    assert radar.reproducibility_verified
+    assert 0.0 < radar.max_abs_pred_delta < O_M9_5_PRED_TOLERANCE
+
+
+def test_load_exp_a_radar_refuses_a_changed_selection_table_however_small_the_pred_delta(
+    comparison_inputs, tmp_path
+):
+    """Part 1 is what keeps the amended gate honest. A different selected family is a
+    DISCRETE change with no tolerance in it, so it must stop the milestone even when the
+    predictions themselves are bit-identical — otherwise loosening part 2 would have
+    widened the gate to real protocol drift rather than only to float noise."""
+    _root, _family_runs, _m9, m7 = comparison_inputs
+    reselected = _write_exp_a_run(tmp_path / "reselected", "10ghz", selected_family="gbm")
+    with pytest.raises(ExpDProtocolError, match="NOT byte-identical"):
+        load_exp_a_radar("10ghz", reselected, m7, analysis_commit="c0ffee1234")
+
+
+def test_load_exp_a_radar_refuses_a_changed_y_true_as_a_data_fault_not_noise(
+    comparison_inputs, tmp_path
+):
+    """The tolerance covers a fitted model's output only. Ground truth moving means the data
+    or the splits changed, which no tolerance may absorb."""
+    _root, _family_runs, _m9, m7 = comparison_inputs
+    retruthed = _write_exp_a_run(tmp_path / "retruthed", "10ghz")
+    path = retruthed / "predictions_10ghz.csv"
     rows = list(csv.reader(path.open(encoding="utf-8")))
-    rows[1][3] = str(float(rows[1][3]) + 1e-9)          # one prediction, one ULP-scale drift
+    rows[1][2] = repr(float(rows[1][2]) + 1e-13)     # far below the y_pred tolerance
     with path.open("w", newline="", encoding="utf-8") as fh:
         csv.writer(fh).writerows(rows)
 
-    with pytest.raises(ExpDProtocolError, match="bit-identical"):
-        load_exp_a_radar("10ghz", drifted, m7, analysis_commit="c0ffee1234")
-    # and the clean pair passes
-    assert load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234").bit_identity_verified
+    with pytest.raises(ExpDProtocolError, match="ground truth itself differs"):
+        load_exp_a_radar("10ghz", retruthed, m7, analysis_commit="c0ffee1234")
 
 
 def test_load_exp_a_radar_refuses_a_run_at_the_wrong_commit_or_config(
@@ -1826,7 +1888,7 @@ def test_load_exp_a_radar_requires_the_m7_reference_provenance(tmp_path):
         load_exp_a_radar("10ghz", m9, m7, analysis_commit="c0ffee1234")
 
 
-def test_summarize_exp_d_refuses_a_radar_input_without_the_bit_identity_precondition(
+def test_summarize_exp_d_refuses_a_radar_input_without_the_reproducibility_precondition(
     comparison_inputs, fast_ci_config
 ):
     """The precondition is STRUCTURAL: `summarize_exp_d` accepts only a `RadarReference`
@@ -1838,7 +1900,7 @@ def test_summarize_exp_d_refuses_a_radar_input_without_the_bit_identity_precondi
         summarize_exp_d("10ghz", fast_ci_config, family_runs,
                         dataclasses.replace(
                             load_exp_a_radar("10ghz", m9, _m7, analysis_commit="c0ffee1234"),
-                            bit_identity_verified=False))
+                            reproducibility_verified=False))
 
 
 def test_summarize_exp_d_refuses_an_incomplete_family_set_naming_the_family(

@@ -746,8 +746,11 @@ def summarize_exp_c(results, config) -> dict:
     for arm in ARMS:
         subjects, _session_idx, y_true, pred_by_seed = _oof_matrix_c(usable, arm)
         n_seeds = pred_by_seed.shape[0]
-        cohort = {"n_eval_subjects": len(set(subjects.tolist())),
-                  "n_rows": int(len(y_true)), "n_seeds": int(n_seeds)}
+        # n_eval_subjects and n_rows genuinely are arm-invariant, so they belong in the
+        # header. n_seeds is NOT: arm a realizes 5 seeds only on the folds where it selects
+        # a seed-sensitive family (rf/gbm), so its realized count differs from arm b's.
+        # Writing it here made the header field silently arm-b-only — it now lives per arm.
+        cohort = {"n_eval_subjects": len(set(subjects.tolist())), "n_rows": int(len(y_true))}
 
         if len(y_true) and n_seeds:
             cis = {
@@ -784,6 +787,7 @@ def summarize_exp_c(results, config) -> dict:
 
         arm_results = [r.arm_result(arm) for r in usable]
         arms[arm] = {
+            "n_seeds": int(n_seeds),   # REALIZED seed count for this arm — see the note above
             **cis,
             "per_subject_class_mae": per_subject,
             "confusion_matrix_mean_over_seeds": confusion.tolist(),

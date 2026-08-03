@@ -90,6 +90,24 @@ def _revision_file_commit():
     return None
 
 
+def _cpu_model():
+    """The CPU's marketing name, e.g. `AMD EPYC 9655 96-Core Processor`, or None.
+
+    Recorded because M9's O-M9-5 investigation burned two days on a last-ulp float
+    difference it could not attribute. `machine` reads `x86_64` on every IBEX node, so it
+    cannot tell a Turin node from a Milan one — and BLAS dispatches its kernels (and hence
+    its summation order) on microarchitecture. `platform.processor()` returns "" on Linux,
+    so the real name has to come from /proc/cpuinfo.
+    """
+    try:
+        for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return platform.processor() or None
+
+
 def _git_info() -> dict:
     """Git revision for provenance, with fallbacks for environments git can't answer.
 
@@ -224,6 +242,11 @@ def build_provenance_payload(config, manifest, folds=None, extra: dict | None = 
             "system": platform.system(),
             "release": platform.release(),
             "machine": platform.machine(),
+            # The two fields whose absence made O-M9-5 unresolvable: which CPU actually ran
+            # the fit, and which node it ran on. Both are free to record and neither feeds
+            # any hash, so adding them cannot change a result.
+            "cpu_model": _cpu_model(),
+            "slurm_nodelist": os.environ.get("SLURM_JOB_NODELIST"),
         },
     }
     if extra:

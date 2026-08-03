@@ -20,6 +20,10 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# Slurm opens --output/--error before the job script runs, so extract77.sbatch's own
+# `mkdir -p logs` is too late on a fresh clone. Create it here, on the login node.
+mkdir -p logs
+
 export DEHYD_GIT_COMMIT="$(git rev-parse HEAD)"
 export DEHYD_GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 export DEHYD_GIT_DIRTY="false"
