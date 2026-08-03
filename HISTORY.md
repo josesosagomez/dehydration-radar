@@ -4,6 +4,66 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-03 — O-M9-5 localization test: the feature store is EXONERATED on the SVR subjects too (2277 arrays, 23 sessions, bit-identical). The sub-ULP source is in the FIT path, not the features — and is unreconstructible. Clears the way for the amendment.
+
+**Why this was run.** The store-innocence evidence in the entry below rested on a single session,
+`s10_10am`, and subject 10 selected **knn** — insensitive to sub-ULP input noise by construction. The
+five subjects whose folds actually diverged all selected **svr** (1, 7, 8, 11, 14). So the one test
+that could still localize the source was M7's own code against *those* subjects' sessions. It became
+nearly free once the clone forced a store rebuild anyway, so it was run before the amendment rather
+than after — the last chance at a root cause before a post-hoc gate change goes into §8.
+
+**Method.** `git worktree add /ibex/user/floresge/m7probe f36c4fb2` off the IBEX clone (full history,
+so the M7 commit is present), then `extract_features.py --subject S --session SESS` for the 5×5 grid
+over subjects 1/7/8/11/14 — 23 of the 25 cells eligible (`s1_8am`, `s1_4pm` reported 0 sessions).
+The paths overlay was written **outside both trees**: provenance computes `dirty` from
+`git status --porcelain`, which counts untracked files, so an overlay inside the worktree would have
+tripped `assert_clean_tree`.
+
+**The trap this test has, and how it was disarmed.** `dehyd` is installed *editable* in the venv,
+pointing at the M9 tree — so `PYTHONPATH` must win or the probe silently rebuilds with M9 code and
+returns a meaningless tautology. The verification was skipped at run time, but the result is
+self-attesting: `_git_info` (provenance.py:106) runs git with `cwd=Path(__file__).resolve().parents[2]`
+— the tree the *imported module* lives in — so the sidecar's own commit field names the code that
+ran. It reads `f36c4fb2428127f590c415d0799fe677faa12c14`. M7 code genuinely ran. **Worth keeping as a
+general technique:** any store built by this pipeline self-identifies which checkout produced it.
+
+**Result.**
+
+    sessions compared : 23
+    shared arrays     : 2277
+    B-only keys (v2 additions, expected): ['sig__matched_iq', 'sig__raw_beat']
+    RESULT: BIT-IDENTICAL
+
+**Method failure, kept per the logging rule.** The first comparator required the two key sets to be
+*equal* and bailed before comparing anything (`arrays compared : 0`, 23 spurious `<key set>`
+"differences"). The v2 store legitimately adds two Exp D arrays — `sig__raw_beat`, `sig__matched_iq`
+from `session_signals_10ghz` (`store.py:235`) — that M7 never wrote: 99 keys at M7, 101 at M9. The
+corrected comparator treats M7 as the reference (every A key must exist in B and match bit-for-bit)
+and reports B-only keys as informational. That is also why the M7-era check reported exactly 99
+arrays. The comparator itself was never archived after the M7-era run and had to be rewritten; it
+now lives at `/ibex/user/floresge/compare_stores.py` and should be committed into the repo on the
+next commit that lands, so this is not paid a third time.
+
+**What this establishes, and what it does not.** The v1→v2 rebuild was value-neutral for the SVR
+subjects as well as the knn one — 2277 arrays over 23 sessions is a far stronger statement than the
+99 arrays over one session it replaces. Every input to the divergent folds is therefore bit-identical
+between M7 and M9, so the 5.14e-14 in `y_pred` **must** originate downstream of the features: in the
+fit path, i.e. BLAS-level summation-order differences inside `StandardScaler`/`SVR`, amplified by
+libsvm's SMO convergence tolerance. That is consistent with every earlier observation, including why
+77 GHz matched despite having 8 SVR folds (different data → different distance to the tolerance
+boundary, not different determinism).
+
+It does **not** name the specific BLAS difference, and it cannot: the M7 venv's BLAS build was never
+recorded, and the store sidecars record what a store was built *from* but not what it was built
+*with*. The root cause is characterized, bounded, and provably harmless to model selection — but it
+stays formally unidentified, and §8 must say so in those words rather than implying it was solved.
+
+**Consequence.** Option 2 is done and it supports option 1. The amendment can now be made on the
+strongest available evidence: not "we could not find it", but "we proved it is not in the data, not
+in the protocol, not in the code, and not in the features, and the remaining surface is one we can
+bound but not reconstruct."
+
 ## 2026-08-03 — IBEX redeployed as a git CLONE (repo made public), `configs/ibex.yaml` paths committed instead of hand-edited. Accepted cost: the commit moves, so BOTH v2 feature stores are invalidated and must be rebuilt (trap 18, no waiver).
 
 **Why anything changed.** The owner made the GitHub repo public and wiped the IBEX tree except
