@@ -50,6 +50,41 @@ whether they need re-running is subsumed by the O-M9-5 decision, which already i
 both. The `REVISION` file is now redundant on the login node (live git answers) but is still written
 because compute nodes cannot answer git — `safe.directory` does not take there.
 
+**OUTCOME — done. Both stores rebuilt and `--validate`-clean at `6b06560`:**
+
+    validate : 10ghz store OK — 73 sessions match this config/commit
+    validate : 77ghz store OK — 72 sessions match this config/commit
+
+Three further commits were needed to get there, and each is worth recording because each was a
+latent defect the copied-tree deployment had been hiding:
+
+1. `a1ac645` — the paths themselves (above).
+2. `bd9bcf8` — **all four `scripts/ibex/submit_*.sh` wrappers were committed mode `100644`**, so the
+   fresh clone gave `Permission denied`. They were authored on Windows with `core.filemode=false`,
+   so the exec bit was never recorded. It had never surfaced because the copied tree could not use
+   these wrappers at all (they shell out to git, and that tree had no `.git`), so every array had
+   gone in via bare `sbatch`. Fixed with `git update-index --chmod=+x`, landed *before* the store
+   rebuild was submitted — after the stores exist, a commit move costs a full re-extraction.
+3. `6b06560` — the IBEX root is **`dehy_radar_new`**, not `dehy_radar`. The clone was kept under its
+   staging name rather than swapped back, so the first pair of arrays ran against a path with no
+   data and were cancelled. The owner elected to keep `_new` as the permanent name rather than spend
+   a second commit on the rename; `configs/ibex.yaml` and the runbook now say `dehy_radar_new`.
+
+**A workflow rule the clone introduces, and it is a genuine regression from the copied tree.**
+Provenance now reads *live* git on IBEX, so **any** `git pull` there moves HEAD and invalidates both
+stores — including a pure journal commit. The old carve-out ("journal-only commits do not force a
+re-stamp", HANDOFF trap 18) no longer protects anything automatically. The rule that replaces it:
+**journal commits land locally and are pushed freely; IBEX simply never pulls** until a code change
+is deliberately being deployed, at which point the rebuild is priced in. IBEX stays pinned at
+`6b06560`. This entry itself is committed under that rule.
+
+**Also worth knowing:** the extraction arrays are `--array=0-79` over 16 subjects × 5 sessions, but
+the cohorts are 73 and 72, so ~7 and ~8 cells have no eligible session and their tasks do not
+succeed. That is expected arithmetic, not failure — `--validate`'s session count is the authority,
+never the per-task exit codes. Separately, `mkdir -p logs` sits *inside* both sbatch scripts
+(`extract10.sbatch:23`), which is too late: Slurm opens the output file before the script runs, so a
+fresh clone with no `logs/` loses all 80 tasks instantly. Create it on the login node first.
+
 ## 2026-08-01 — M9 step 12 STOPPED: the O-M9-5 bit-identity gate FAILED on 10 GHz (77 GHz passed). Cause is last-ulp float noise, not protocol drift — but trap 17 says escalate, so the milestone is halted pending an owner decision.
 
 Both Exp A full-cohort re-runs completed on IBEX at `f9dee54` (jobs 49779546 / 49779550, empty
