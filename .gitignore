@@ -5,6 +5,9 @@
 /data*/
 logs*/
 review*/
+archive*/
+matlab*/
+paper*/
 
 # A copied-tree revision stamp (git rev-parse HEAD > REVISION), read by provenance when
 # there is no .git — e.g. IBEX, where the private repo is copied, not cloned. Never

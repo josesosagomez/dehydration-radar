@@ -4,6 +4,345 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-01 — M9 step 12 STOPPED: the O-M9-5 bit-identity gate FAILED on 10 GHz (77 GHz passed). Cause is last-ulp float noise, not protocol drift — but trap 17 says escalate, so the milestone is halted pending an owner decision.
+
+Both Exp A full-cohort re-runs completed on IBEX at `f9dee54` (jobs 49779546 / 49779550, empty
+stderr, cohorts 73 and 72), producing
+
+    results/runs/20260801T162357722390Z_f9dee54e/   10 GHz
+    results/runs/20260801T165841260326Z_f9dee54e/   77 GHz
+
+`load_exp_a_radar` was then run per band against the M7 references:
+
+    10ghz: *** FAILED *** predictions_10ghz.csv is NOT bit-identical to the M7 artifact
+    77ghz: BIT-IDENTICAL OK | n_seeds=5 | subjects=16 | verified=True
+
+**The 10 GHz difference, quantified.** 149 data rows; **11 rows differ**; `max |Δy_pred| =
+5.14e-14`; `max |Δy_true| = 0.0`. sha256 `4bd21201...` (M7) vs `453a22ba...` (re-run); file sizes
+6360 vs 6358 bytes (shorter repr of a few floats, not missing rows). This is last-ulp floating-point
+noise, roughly 1e-14 relative — not a protocol, data or model change.
+
+**Ruled out, each with evidence rather than by assumption:**
+
+- *Data*: `provenance.inputs` identical — the ground-truth workbook and every radar `.mat` sha256
+  match exactly. `manifest` identical.
+- *Splits/protocol*: `folds` identical, `seed=20260721`, `seed_set=[1,2,3,4,5]` in both, and the
+  predictions CSVs agree row-for-row on `subject`, `seed` and `y_true`.
+- *Config*: zero differing sections excluding `paths`.
+- *Model selection*: `selection_table_10ghz.csv` is **byte-identical** — every one of the 16 folds
+  chose the same family, feature key and hyperparameters. The 1e-14 perturbation did not flip a
+  single tie-break.
+- *Environment*: `platform` identical (Linux 5.14.0-427.20.1.el9_4.0.1, Python 3.14.6, x86_64).
+  The recorded package set differs in **exactly one entry**: `torch 2.13.0 -> 2.13.0+cu126`, step
+  10's cu126 pin. **torch is provably not the mechanism** — confirmed by executing the
+  `run_regression.py` import chain and checking `sys.modules`: `torch imported = False`. numpy
+  (2.5.1), scipy (1.16.3), scikit-learn (1.9.0) and kymatio (0.3.0) are unchanged, as the part-2
+  relock analysis predicted.
+
+**Downstream impact is nil for the science.** Comparing `metrics_exp_a_10ghz.json` end to end:
+20 scalar fields differ, all by <= 1.72e-14 (`per_subject_mae.1` 0.4811039865757429 ->
+0.4811039865757258; `pooled_pearson_r` bounds by ~2e-15). No conclusion, sign, or CI-vs-zero verdict
+moves.
+
+**Candidate causes. Node heterogeneity was checked first and is RULED OUT:**
+
+1. ~~**IBEX node heterogeneity.**~~ **Eliminated.** `sacct` shows the two jobs ran on *different*
+   nodes — M7 job 49491225 on `cn604-15`, re-run 49779546 on `cn604-17`, both `batch` — but
+   `scontrol`/`sinfo` show the nodes are the SAME hardware: `cpu_amd_epyc_9655` (Turin), 192 cores,
+   `CoresPerSocket=96`, `Arch=x86_64`, and byte-identical `AvailableFeatures`/`ActiveFeatures`
+   strings. Identical microarchitecture means numpy/sklearn dispatch identical SIMD kernels, so
+   hardware dispatch cannot explain the divergence.
+   *Incidental observation, possibly relevant to cause 3:* both nodes are heavily shared —
+   `CPUAlloc` 181/192 and 183/192, `CPULoad` 95.8 and 103.8. These are contended nodes, not
+   exclusive allocations.
+2. **The store rebuild was not bit-neutral after all.** The 10 GHz v2 store was rebuilt at
+   `f9dee54`; the M7 predictions came from the f36c4fb2-era store. The part-2 commit asserted
+   "store contents are therefore unaffected and the pending rebuild remains a pure re-stamp," but
+   that assertion rested on package-version reasoning — it was **never verified by comparing store
+   bytes**. A last-ulp difference in stored WST features reproduces this signature exactly.
+
+3. **Run-to-run nondeterminism in Exp A itself**, independent of both node and store — e.g. a
+   numeric library not covered by the per-worker `threadpool_limits` pinning, whose thread count
+   or reduction order varies with machine load. Cause 1's elimination promotes this from an
+   afterthought to a live hypothesis, and the contended-node observation above is consistent
+   with it.
+
+That 77 GHz passed does not separate 2 from 3: it is equally consistent with the 77 GHz store
+rebuilding bit-exactly and with its numerics never reaching a load-sensitive reduction.
+
+**The decisive experiment, revised after cause 1 fell (~1 h CPU, both runs submitted in parallel):**
+run 10 GHz Exp A **twice more** at `f9dee54` against the current store, and compare A-vs-B as well
+as A-vs-M7. Comparing only against M7 cannot distinguish 2 from 3; comparing the two fresh runs
+against each other does.
+  * **A != B** -> Exp A is not run-to-run deterministic on CPU (cause 3). The store is exonerated,
+    and O-M9-5's literal bit-identity is unattainable on IBEX regardless of any rebuild — it needs
+    an owner amendment to a justified tolerance, disclosed with its post-hoc chronology.
+  * **A == B, both != M7** -> Exp A IS deterministic, so the divergence entered through the store
+    rebuild or the code between `f36c4fb2` and `f9dee54` (cause 2). This is the more serious branch:
+    it would falsify the part-2 "pure re-stamp" claim and put every M9 artifact resting on the
+    rebuilt store up for re-examination.
+  * **A == B == M7** -> the original re-run was a one-off perturbation; investigate what was
+    singular about job 49779546 before trusting anything.
+
+### 2026-08-02 follow-up — the three-way test resolved it: cause 3 is out, cause 2 confirmed, and the code is exonerated. Root cause is store-build ENVIRONMENT drift, which is unrecoverable.
+
+Two more full-cohort 10 GHz Exp A runs at `f9dee54` (jobs 49796135 / 49796136). sha256 of
+`predictions_10ghz.csv`:
+
+    A (49796135)             453a22ba2e6ac06ea846037dba551587d9c0f36ef58498162fc2dee51a18ef8f
+    B (49796136)             453a22ba2e6ac06ea846037dba551587d9c0f36ef58498162fc2dee51a18ef8f
+    orig re-run (49779546)   453a22ba2e6ac06ea846037dba551587d9c0f36ef58498162fc2dee51a18ef8f
+    M7 reference             4bd21201cb87a62aed32b19e7f5fbb478fd7354a6a2c08040cfad6a377145c57
+
+**A == B == the original re-run; all three != M7.** So **cause 3 is eliminated**: Exp A *is*
+run-to-run bit-deterministic on IBEX CPU, across three independent jobs on contended nodes. The
+divergence is stable and reproducible, not noise.
+
+**The code is exonerated too.** `git diff f36c4fb2 f9dee54` over the value-affecting paths
+(`features/`, `preprocess/`, `data/`, `config.py`) touches exactly two files:
+  * `features/store.py` (+72) — **purely additive**: the schema-v2 `sig__*` per-frame signal
+    arrays plus two new builder functions. Every WST line (`raw_key`, `prelog_key`, `order_key`)
+    is unchanged; the two new `npz.update(...)` calls only add keys.
+  * `config.py` (+35/-11) — **validation logic only**: the `FROZEN_SEED_SET`/`SMOKE_SEED_SET`
+    constants and the seed_set branch from step 10. No computed value.
+`preprocess/`, `data/` and `features/extraction.py` are byte-unchanged. So no code path that
+produces a WST feature differs between M7 and M9.
+
+**The store build is bit-reproducible** — tested directly rather than assumed. Recomputed session
+`s10_10am`'s npz in-memory from the raw `.mat` at the current commit and compared all **99**
+non-`sig__` arrays against the on-disk local store: **BIT-IDENTICAL**. Note this also spans two
+commits (the store was written at `dab8f70`, the recompute ran at `d1c531d`), independently
+corroborating that the code delta is inert. Caveat stated plainly: this proves determinism on THIS
+machine at a FIXED environment; it does not prove the IBEX build is deterministic.
+
+**Conclusion by elimination.** Identical raw inputs (sha256), identical folds/seeds/config,
+identical selection tables, inert code, deterministic Exp A, deterministic store build. What
+remains is that the **M7-era store and the M9 rebuild were produced under different numeric
+environments** — a numpy/scipy/kymatio/BLAS difference on IBEX between 2026-07-27 and 2026-08-01.
+The store sidecar records `git`, `spec_hash`, `qc_config_hash`, `raw_sha256`, `n_frames`,
+`frame_selection`, `session_eligible`, `store_version` — **no package versions**. The M7 build
+environment is therefore not recoverable, and the M7 store no longer exists (it was overwritten by
+the 9.6 rebuild). **Bit-identity with M7 cannot be restored.** This is a genuine gap: the sidecar
+records what the store was built FROM but not what it was built WITH.
+
+### 2026-08-02 second follow-up — CORRECTION: the "environment drift, unrecoverable" conclusion above was WRONG. The store is innocent, the code is byte-neutral, and the only surviving difference is the sbatch RESOURCE line (8 -> 16 cores).
+
+The IBEX confirmation came back **BIT-IDENTICAL** (99/99 arrays, session `s10_10am`) — and note it was
+run on the LOGIN node against a store built on a COMPUTE node, so the WST path reproduces across
+machines, not merely within one. That result plus the checks below overturn the previous entry's
+conclusion; recording the error rather than editing it away.
+
+**Why environment drift is dead.** `git log f36c4fb2..f9dee54 -- pyproject.toml uv.lock` returns
+**one** commit: `f9dee54`, the torch cu126 pin. Its lock delta is torch plus the `nvidia-*` CUDA
+runtime packages flipping to their `-cu12` variants. `numpy`, `scipy`, `kymatio`, `scikit-learn`
+entries are untouched, and the CUDA libraries are GPU-only — numpy/scipy use CPU BLAS. The M7 and
+M9 numeric environments are therefore the same.
+
+**Why the store is innocent — tested with M7's own code.** Checked out `f36c4fb2` in a throwaway
+worktree, pointed it at the real data via an absolute-path config overlay, and rebuilt session
+`s10_10am`'s npz with the **M7 code**, comparing against the **current M9 store**:
+`M7 CODE vs CURRENT STORE: compared 99 arrays -> RESULT: BIT-IDENTICAL`. So the v1->v2 rebuild
+genuinely was a pure re-stamp, exactly as the part-2 commit claimed, and the schema-v2 addition is
+value-neutral. This is also the cleanest possible confirmation that the store code delta is inert.
+
+**Why the code is byte-neutral for Exp A** — the earlier entry's claim was right but rested on too
+narrow a diff (`features/`, `preprocess/`, `data/`, `config.py`). Re-diffed the whole of `src/`:
+  * `exp_a.py`, `splits.py`, `features/extraction.py` — **unchanged**.
+  * `harness.py` (+118) — the M9 additions are the keyword-only `score_fn` hook and Exp C's
+    ordinal viability rule. With `score_fn=None` (Exp A always) `_score` makes the identical
+    `subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)` call; `_viability_reason`
+    keys KNN on the parameter name (same rule for Exp A) and its 2-column branch is skipped for a
+    1-D y; `n_train_rows` moved from `np.isin(...).sum()` to `np.count_nonzero(train_rows)` — same
+    integer.
+  * `regressors.py` (+72) — `build_estimator` now delegates the five base branches to `_bare_model`
+    and wraps in the same `Pipeline([("scaler", StandardScaler()), ("model", model)])`. Pure
+    extraction.
+  * `selection.py` (+112) — `SIMPLICITY_RANK`'s base entries are unchanged (`ridge` 0, `knn` 1,
+    `svr` 2, `rf` 3, `gbm` 4); only the six `ord_*` ids were added. Consistent with the byte-identical
+    selection tables.
+  * `metrics.py` (+272) — `subject_cluster_bootstrap_pooled` gained a `subjects` first argument.
+    This touches CI computation only, never `model.predict`, so it cannot explain a `y_pred` delta
+    (it plausibly does explain part of the ~2e-15 CI-bound movement).
+  * `experiments/run_regression.py` — **unchanged**.
+
+**The one difference that remains.** `scripts/ibex/run_exp_a.sbatch` changed at M9:
+
+    -#SBATCH --cpus-per-task=8      -#SBATCH --mem=32G
+    +#SBATCH --cpus-per-task=16     +#SBATCH --mem=64G
+    -export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
+    +export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-16}
+
+`run_regression.py:83` reads `n_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))` and
+`exp_a.run_exp_a` fans the 16 outer folds over `ctx.Pool(processes=min(n_workers, len(tasks)))`.
+**So the M7 run used 8 workers and `OMP_NUM_THREADS=8`; all three M9 runs used 16 and 16.** That is
+the last surviving difference between the two.
+
+**Honest caveat on the mechanism.** `_run_single_fold` (`exp_a.py:242-251`) wraps the whole fold —
+provider construction, both stage searches, the final refit — in `threadpool_limits(1)`, which
+*should* make the ambient thread count irrelevant to `y_pred`. So the resource change being the
+cause is **not yet mechanistically explained**; it is simply the only variable left standing after
+code, store, raw data, packages and CPU model were each eliminated by direct test. A plausible
+reading is that `threadpool_limits(1)` does not cover every library actually doing float reductions
+(it limits pools it can discover at context entry), leaving some ambient-thread-count sensitivity —
+but that is a hypothesis, not a finding, and 77 GHz passing at the SAME resource change means any
+such sensitivity is size-dependent (10 GHz's larger feature matrices crossing a BLAS threading
+threshold that 77 GHz's stay below would fit).
+
+**The test, and it is cheap.** Re-run 10 GHz Exp A at `f9dee54` with M7's exact resources — the
+sbatch header even documents the override:
+
+    BAND=10ghz MODE=full sbatch --export=ALL --cpus-per-task=8 --mem=32G scripts/ibex/run_exp_a.sbatch
+
+  * reproduces M7 bit-exactly -> cause confirmed, and **bit-identity is RECOVERABLE**: O-M9-5 needs
+    no amendment, only a pinned resource line (and the run_exp_c/run_exp_d sbatch resource choices
+    deserve the same scrutiny before their artifacts are trusted as comparable to anything M7-era).
+  * still differs -> the resource line is exonerated too, and the divergence has no identified
+    cause at all, which would be a much more serious reproducibility finding.
+
+### 2026-08-02 third follow-up — the resource line is ALSO exonerated. Divergence is confined ENTIRELY to the SVR folds. Root cause not fully identified; bit-identity with M7 is not achievable and O-M9-5 needs an owner decision.
+
+The 8-core control run (job 49848293, `workers : 8` confirmed in its log, 32 G, ~1h50) produced
+`453a22ba...` — **the same hash as the three 16-core runs**, not M7's `4bd21201...`. So the
+`--cpus-per-task` 8->16 change is not the cause either. Four runs at `f9dee54` across two worker
+counts and at least two nodes are byte-identical to each other; **M7 is the sole outlier**. The
+previous entry's hypothesis is therefore also wrong, and `threadpool_limits(1)` is vindicated: it
+does neutralize ambient thread count, which is why worker count changes nothing.
+
+**The decisive structural finding.** Mapping the differing rows onto the (byte-identical) selection
+table gives a *perfect* correlation with one estimator family:
+
+| selected family | folds | folds differing |
+|---|---|---|
+| **svr** | 5 | **5** |
+| knn | 7 | 0 |
+| gbm | 3 | 0 |
+| rf | 1 | 0 |
+
+Every SVR fold differs; no other fold does. Per-subject: s1 (svr) 1/3 rows at 5.14e-14; s7, s8,
+s11, s14 (all svr) 2-3 rows each at 1.11e-16 — literally one ULP. Subjects on knn/rf/gbm are
+bit-clean. `sklearn.svm.SVR` is libsvm's **iterative SMO solver with a convergence tolerance** — the
+one family in the grid that can turn a sub-ULP difference in its inputs or in a BLAS kernel
+evaluation into a visibly different (still ~1e-14) output, by converging one iteration earlier or
+later. knn (distance comparisons), rf and gbm (tree splits) are structurally insensitive to
+perturbations that small.
+
+**What this does NOT explain.** 77 GHz selected **8** SVR folds and still reproduced M7 bit-exactly.
+So SVR is the *amplifier*, not the *source*: there must be a 10 GHz-specific sub-ULP perturbation
+for it to amplify, and 77 GHz's inputs evidently carry none. That source is still unidentified.
+Note also that the one session tested for store reproducibility (`s10_10am`) belongs to subject 10,
+which selected **knn** — i.e. the test happened to land on a fold that is insensitive by
+construction. Re-running that check on the SVR subjects' sessions (1, 7, 8, 11, 14) on IBEX with M7
+code is the one test that could still localize it; it is not needed for the decision below.
+
+**Everything controllable has been eliminated by direct test**: raw data (sha256), folds, seeds,
+config, code (full `src/` + `experiments/` diff), store content (M7 code reproduces the M9 store
+bit-exactly), package set, CPU model, worker count, thread count, memory. The M7-era store no longer
+exists and the M7 venv's actual BLAS build was never recorded, so the residual difference is not
+reconstructible.
+
+**Assessment for the decision.** The effect is bounded and characterized: max 5.14e-14 on `y_pred`
+(11/149 rows), max 1.72e-14 across every metric, **zero** effect on model selection (selection
+tables byte-identical in both bands), no sign/CI-vs-zero verdict moved. The M9 pipeline is itself
+strongly reproducible — four runs, two worker counts, multiple nodes, one hash. What cannot be done
+is reproduce a July artifact whose exact numeric environment was never captured.
+
+**Status: STOPPED at step 12, per §5 trap 17 and D9.** Step 13 is not started. The gate was not
+weakened, no tolerance was introduced, and the comparison was NOT re-pointed at the fresh
+predictions — doing any of those would convert a detected fault into a silent protocol change,
+which is the precise failure mode O-M9-5 exists to prevent. 77 GHz is verified and can proceed
+independently only if the owner decides the two bands are separable; that is an owner call, not one
+taken here. Awaiting owner decision.
+
+## 2026-08-01 — M9 step 11 DONE: full-cohort Exp C (ordinal S0-S4) ran on both bands. Negative result — QWK is at or below zero in all four arm x band cells. One cosmetic reporting defect found and deliberately NOT fixed.
+
+Submitted on IBEX as two independent CPU jobs from the copied tree at `f9dee54`
+(`BAND={10ghz,77ghz} MODE=full sbatch --export=ALL scripts/ibex/run_exp_c.sbatch`), jobs
+49770850 and 49770855. Both completed; artifacts are the full four-file set
+(`metrics_exp_c_{band}.json`, `predictions_{band}.csv`, `selection_table_{band}.csv`,
+`confusion_{band}.csv` + `.png`) under
+
+    results/runs/20260801T133513697136Z_f9dee54e/   10 GHz
+    results/runs/20260801T141211973935Z_f9dee54e/   77 GHz
+
+**Provenance checks, all passed.** Both attest `git.commit = f9dee54e0cef...` (via the copied-tree
+`REVISION`, `branch`/`dirty` correctly `None` — no live git on a compute node), `stage=exp-c-full`,
+`device=cpu`, `seed_set=[1,2,3,4,5]`, `seed=20260721`, 16 LOSO folds, `n_eval=16`. Cohorts are
+`n_sessions` 73 (10 GHz) / 72 (77 GHz) — exactly the M5 QC-eligible set both Exp A and Exp B ran
+on, so the v2 schema and the M9 commit moved no session. The two runs share a `config_hash`
+(`fb135b5c...`); that is expected, not a mix-up — the merged config carries BOTH bands' sections
+(`wst`/`wst77`, `search_10ghz`/`search_77ghz`, `qc`/`qc77`), so band is a runtime argument rather
+than a config difference. The `inputs` block confirms genuinely different data: same-named `.mat`
+files with different sha256 per band.
+
+**Headline (ordinal metrics only, per invariant 4; subject-cluster BCa bootstrap, n_eval=16, no
+skipped subjects, `unreliable=false` throughout):**
+
+| band | arm | QWK | adjacent acc. | class-unit MAE |
+|---|---|---|---|---|
+| 10 GHz | a (regress-then-threshold) | **-0.213 [-0.365, -0.030]** | 0.534 [0.432, 0.631] | 1.553 [1.369, 1.772] |
+| 10 GHz | b (Frank-Hall) | **-0.198 [-0.317, -0.075]** | 0.534 [0.473, 0.608] | 1.644 [1.459, 1.792] |
+| 77 GHz | a | **-0.278 [-0.461, -0.077]** | 0.558 [0.465, 0.636] | 1.492 [1.317, 1.700] |
+| 77 GHz | b | **+0.025 [-0.281, +0.243]** | 0.611 [0.487, 0.712] | 1.347 [1.137, 1.680] |
+
+Three of the four CIs sit entirely below zero; the fourth spans zero. **This is a negative result
+and must be written as one.** It is NOT evidence of inverse predictive ability — the confusion
+matrices show why: predictions collapse into the middle classes and then run *counter* to truth.
+10 GHz arm b sends 5 of the 14 true-S0 rows to S4 and 5 of the 15 true-S4 rows to S0; 77 GHz arm a
+never emits S0 at all and puts 8.6/15 true-S4 rows in S2. A model that tracks some subject- or
+session-level quantity uncorrelated with Δm, under LOSO where the test subject's own offset is
+unavailable, produces exactly this: mild systematic anti-agreement whose bootstrap CI can exclude
+zero at 16 subjects without any inverse mechanism existing. The honest claim is "no usable ordinal
+signal," nothing stronger in either direction.
+
+Adjacent accuracy (0.53-0.61) is the cautionary number here: it looks unremarkable-to-fine while
+QWK is negative, precisely because middle-collapsed predictions are within +/-1 of a lot of truth
+by construction. QWK stays the headline ordinal metric; adjacent accuracy is never quoted alone.
+
+**Selection behaviour.** Stage-1 tiling is stable within a band and differs across bands: 10 GHz
+modal key `(1, 'A', 'mag', 0, 'tuned')` (6/16 folds, with `frozen` and `(1,'A','mag',2,'tuned')`
+at 2/16 each); 77 GHz modal `(2, 'off')` (4/16), then `(2,'tuned')` and `(2,'frozen')` at 3/16.
+Arm-a family choice is genuinely heterogeneous across folds — 10 GHz: ridge 8, gbm 4, rf 2, svr 2;
+77 GHz: gbm 8, ridge 4, rf 2, svr 2 — which is itself a no-signal signature (no family dominates
+because none of them works). Arm b is `ord_b_frank_hall` in all 16 folds by construction.
+`n_evaluable_inner_folds` is 5 in every fold of both bands, and `viability_reason_counts` is empty
+everywhere: the trap-3 degradation path that fired on the 6-subject smoke never triggered at full
+cohort, as expected once every inner-training set can see all five classes.
+
+**QWK undefinedness (the O-M9-8 / 8a instrumentation) is a clean zero.** 10 GHz: 9280 inner
+evaluation cells, 56 outer, `n_qwk_nan = 0`, `n_single_class_truth_val_folds = 0`. 77 GHz: 4240
+inner, 72 outer, same zeros. So the 8a trigger changed nothing on real data — worth stating in §8
+precisely because it was a contested design point.
+
+**Defect found: the metrics header's `n_seeds` is arm-b-only, and reads `1` for both bands.**
+`exp_c.py:745-750` builds `cohort` INSIDE the per-arm loop and overwrites it each iteration, so the
+top-level `n_eval_subjects`/`n_rows`/`n_seeds` are whatever the last arm (b) produced. The first two
+really are arm-invariant; `n_seeds` is not. `_oof_matrix_c` sets it to
+`max(len(seed_outcomes))` for that arm, and arm b is always Frank-Hall (deterministic, 1 realized
+seed) while arm a selects rf/gbm in 6/16 folds at 10 GHz and 10/16 at 77 GHz (stochastic, 5
+realized seeds). The line-745 comment's claim that the shape is "identical across arms" is
+therefore false for that one field.
+
+Confirmed three independent ways rather than asserted: arm a's `confusion_matrix_mean_over_seeds`
+has fractional entries (5.8, 6.2, 8.6 ...) and arm b's is all-integer; and the outer QWK cell
+counts reconcile exactly under "rf/gbm realize 5 seeds, ridge/svr/frank-hall realize 1" —
+10 GHz `(2+4)*5 + (8+2)*1 + 16 = 56` and 77 GHz `(2+8)*5 + (4+2)*1 + 16 = 72`, matching the
+recorded 56 and 72; and the prediction row counts reconcile on the same model (10 GHz 254 data
+rows, 77 GHz 332).
+
+**Impact: reporting metadata only — no metric is wrong.** Every CI, confusion matrix and
+per-subject MAE is computed inside the arm loop from that arm's own `pred_by_seed`, never from the
+header. The 5-seed protocol itself ran correctly; only the header's summary of it is misleading.
+
+**Deliberately NOT fixed, and the reasoning is trap 18, not laziness.** Any code change moves the
+analysis commit, which invalidates both v2 stores (`_check_match` is strict equality) and forces a
+rebuild of both, *and* would strand these step-11 artifacts at a superseded commit right before
+step 12's bit-identity gate and step 13's comparisons consume commit lineage. Paying a full
+two-band store rebuild plus a re-run of step 11 to correct one metadata integer is not a trade
+worth making mid-milestone. The mitigation is documentary: SECOND_CHAPTER §8 states the realized
+seed count PER ARM (arm a: 5 for stochastic winners, 1 for deterministic ones; arm b: 1 throughout)
+and never quotes the header field. Logged here as a known cosmetic defect so a later reader of
+`metrics_exp_c_*.json` does not mistake it for a protocol violation.
+
 ## 2026-08-01 — M7 reference artifacts recovered after a local `results/runs/` wholesale-replace deleted them; recovered from the Windows Recycle Bin and byte-verified.
 
 While preparing HANDOFF.md, the owner replaced local `results/runs/` wholesale with a copy of
