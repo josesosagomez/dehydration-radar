@@ -4,6 +4,63 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-04 — Pre-rebuild audit of steps 13-15, at the owner's request ("this is the last rebuild — validate that"). Comparison stage now has end-to-end coverage; step 14's invocation constraint found and documented. No further code change is required.
+
+**Why this audit happened.** The owner asked for an assurance that the rebuild about to be paid
+for is the last one. Since any code change moves the analysis commit, and step 14's
+`load_source_run` refuses a source artifact whose commit differs from its own, the requirement
+is stricter than "no more store rebuilds": it is **no code change at all from `ead4fe8` through
+step 15**, or steps 11-13 would need re-running too. The rebuild is the cheap part.
+
+**Gap found and closed: the comparison stage had NO success-path coverage.** Both existing
+tests assert refusals, so the wiring was only ever exercised by failing early — which is
+precisely how yesterday's device/`config_hash` defect survived: every component
+(`summarize_exp_d`, `write_exp_d_comparison_reports`, `load_exp_a_radar`, `record_run`) was
+individually tested and green while the stage as a whole could not run on any real cohort. The
+new end-to-end test builds the six families the way production does (CNN at `device: cuda`,
+deterministic at `device: cpu`) and requires `rb.main` to reach its reports. **Verified
+sensitive:** with the per-family normalization reverted, it fails on `cnn1d_matched` with the
+exact `config_hash` mismatch that would have hit IBEX after the eight GPU groups finished.
+
+**Step 14 attempted end-to-end against real artifacts, and the attempt itself was informative.**
+Ran `run_frame_split_exploratory.py` from a worktree pinned at `f0a46aa` (the commit the source
+Exp C run carries; `frame_split.py` is byte-unchanged between `f0a46aa` and `ead4fe8`, so this
+tests the same code step 14 will run) against
+`results/runs/20260803T143705048534Z_f0a46aa6`. The **`analysis_commit` check passed** — so the
+entrypoint loads, parses, builds its config and reaches `load_source_run` on real data — and it
+then correctly REFUSED on `config_hash`.
+
+**The refusal is the finding, not a bug.** `exp_b.config_fingerprint` hashes the whole config
+dict, `paths` included, and the source runs carry IBEX absolute paths. Two consequences:
+
+1. **Step 14 cannot be run locally against IBEX-produced artifacts, ever.** Any local paths
+   overlay changes the hash. It must run on IBEX.
+2. **Each frame-split run must load the EXACT overlay chain of the run it sources**, because
+   that chain is what fixed the source's hash:
+
+   | source | overlay chain the frame-split run must use |
+   |---|---|
+   | Exp C (arm_a, arm_b) | `exp_a_regression{_77ghz}.yaml` + `exp_c.yaml` + `ibex.yaml` |
+   | Exp D physics, session_index | `exp_a_regression{_77ghz}.yaml` + `baselines.yaml` + `ibex.yaml` |
+   | Exp D the four CNN families | the above **plus `gpu.yaml`** |
+
+   The last row is the one that would have bitten: 12 of the 16 sanctioned runs source Exp D
+   families, and the 8 sourcing CNNs need `gpu.yaml` or they refuse on `config_hash` — the same
+   class of trap as the comparison-stage defect fixed earlier today, and self-consistent, since
+   a CNN-sourced refit retrains a network and therefore wants the GPU allocation anyway.
+
+This needs **no code change** — it is an invocation requirement, and it is now written down
+before step 14 rather than discovered during it.
+
+**Residual risk, stated honestly rather than waved away.** What remains unexercised on real
+data is the CNN training path at full 16-fold scale (smoked on CPU and on one single-fold GPU
+task at step 10) and everything in `frame_split` after `load_source_run` (27 synthetic tests,
+no real-artifact run). A failure in the first is a resources problem — wrong `ARRAY_TIME`, OOM
+— fixable by resubmitting with different sbatch flags, not by changing code. A failure in the
+second is the one genuine exposure that could still force a re-run, and it cannot be closed
+before the rebuild for the reason above: it needs source artifacts at the current commit, which
+will not exist until step 13 has run.
+
 ## 2026-08-04 — Step 13 BLOCKER found before submitting any GPU work: the Exp D comparison stage could never have passed. `config_hash` is checked for cross-family equality, but the six families cannot share one `run.device`. Fixed by normalizing the device per family.
 
 **Found while drafting the step-13 submission sequence, by reading the scripts rather than
