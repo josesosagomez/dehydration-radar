@@ -4,6 +4,60 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-04 — Step 13 BLOCKER found before submitting any GPU work: the Exp D comparison stage could never have passed. `config_hash` is checked for cross-family equality, but the six families cannot share one `run.device`. Fixed by normalizing the device per family.
+
+**Found while drafting the step-13 submission sequence, by reading the scripts rather than
+trusting the plan.** Nothing had been submitted, so the cost of the fix is a store rebuild and
+the step 11/12 re-runs — not eight wasted GPU array groups.
+
+**The defect, as a chain.** `exp_b.config_fingerprint` (`exp_b.py:635`) is a sha256 over the
+WHOLE config dict, so `run.device` is inside it. Then:
+
+- `run_exp_d_cnn.sbatch:56` loads `configs/gpu.yaml` into all three CNN run-group stages, so a
+  CNN family's `lineage.config_hash` is computed at `device: cuda`. `merge_exp_d_folds` reads
+  it straight from the init group's `extra["config_hash"]` (`exp_d.py:1844`) and writes it into
+  `metrics_{family}_{band}.json`.
+- `run_exp_d_cheap.sbatch:33` gives physics, session_index AND the comparison stage no GPU
+  overlay, so those are `device: cpu`.
+- `run_baselines.py:112` refuses any non-CNN family with `device != "cpu"`, so the cheap
+  families **cannot** be given the cuda hash to make them match.
+- `run_baselines.py:327-339` required every family's `lineage.config_hash` to equal the
+  comparison's own single hash.
+
+Four families carry the cuda hash, two carry the cpu hash, and one comparison config can only
+ever equal one of them. **No invocation of the comparison stage could have succeeded on a real
+cohort** — it would have failed on four families or on two, depending on how the comparison
+itself was configured.
+
+**Why it was never caught.** `tests/test_run_baselines.py::test_a_fold_task_naming_a_different_device_than_init_is_refused`
+pins the *within-group* case (a fold task loading a different overlay than its init), which is
+a real and different failure mode. The *cross-family* case at the comparison stage had no test,
+because the comparison fixtures build all six families from one config — so every fixture family
+shares a hash by construction, which is exactly the thing that cannot happen in production. A
+fixture that is more uniform than reality hides the bug it was built to look for.
+
+**The fix.** `_expected_family_config_hash(config, family)` normalizes `run.device` to the only
+value that family is PERMITTED to have — cuda for `CNN_FAMILIES`, cpu for
+`DETERMINISTIC_FAMILIES` — and the comparison checks each family against that. `analysis_commit`
+equality stays strict, and everything in the config other than `run.device` still has to match
+exactly.
+
+**The alternative was rejected on purpose.** Dropping `run.device` from `config_fingerprint`
+is a smaller change, but it would blind the within-group check that the existing test exists to
+protect, and GPU-vs-CPU numerics genuinely differ (GPU training is never claimed
+bit-deterministic). Normalizing per family is strictly narrower than ignoring the field.
+
+**New test** pins both halves: each family resolves to the hash it is allowed to have
+regardless of how the comparison itself was configured, AND a config differing in anything else
+(a bumped `run.seed`) still mismatches. Without that second half the fix could have degenerated
+into ignoring the config entirely.
+
+**Cost, accepted.** The commit moves, so trap 18 applies again: both stores rebuilt, Exp A
+re-run on both bands (the O-M9-5 gate requires a matching `analysis_commit`), Exp C re-run on
+both bands so the reported ordinal results sit at the reported commit, and only then step 13.
+The store-sidecar package-versions change was NOT bundled — the owner scoped this to the
+comparison fix.
+
 ## 2026-08-04 — File hygiene: every `f9dee54` run record moved to `archive/results/`. `results/runs/` now holds only the M7 references and the current `f0a46aa` runs.
 
 Moved (not deleted — these are the only record of the pre-`f0a46aa` numerics):

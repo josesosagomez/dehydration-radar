@@ -15,6 +15,7 @@ Three things pytest can hold this file to without a GPU or the real cohort:
 The training itself is covered by test_exp_d.py; nothing here trains a network.
 """
 
+import dataclasses
 import json
 
 import numpy as np
@@ -428,3 +429,37 @@ def test_comparisons_refuse_a_lineage_mismatched_family_directory(tmp_path, monk
     message = str(excinfo.value)
     assert "lineage.analysis_commit" in message
     assert sorted(exp_d.EXPD_FAMILIES)[0] in message
+
+
+def test_the_six_families_are_validated_against_their_own_authorized_device(tmp_path):
+    """The CNN families run at `device: cuda` and the deterministic ones are REFUSED unless
+    they are at `device: cpu`, while `config_fingerprint` hashes `run.device` along with
+    everything else. So the six families cannot all carry one `config_hash`, and a plain
+    equality check against the comparison's own hash could never pass on a real cohort — it
+    would fail on four families or on two, whichever half the comparison was configured like.
+
+    This pins the per-family normalization: each family is checked against the hash it is
+    ALLOWED to have, and against nothing looser. Everything outside `run.device` still has to
+    match exactly.
+    """
+    config = load_config(*CONFIG_ARGS[1::2])
+    assert str(config.run.device) == "cpu", "the base experiment config pins device: cpu"
+
+    cpu_hash = exp_b.config_fingerprint(config)
+    gpu_config = dataclasses.replace(
+        config, run=dataclasses.replace(config.run, device="cuda")
+    )
+    gpu_hash = exp_b.config_fingerprint(gpu_config)
+    assert cpu_hash != gpu_hash, "run.device must be inside the fingerprint (trap 11)"
+
+    for family in exp_d.DETERMINISTIC_FAMILIES:
+        assert rb._expected_family_config_hash(config, family) == cpu_hash
+        assert rb._expected_family_config_hash(gpu_config, family) == cpu_hash
+    for family in exp_d.CNN_FAMILIES:
+        assert rb._expected_family_config_hash(config, family) == gpu_hash
+        assert rb._expected_family_config_hash(gpu_config, family) == gpu_hash
+
+    # and the normalization is ONLY of the device: a genuinely different config still differs
+    other = dataclasses.replace(config, run=dataclasses.replace(config.run, seed=config.run.seed + 1))
+    assert rb._expected_family_config_hash(other, "physics") != cpu_hash
+    assert rb._expected_family_config_hash(other, "cnn1d_raw") != gpu_hash

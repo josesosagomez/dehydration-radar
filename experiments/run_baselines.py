@@ -35,6 +35,7 @@ the DL baselines are the one authorized GPU path (`implementation_plan.md:1326-1
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -314,6 +315,32 @@ def _main_cheap(args, config) -> int:
     return 0
 
 
+def _expected_family_config_hash(config, family) -> str:
+    """The `config_hash` family `family` is REQUIRED to carry, given this comparison's config.
+
+    The six Exp D families do not — and must not — share one `run.device`. The four CNN
+    families are the only authorized GPU consumers, so `run_exp_d_cnn.sbatch` loads
+    `configs/gpu.yaml` into all three of their run-group stages and their `lineage.config_hash`
+    is therefore computed at `device: cuda`. The two deterministic baselines are refused
+    outright above if `device != "cpu"`, so theirs is computed at `device: cpu`. Since
+    `config_fingerprint` hashes the whole config dict, `run.device` included, ONE literal hash
+    cannot match both groups and a plain equality check can never pass on a real cohort.
+
+    So the device is normalized per family to the only value that family is permitted to have,
+    and everything else in the config still has to match exactly. This is strictly narrower
+    than ignoring `run.device`: dropping it from the fingerprint would also blind the
+    WITHIN-group check that catches a fold task loading a different overlay than its init
+    (`tests/test_run_baselines.py::test_a_fold_task_naming_a_different_device_than_init_is_refused`),
+    which is a real failure mode and stays pinned.
+    """
+    device = "cuda" if family in exp_d.CNN_FAMILIES else "cpu"
+    if str(config.run.device) == device:
+        return exp_b.config_fingerprint(config)
+    return exp_b.config_fingerprint(
+        dataclasses.replace(config, run=dataclasses.replace(config.run, device=device))
+    )
+
+
 def _main_comparisons(args, config) -> int:
     band = args.band
     mode = "full" if args.full_cohort else "smoke"
@@ -323,14 +350,15 @@ def _main_comparisons(args, config) -> int:
     family_runs = dict(args.family_run_dir)
 
     # every input family must come from THIS code and THIS config, named individually on
-    # failure so a wrong directory is a one-line diagnosis rather than a hunt
+    # failure so a wrong directory is a one-line diagnosis rather than a hunt. The commit must
+    # match exactly; the config must match with `run.device` normalized per family (see above).
     for family, run_dir in sorted(family_runs.items()):
         metrics = json.loads(
             (Path(run_dir) / f"metrics_{family}_{band}.json").read_text(encoding="utf-8")
         )
         lineage = metrics.get("lineage") or {}
         for field, expected in (("analysis_commit", analysis_commit),
-                                ("config_hash", config_hash)):
+                                ("config_hash", _expected_family_config_hash(config, family))):
             if lineage.get(field) != expected:
                 raise SystemExit(
                     f"Exp D family {family} at {run_dir}: lineage.{field} is "
