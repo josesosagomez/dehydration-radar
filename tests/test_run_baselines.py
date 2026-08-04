@@ -431,6 +431,104 @@ def test_comparisons_refuse_a_lineage_mismatched_family_directory(tmp_path, monk
     assert sorted(exp_d.EXPD_FAMILIES)[0] in message
 
 
+def _write_family_for_comparison(config, out_dir, band, family, commit):
+    """One family's merged artifacts, with the lineage that family is REQUIRED to carry.
+
+    Deliberately not a single shared lineage: the whole point is that the CNN families record
+    their `config_hash` at `device: cuda` and the deterministic ones at `device: cpu`.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    seeds = (1,) if family in exp_d.DETERMINISTIC_FAMILIES else (1, 2, 3, 4, 5)
+    prediction_rows, selection_rows = [], []
+    for fold_id, subject in enumerate(range(1, N_SUBJECTS + 1)):
+        for seed in seeds:
+            for session_idx in range(5):
+                truth = 0.0 if session_idx == 0 else -(0.4 * session_idx + 0.1 * subject)
+                prediction_rows.append({
+                    "fold_id": fold_id, "subject": subject, "session_idx": session_idx,
+                    "seed": seed, "y_true_delta_m_pct": truth,
+                    # a small family-dependent offset so the families are not all identical
+                    "y_pred": truth + 0.05 * (1 + exp_d.EXPD_FAMILIES.index(family)),
+                    "n_frames_aggregated": 2,
+                })
+        selection_rows.append({
+            "fold_id": fold_id, "test_subject": subject, "selected_config": "n/a",
+            "learning_rate": "", "weight_decay": "", "epoch_budget": "",
+            "selected_epoch_counts": [], "per_config_inner_scores": [0.5],
+            "inner_score": 0.5, "n_inner_folds": 3, "fitted_coefficients": {},
+        })
+    exp_d.write_family_artifacts(
+        band, family, out_dir,
+        prediction_rows=prediction_rows, selection_rows=selection_rows,
+        deterministic=family in exp_d.DETERMINISTIC_FAMILIES,
+        bootstrap_b=50, rng_seed=config.run.seed,
+        skip_threshold_pct=config.stats.undefined_metric_skip_threshold_pct,
+        lineage={"analysis_commit": commit,
+                 "config_hash": rb._expected_family_config_hash(config, family),
+                 "run_group_id": out_dir.name},
+    )
+    return out_dir
+
+
+def test_the_comparison_stage_runs_end_to_end_with_the_six_real_family_lineages(
+    tmp_path, monkeypatch
+):
+    """The SUCCESS path of `--family comparisons`, which had no coverage at all.
+
+    Both existing comparison tests assert refusals, so the wiring — validation loop, radar
+    gate, summary, report write — was only ever exercised by failing early. That is exactly
+    where the device/`config_hash` defect lived: every component was individually tested and
+    green while the stage as a whole could not run on any real cohort, because the fixtures
+    gave all six families one shared lineage, which production never does.
+
+    This builds the six families the way production does — CNN at `device: cuda`, deterministic
+    at `device: cpu` — and requires the stage to reach its reports.
+    """
+    overlay, data_10, results = _overlay(tmp_path)
+    sessions = _sessions()
+    _patch(monkeypatch, sessions, data_10)
+    commit = "c0ffee1234"
+    monkeypatch.setattr(rb, "_git_info", lambda: {"commit": commit, "dirty": False, "branch": "t"})
+
+    config = load_config(*CONFIG_ARGS[1::2], str(overlay))
+    family_dirs = {
+        family: _write_family_for_comparison(
+            config, tmp_path / f"run_{family}", "10ghz", family, commit
+        )
+        for family in exp_d.EXPD_FAMILIES
+    }
+
+    # the radar side: an Exp A re-run and an M7 reference that agree, per O-M9-5
+    exp_a_dir, m7_dir = tmp_path / "exp_a_m9", tmp_path / "exp_a_m7"
+    for directory in (exp_a_dir, m7_dir):
+        directory.mkdir()
+        (directory / "provenance.json").write_text(
+            json.dumps({"git": {"commit": commit}, "config": {"model_grid": {"ridge_alpha": [1.0]}}}),
+            encoding="utf-8",
+        )
+        with (directory / "predictions_10ghz.csv").open("w", newline="", encoding="utf-8") as fh:
+            fh.write("subject,seed,y_true,y_pred\n")
+            for subject in range(1, N_SUBJECTS + 1):
+                for seed in (1, 2, 3, 4, 5):
+                    fh.write(f"{subject},{seed},{-0.5 * subject},{-0.5 * subject + 0.1}\n")
+        (directory / "selection_table_10ghz.csv").write_text(
+            "test_subject,family\n" + "".join(f"{s},svr\n" for s in range(1, N_SUBJECTS + 1)),
+            encoding="utf-8",
+        )
+
+    assert rb.main(
+        CONFIG_ARGS + ["--config", str(overlay), "--family", "comparisons", "--full-cohort",
+                       "--exp-a-run-dir", str(exp_a_dir), "--m7-reference-dir", str(m7_dir)]
+        + [f"--family-run-dir={f}={p}" for f, p in family_dirs.items()]
+    ) == 0
+
+    written = list(results.rglob("metrics_exp_d_10ghz.json"))
+    assert written, "the comparison stage produced no report"
+    report = json.loads(written[0].read_text(encoding="utf-8"))
+    assert report["lineage"]["reproducibility_verified"] is True
+    assert report["lineage"]["max_abs_pred_delta"] == 0.0
+
+
 def test_the_six_families_are_validated_against_their_own_authorized_device(tmp_path):
     """The CNN families run at `device: cuda` and the deterministic ones are REFUSED unless
     they are at `device: cpu`, while `config_fingerprint` hashes `run.device` along with
