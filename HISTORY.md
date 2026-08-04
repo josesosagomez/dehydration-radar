@@ -4,6 +4,67 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-04 — Phase 2 at `3f465ab`: gate passes both bands, Exp C byte-identical across CPU vendors — and a CORRECTION. Hardware was NOT ruled out: 10 GHz Exp A is microarchitecture-sensitive. Two independent factors, both now isolated.
+
+**Correction to the determinism-control entry below.** That entry concluded hardware was "ruled
+out positively" and the venv was the variable. It generalized the Exp C control — which is
+genuinely architecture-invariant — to the whole pipeline. **Exp A 10 GHz falsifies that
+generalization.** Both factors are real and independent, and the correction is the finding.
+
+**The complete account, now that `provenance.platform` records the CPU on every run:**
+
+| commit | CPU | Exp A 10 GHz vs M7 | Exp A 77 GHz vs M7 |
+|---|---|---|---|
+| `f9dee54` | AMD EPYC 9655 (Turin) | 5.14e-14 | 0.0 |
+| `f0a46aa` | AMD EPYC 9655 (Turin) | **0.0** | 0.0 |
+| `3f465ab` | Intel Xeon Gold 6148 (Skylake) | **2.33e-13** | 0.0 |
+
+- `f9dee54` -> `f0a46aa`: **same architecture, different venv** (accumulated across M5-M9 vs
+  built fresh by `uv sync --frozen`). The venv explains that transition, as recorded below.
+- `f0a46aa` -> `3f465ab`: **same venv, different architecture** — nothing in the two intervening
+  commits touches Exp A's fit path (`run_baselines.py`'s comparison check, tests, journals).
+  The CPU explains this one.
+
+**How narrow the sensitivity is, which is the scientifically interesting part.** Only 10 GHz
+Exp A moves. Confirmed bit-identical across the same AMD->Intel move: Exp A **77 GHz** (0.0
+against M7 on both), and Exp C in **both** bands on the full cohort — `selection_table` and
+`predictions` byte-identical, checked directly against the `f0a46aa` runs.
+
+This refines the SVR story rather than repeating it. 77 GHz selects SVR on **8** folds and is
+stable; 10 GHz selects it on **5** and moves. So SVR is not generating the difference — it
+amplifies a microarchitecture-sensitive computation upstream in the 10 GHz fit path, where the
+feature vectors have a different dimension and BLAS therefore dispatches different kernels.
+Consistent with the store being provably identical (M7's own code reproduces it bit-for-bit
+across all five SVR subjects), the divergence has to arise after the features and before the
+prediction — i.e. in `StandardScaler`/`SVR`, exactly where it was localized.
+
+**In every case across all three commits, `selection_table_{band}.csv` stayed BYTE-IDENTICAL.**
+No model choice has ever moved. Every observed difference is last-ulp noise on the predictions.
+
+**The amendment is vindicated, not merely justified.** Under the original bit-identity criterion
+this run would have FAILED and halted M9 a second time — at 2.33e-13, four times further from
+zero than the divergence that halted it the first time. The decision recorded yesterday to keep
+the tolerance rather than re-tighten it to zero (on the argument that "a strict gate would stop
+the milestone again on the next environment shift") was correct, and is now demonstrated rather
+than predicted. §8 should say so in those terms: the amendment was adopted post-hoc, and the
+subsequent runs independently confirmed the failure mode it was adopted for.
+
+**Phase 2 status:** all four runs landed at `3f465ab` (Exp A + Exp C, both bands), the O-M9-5
+gate PASSES both bands (10 GHz 2.330e-13, 77 GHz 0.000e+00; n_seeds=5, 16 subjects), and Exp C
+reproduces the `f0a46aa` values byte-for-byte. Steps 11 and 12 are closed at the current commit.
+
+    20260804T150841445054Z_3f465abc  exp-a-full 10ghz  cn603-21-r
+    20260804T150846388584Z_3f465abc  exp-c-full 10ghz  cn603-24-r
+    20260804T170644111783Z_3f465abc  exp-c-full 77ghz  cn603-24-l
+    20260804T171005433711Z_3f465abc  exp-a-full 77ghz  cn603-21-l
+
+**Operational note:** the two M7 reference dirs were absent on IBEX (the tree was wiped to
+`data/` + `results/features/`) and had to be copied back from the owner's machine — 244 KB
+total. `results/runs/` is gitignored, so the two artifacts the entire O-M9-5 gate depends on
+exist only as loose copies and have now been lost twice. A `!results/runs/*_f36c4fb2/`
+exception in `.gitignore` is the fix; it is a tracked-file change, so it goes on the post-M9
+list rather than costing the rebuild just paid for.
+
 ## 2026-08-04 — Pre-rebuild audit of steps 13-15, at the owner's request ("this is the last rebuild — validate that"). Comparison stage now has end-to-end coverage; step 14's invocation constraint found and documented. No further code change is required.
 
 **Why this audit happened.** The owner asked for an assurance that the rebuild about to be paid
