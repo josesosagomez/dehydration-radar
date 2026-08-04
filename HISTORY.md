@@ -4,6 +4,46 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-04 — Determinism control: Exp C 10 GHz reproduces BYTE-IDENTICALLY on a different CPU vendor (Intel Skylake vs AMD Turin). Hardware is positively ruled out; the environment conclusion stands and strengthens.
+
+**The control.** Re-ran `BAND=10ghz MODE=full run_exp_c.sbatch` at `f0a46aa` with nothing
+changed, against `20260803T143705048534Z_f0a46aa6`. The new run is
+`20260803T172827484892Z_f0a46aa6`.
+
+    selection_table_10ghz.csv   IDENTICAL
+    predictions_10ghz.csv       IDENTICAL
+
+**Why this is worth more than a same-node repeat.** Slurm happened to place it on a completely
+different machine:
+
+    original : cn604-11    AMD EPYC 9655 96-Core Processor        (Turin)
+    control  : cn605-10-l  Intel(R) Xeon(R) Gold 6148 @ 2.40GHz   (Skylake)
+
+Different vendor, different microarchitecture — and byte-identical output. Three conclusions:
+
+1. **Exp C is deterministic** at this commit and environment. So the 10 GHz arm b movement
+   recorded in the entry below was environment-borne, not run-to-run noise, exactly as Exp A's
+   convergence onto the M7 hash indicated. The current values stand as the reported ones.
+2. **The pipeline is bit-reproducible across CPU microarchitectures.** That is a stronger
+   reproducibility statement than anything M9 had before, and §8 can make it as an evidenced
+   claim rather than an assumption.
+3. **Hardware is now ruled out POSITIVELY, not merely by elimination.** BLAS dispatching
+   different kernels for Skylake vs Turin is precisely the mechanism that would have shown up
+   here, and it did not. That leaves the venv's *realized* contents as the variable behind the
+   `f9dee54` -> `f0a46aa` change — which is what the fresh `uv sync --frozen` hypothesis
+   predicted, and it now has positive support rather than only being the last candidate
+   standing.
+
+**Note on the instrumentation.** This test was only interpretable because `provenance.platform`
+records `cpu_model` and `slurm_nodelist` — the fields added one commit earlier, precisely
+because their absence had made O-M9-5 undiagnosable. They paid for themselves within a day. The
+remaining half of that gap (store sidecars recording what a store was built WITH, not only what
+it was built FROM) stays on the post-M9 list, and this entry is further evidence for doing it.
+
+**Consequence for the amended gate.** The residual risk O-M9-5's 1e-10 tolerance insures against
+is now specifically *environment* drift — a rebuilt or re-resolved venv — and explicitly not
+node placement. That is the narrower and more accurate way for §8 to state it.
+
 ## 2026-08-03 — Steps 11 and 12 re-run at `f0a46aa`: the O-M9-5 gate PASSES BOTH BANDS **bit-identically** — the 5.14e-14 divergence is GONE. Root cause localized to the IBEX environment. Exp C 10 GHz arm b moved by one inner-CV tie-break.
 
 **The headline.** `predictions_10ghz.csv` from the `f0a46aa` Exp A re-run hashes to
