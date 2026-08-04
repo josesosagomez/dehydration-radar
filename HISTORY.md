@@ -4,6 +4,40 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-04 — File hygiene: every `f9dee54` run record moved to `archive/results/`. `results/runs/` now holds only the M7 references and the current `f0a46aa` runs.
+
+Moved (not deleted — these are the only record of the pre-`f0a46aa` numerics):
+
+    results/runs/step11/           -> archive/results/runs_f9dee54_superseded/step11/
+    results/runs/validate_step11/  -> archive/results/runs_f9dee54_superseded/validate_step11/
+    results/runs/*_f9dee54e/  (16) -> archive/results/runs_f9dee54_superseded/duplicates_of_step11/
+
+2.2 MB total, with a README in the archive folder explaining what each dir is and why it is
+superseded. Every `f9dee54` run would now fail `store._check_match` closed — the stores were
+rebuilt at `f0a46aa` and the commit comparison is strict equality — so none of it is runnable
+material any more.
+
+**Two things found while doing this, both worth recording.**
+
+*`results/runs/step11/` was misnamed.* Only 4 of its 20 dirs are step 11/12 (`exp-c-full` and
+`exp-a-full`, both bands); the other 16 are step-**10** mechanism smokes (`exp-d-*-smoke`,
+`exp-c-smoke`, `exp-d-cnn-group`). Anyone citing "the step11 folder" as a provenance path would
+have been citing mostly step-10 material — which is exactly why the handoff warned that those
+nested folders are not where `record_run` writes and must not be cited.
+
+*The 16 top-level `*_f9dee54e` dirs were exact duplicates* of copies inside `step11/`, verified
+`diff -rq` 16/16 identical. They are preserved under `duplicates_of_step11/` rather than
+deleted, only because `results/runs/` is gitignored and has already been lost twice this
+milestone. Safe to remove whenever.
+
+**What stays live in `results/runs/`:** the two M7 references (`*_f36c4fb2`, still the active
+O-M9-5 comparison target, NOT stale) and the five `f0a46aa` runs — Exp A and Exp C for both
+bands plus the cross-vendor determinism control.
+
+**Loose end:** the `f0a46aa` job logs (`exp_a_49947736.*`, `exp_c_49947734.*` and siblings) that
+had been at `results/runs/` top level are no longer there after the run-dir restore. They still
+exist on IBEX under `logs/`; pull them if the stdout is wanted, but no result depends on them.
+
 ## 2026-08-04 — Determinism control: Exp C 10 GHz reproduces BYTE-IDENTICALLY on a different CPU vendor (Intel Skylake vs AMD Turin). Hardware is positively ruled out; the environment conclusion stands and strengthens.
 
 **The control.** Re-ran `BAND=10ghz MODE=full run_exp_c.sbatch` at `f0a46aa` with nothing
