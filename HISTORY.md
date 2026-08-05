@@ -4,6 +4,55 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-05 — Step 13 phase 4: a REAL code bug found in the merge stage (`PosixPath` not JSON-serializable) — deliberately NOT fixed — plus 77 GHz fold timeouts. The bug inverts the success signal: complete merges crash, partial merges succeed.
+
+**The bug.** `run_baselines.py:202` writes the merge summary with
+`json.dumps(merged, indent=2, sort_keys=True)`. On a **complete** merge,
+`exp_d.merge_exp_d_folds` sets `merged["artifacts"] = write_family_artifacts(...)`
+(`exp_d.py:1837`), and that returns a dict of **`Path` objects** (`exp_d.py:1415-1420`), which
+`json` cannot serialize. On a **partial** merge the early return sets `artifacts = None`
+(`exp_d.py:1829`), which serializes fine.
+
+    TypeError: Object of type PosixPath is not JSON serializable
+
+**So the signal is exactly inverted: every COMPLETE merge job FAILS, every PARTIAL one
+succeeds.** This is why `grep "state=" logs/exp_d_cnn_merge_*.out` listed only the partial
+groups — the complete ones die before reaching the `print`. Six families were sitting in
+`READY` state with their merge jobs recorded as FAILED.
+
+**Why it is harmless, and why it is NOT being fixed.** The crash happens *after*
+`write_family_artifacts` has written all four artifacts, so everything the comparison stage
+consumes is correct and complete. Nothing in `src/`, `experiments/` or `scripts/` ever READS
+`exp_d_{family}_{band}_merged.json` — only a test does. Fixing it would move the commit and
+invalidate both stores plus every run back to step 11 (trap 18), costing days of compute to
+gain a file nothing reads. **Post-M9 list.**
+
+**The completeness attestation is not lost.** `write_family_artifacts` is reached only inside
+the `if merged["complete"]` branch, so **the presence of `metrics_{family}_{band}.json` is a
+rigorous proof that the group completed** — a partial merge writes no family artifacts at all.
+The phase-4 verification therefore checks artifact presence plus per-family `config_hash` and
+`analysis_commit`, which is strictly what the comparison stage itself demands. Anyone reading
+these run dirs later must know that a **missing** `merged.json` means SUCCESS and a
+**present** one means partial.
+
+**The same lesson as the comparison-stage defect, one day apart.** `tests/test_run_baselines.py:399`
+reads `merged.json` — but only in the partial case. The complete path's serialization was never
+exercised. Two real bugs in two days, both in a success path that every component test covered
+individually while no test ran the thing end to end. That belongs in §8's discussion of what the
+test suite did and did not buy.
+
+**77 GHz fold timeouts, the predicted failure.** `ARRAY_TIME` was measured at step 10 from a
+**10 GHz** single-fold GPU smoke only; the 77 GHz values were extrapolated. At `02:00:00`:
+
+    cnn1d_matched 77 GHz  missing folds 0, 1, 3, 8, 9   (array tasks 1, 2, 4, 9, 10)
+    spec2d_raw    77 GHz  missing fold 2                (array task 3)
+
+For scale, 77 GHz `cnn1d_raw` folds ran 1:03-2:10 even with a 3-hour limit. Both groups were
+resubmitted for the missing folds only — same run group, same init, other 21 shards untouched —
+at `--time=06:00:00`, with a dependent re-merge. A `--time` change, not a code change, so the
+commit does not move. **Record for any future sizing: 77 GHz fold wall-times must be measured,
+not extrapolated from 10 GHz.**
+
 ## 2026-08-04 — Phase 2 at `3f465ab`: gate passes both bands, Exp C byte-identical across CPU vendors — and a CORRECTION. Hardware was NOT ruled out: 10 GHz Exp A is microarchitecture-sensitive. Two independent factors, both now isolated.
 
 **Correction to the determinism-control entry below.** That entry concluded hardware was "ruled
