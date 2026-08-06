@@ -4,6 +4,46 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-06 — STEP 14 done at 15 of 16: the exploratory frame split ran, and the one refusal is a frozen protocol guard firing correctly (Frank-Hall non-convergence at 77 GHz), NOT a bug to fix.
+
+**What ran.** All 16 sanctioned units were submitted — 2 bands x (2 Exp C arms + 6 Exp D
+families) — each loading the EXACT overlay chain of the LOSO run it sources, which is what the
+pre-rebuild audit identified as the trap: `exp_c.yaml` for the ordinal units, `baselines.yaml`
+for the cheap ones, and `baselines.yaml` + **`gpu.yaml`** for the eight CNN-sourced ones, which
+also need a GPU allocation. Without that last detail 8 of 16 would have refused on `config_hash`.
+15 completed; output is under `results/exploratory_frame_split/<band>/`, every file tagged
+`frameSplit_leaked_exploratory` and every JSON carrying `leaky_protocol` / `never_report`.
+
+**The one failure: 77 GHz `ordinal_arm_b`** (job 50138258, FAILED after 00:41:20 of a 6-hour
+limit — not a resource problem).
+
+    sklearn.exceptions.ConvergenceWarning: lbfgs failed to converge after 1000 iteration(s)
+
+raised as an EXCEPTION from `models/ordinal.py:225`. This is deliberate and documented in
+`FrankHallOrdinal`'s docstring: *"`max_iter = 1000` is a solver convergence bound, not a tuned
+quantity. A `ConvergenceWarning` from lbfgs is promoted to an exception: a non-converged
+threshold fit must stop the run, never contribute coefficients to a reported result."*
+
+**Deliberately NOT fixed.** Raising the bound means changing `FRANK_HALL_MAX_ITER`, which
+`exp_c.py:333` asserts against as a protocol guard — so it would loosen a frozen constant, move
+the commit, and invalidate both stores plus every run back to step 11, to obtain one cell of a
+diagnostic that is never reported. A documented refusal is the correct outcome, and 15/16 is
+sufficient for exploratory material.
+
+**A hypothesis worth checking, not yet evidence.** Logistic regression fails to converge when
+the classes become near-perfectly separable — coefficients diverge and lbfgs never settles.
+Near-perfect separability is exactly what frame-level leakage manufactures, since frames from
+the same session appear on both sides of the split. If that is the mechanism, the refusal is a
+*symptom of the leakage* rather than a solver accident, which would be a genuinely useful detail
+for the methods discussion. **But 10 GHz `arm_b` converged**, so it is not universal, and this
+stays a hypothesis until the leaky ordinal metrics are read.
+
+**Method note for the record.** The completeness check first used
+`find ... -name "*frameSplit_leaked_exploratory.json" | wc -l` and expected 16; it returned 30,
+because the pattern also matches each run's `*_provenance_*` sidecar. 16 runs produce 32 such
+files. The corrected check excludes provenance:
+`find ... -name "*frameSplit_leaked_exploratory.json" ! -name "*_provenance_*"`.
+
 ## 2026-08-06 — STEP 13 COMPLETE. Exp D's primary result is strongly NEGATIVE: the session-index baseline beats radar in both bands, on every subject at 10 GHz. Radar does beat the DL/physics composite at 10 GHz.
 
 **Reports.** `results/runs/20260806T104207854321Z_3f465abc/metrics_exp_d_10ghz.json` and
