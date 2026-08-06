@@ -4,6 +4,47 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-06 — The frame split DEMONSTRATES the leakage mechanism: 10 GHz Frank-Hall goes from QWK -0.197 (LOSO) to +0.819 / 80.3% accuracy (frame-level), on identical features, models and data.
+
+**These numbers are LEAKY BY CONSTRUCTION and are never a result.** They are recorded here as a
+methodological measurement of the protocol itself. Whether any of it may appear in §8 is an open
+owner decision at the time of writing; nothing below is a finding about hydration.
+
+**10 GHz ordinal, the same pipeline under two split protocols:**
+
+| arm | protocol | QWK | accuracy | adjacent | class-unit MAE |
+|---|---|---|---|---|---|
+| a (regress-then-threshold) | LOSO | **-0.212** | - | 0.534 | 1.553 |
+| a | frame-split | **+0.405** | 0.307 | 0.695 | 1.171 |
+| b (Frank-Hall) | LOSO | **-0.197** | - | 0.521 | 1.658 |
+| b | frame-split | **+0.819** | **0.803** | 0.912 | 0.328 |
+
+`resolved_config` confirms the pipeline is identical across both protocols — feature key
+`[1, "A", "mag", 0, "tuned"]` in both arms, same selected families, same 73 sessions, same
+store. The only change is that the 7168 frames were shuffled into 5 random folds
+(`kfold_random_state=20261621`, ~5734 train / 1434 test per fold) instead of being held out by
+subject. **Frank-Hall swings by more than a full unit of kappa on that change alone.**
+
+**What it does NOT show.** It does not reproduce the paper's 96-98% exactly; 80.3% is lower. The
+residual gap is plausibly the original's different classifier and feature pipeline. The chapter
+must say that rather than claim an exact reproduction. What is unambiguous is the *regime*: an
+honest protocol says no signal, frame-level splitting on the same machinery says strong
+classifier.
+
+**Pre-empting the "more training rows" objection.** The frame split trains on 5734 rows against
+LOSO's 73 sessions, but those frames come from the same 73 sessions and carry no new
+information — frames within a session are near-duplicates sharing one label. That is
+pseudo-replication, i.e. the leakage itself, not a data advantage.
+
+**This also supports the 77 GHz `arm_b` convergence hypothesis from the entry below.** Note
+which arm exploits the leakage: arm a reaches only 0.307 accuracy, arm b reaches 0.803.
+Frank-Hall is discriminative and can memorise session-specific signatures directly, where
+regress-then-threshold cannot. And arm b at 77 GHz is exactly the cell that failed to converge.
+If leakage drives Frank-Hall toward near-perfect separability, logistic coefficients diverge and
+lbfgs never settles — so that refusal is a symptom of *stronger* leakage at 77 GHz rather than a
+solver accident. The arm that most exploits leakage is the one that broke. Still a hypothesis,
+but the pattern now fits, and §8 should state it as a hypothesis rather than a conclusion.
+
 ## 2026-08-06 — STEP 14 done at 15 of 16: the exploratory frame split ran, and the one refusal is a frozen protocol guard firing correctly (Frank-Hall non-convergence at 77 GHz), NOT a bug to fix.
 
 **What ran.** All 16 sanctioned units were submitted — 2 bands x (2 Exp C arms + 6 Exp D
