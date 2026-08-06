@@ -1331,6 +1331,42 @@ an earlier analysis of the same data appeared to.
 
 ## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
+Not yet written — milestone 10 is unstarted as of 2026-08-06. Recorded here so the section's scope
+and its three known framing problems are fixed *before* any result exists, in the same spirit as the
+milestone-6 config freeze.
+
+**What the section will contain.** Experiment G (cross-band 10 + 77 GHz fusion on the matched
+subject-session intersection, constrained convex combiner with α on a 21-point grid fit on
+cross-fitted out-of-fold predictions, primary contrast fused vs 10-only); Experiment E (pre-registered
+path-grouped permutation interpretability, 4-fold subject-grouped CV, run on the Exp B model);
+Experiment F (four nested ridge models sharing one clock encoding, plus the algebraic-coupling
+sensitivity analysis); Experiment H (per-subject performance spread, the pre-specified comparisons
+with subject-cluster CIs and Holm correction, and the selection-variance robustness bootstrap). All
+four designs were frozen at milestone 6, before any outer-fold result existed, and are transcribed in
+`configs/exp_e.yaml`, `exp_f.yaml`, `exp_g_fusion.yaml` and `stats.yaml`.
+
+**Three things this section must not paper over.**
+
+1. **Experiment E was designed to support a signal that §6–§8 show does not exist.** Its stated
+   purpose is alignment between the informative scattering paths and the Cole-Cole water-driven
+   permittivity expectation — supporting evidence that a real signal is physical. With no signal,
+   permutation importance describes the structure of noise. Whatever is done — reported as a null
+   attribution, reframed as a negative control, or dropped — the chapter states which, and why, and
+   states that the analysis was pre-registered before the null was known. Silently dropping a
+   pre-registered analysis after seeing a null result is precisely the selective-reporting failure
+   this rebuild exists to correct.
+2. **Experiment F is not the heart-rate confound check the paper's framing implies.** Heart rate was
+   reportedly collected but is **not present in the delivered data**, so the confound check is built
+   on the clock plus static covariates (age, height, baseline mass, BMI) instead. The chapter says
+   this plainly rather than letting the absence read as a scope cut, and repeats that skin
+   temperature and glucose were never controlled (temperature logs lost, glucose never measured).
+3. **Experiment G fuses two arms that both already lost to the clock.** The pre-registered primary
+   contrast is therefore a comparison between two failures, and the reading of a *positive* fused
+   result is pre-committed here, before the result is seen: with α selected over 21 grid points on a
+   16-subject matched population, a small fused improvement is far more consistent with selection
+   noise than with complementary information across bands, and would be reported as such unless its
+   subject-cluster CI excludes zero by a margin comparable to the §6 effects.
+
 ## Provenance index
 
 For each locked parameter, the "where did this number come from?" answer lives in

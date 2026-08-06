@@ -4,6 +4,69 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-06 — Journals refreshed for a milestone-10 planning session: HANDOFF.md rewritten, and §9's scope + its three framing problems recorded *before* any M10 result exists.
+
+Owner is starting a fresh chat to plan milestone 10 (ROADMAP §7 item 9: G, E, F, H → §9), so
+`HANDOFF.md` was rewritten from scratch — the previous version was written 2026-08-03 and described
+M9 step 12 as blocked on the O-M9-5 decision, which is three days and fifteen steps stale.
+
+Four facts established while writing it, each of which changes how M10 should be planned:
+
+- **Both feature stores are stale as of `5b5ff06`.** `c523266` and `5b5ff06` touched `src/`, and
+  `store._check_match` requires strict git-commit equality. So M10's first result costs a `REVISION`
+  re-stamp plus a full rebuild of both bands. The scheduling consequence is recorded in the handoff:
+  write E, F and G, land them in **one** wave, stamp once, rebuild once, then run — rather than
+  landing three drivers and paying for three rebuilds.
+- **The reported results legitimately span two commits.** Exp A/B/C artifacts carry `f0a46aa`; Exp D
+  carries `3f465ab`. Checked the diff rather than assuming: it touches only
+  `experiments/run_baselines.py` (Exp D's own driver) and its test. Nothing Exp A/B/C consumes
+  differs. Worth having verified now, because it looks like an inconsistency to anyone auditing the
+  provenance later.
+- **H is mostly already built.** `eval/metrics.py` already provides the BCa subject-cluster
+  bootstrap, the session-weighted bootstrap, `holm_adjusted`, `wilcoxon_signed_rank`,
+  `mean_difference_ci` and the ordinal metrics, all exercised by A–D. The only unbuilt component is
+  the selection-variance robustness bootstrap (`stats.robustness_replicates_r = 200`,
+  `robustness_min_distinct_subjects = 4`, `robustness_min_successful_replicates = 100`, classical
+  models only), which exists as validated config and nothing else. So H is assembly plus one
+  component, not a build.
+- **E, F and G have frozen designs, validated configs and `ExpEConfig`/`ExpFConfig`/`ExpGConfig`
+  dataclasses — and no code at all.** No `exp_e.py`/`exp_f.py`/`exp_g.py`, no entrypoint.
+
+**And the substantive part: §9 now records three framing problems before any M10 result exists.**
+This is deliberate — the same reasoning as the milestone-6 config freeze. Committing to how a result
+will be read *before* seeing it is the only version of that commitment that is worth anything, and
+M10 is the milestone where the temptation runs the other way, because every prior arm came out null.
+
+1. **Exp E was designed to support a signal that A/B/C/D show does not exist.** Its pre-registered
+   job is to align informative scattering paths with the Cole-Cole permittivity expectation —
+   supporting evidence that a *real* signal is physical. Permutation importance over a model that
+   loses to a constant measures the structure of noise. Three defensible options (run and report as
+   a null attribution; reframe as a negative control; drop with a recorded justification) — but
+   this is explicitly flagged as an **owner decision**, not a planning default, because quietly
+   dropping a pre-registered analysis after seeing a null is exactly the selective-reporting failure
+   this rebuild exists to correct. Also noted: E runs on the **Exp B** model as primary, so Exp B
+   artifacts must be regenerated at the M10 commit.
+2. **Exp F is not the heart-rate confound check ROADMAP §4 describes.** The implementation plan
+   already records that heart rate was reportedly collected but is not in the delivered data; the
+   frozen F design substitutes the clock + static covariates with the algebraic-coupling sensitivity
+   analysis (`m0` and BMI sit in Δm%'s denominator, so part of any covariate contribution is
+   algebraic rather than physiological). §9 states the ROADMAP-vs-plan divergence rather than letting
+   the absence read as a silent scope cut.
+3. **Exp G fuses two arms that both already lost to the clock**, so its pre-specified primary
+   contrast (fused vs 10-only) compares two failures. The reading of a *positive* fused result is
+   pre-committed now: with α chosen over 21 grid points on a 16-subject matched population, a small
+   improvement is far more consistent with selection noise than with complementary cross-band
+   information, and will be reported as such unless its subject-cluster CI excludes zero by a margin
+   comparable to §6's effects.
+
+The one process lesson carried into the handoff as a standing instruction: **every real bug in M9
+lived in an untested success path while every component test stayed green** — the comparison stage
+(fixtures gave six families one shared `config_hash`; production never does), the merge summary (the
+test pinned the `Path` shape and never serialized it), and the M7 reference CSVs (nothing would have
+caught `core.autocrlf` normalization until the O-M9-5 gate failed against its own reference). Three
+incidents, one cause. Each new M10 driver gets an end-to-end test on real lineages, not only
+component tests.
+
 ## 2026-08-06 — MILESTONE 9 CLOSED (§8 written), and the four post-M9 items cleared. Each had been blocked purely because a commit move would have invalidated both stores and every run.
 
 **§8 written** — `SECOND_CHAPTER.md` Experiments C and D, from the full-cohort results at

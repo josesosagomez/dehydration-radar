@@ -1,172 +1,172 @@
-# HANDOFF — resume point for a new chat (M9 step 11 DONE; step 12 BLOCKED on an owner decision)
+# HANDOFF — resume point for a new chat (MILESTONE 9 CLOSED; next job: **plan milestone 10**)
 
-_Written 2026-08-03. The next chat's job: **get the owner's decision on the O-M9-5 gate failure
-below, then continue `plans/MILESTONE_9_PLAN.md` from step 12**. Do not read the whole 1474-line
-plan — §1 rows 12-15, §4 D9-D12, §5 traps 10, 11, 17, 18, 20. Anything needing more detail than
-fits here is in HISTORY.md's four newest entries: search it, don't guess._
+_Written 2026-08-06. The next chat's job: **produce `plans/MILESTONE_10_PLAN.md`** covering
+Experiments **G, E, F, H** → `SECOND_CHAPTER.md` §9. Nothing is blocked, nothing is half-done, the
+suite is green and pushed. Read this file, then `plans/implementation_plan.md` lines **1056–1298**
+(the frozen E/F/G designs) and **1299–1448** (§Statistics = H). Do **not** read all of HISTORY.md —
+its top ~3 entries cover milestone 9; search it for anything older._
 
-## TL;DR — read this first
+## TL;DR
 
-- **Step 11 (full-cohort Exp C, both bands) is DONE.** Negative result, cleanly obtained.
-- **Step 12 is BLOCKED.** The O-M9-5 bit-identity gate **FAILED on 10 GHz** (77 GHz passed). It was
-  investigated to exhaustion over 2026-08-01/02: every controllable cause was eliminated by direct
-  test, the effect is characterized and benign (max 5.14e-14, zero effect on model selection), but
-  the root cause is NOT fully identified and bit-identity with the M7 artifacts is **not
-  achievable**. **An owner decision is required before anything else happens.** Trap 17 forbids
-  proceeding, weakening the gate, or re-pointing the comparison — none of which was done.
-- **Analysis commit is still `f9dee54e0cef11c92f0d932d33a51710e098bd26`.** IBEX's `REVISION` must
-  keep reading exactly this. Local HEAD has moved past it for journal-only commits — see below.
-- **Nothing about steps 13-15 has changed.** They are unblocked the moment step 12 resolves.
+- **Milestone 9 is complete** (all 15 steps: Exp C, Exp D, the exploratory frame split, §8) and the
+  post-M9 technical-debt queue is **empty**.
+- **Branch `v1_milestone_9a`, HEAD `5b5ff06`, pushed. Working tree clean. 1160 passed / 16 skipped.**
+  `git diff --exit-code tests/test_no_leakage.py` is clean.
+- **The primary result of the whole study is negative and now stands on four independent legs**
+  (A, B, C, D — table below). Milestone 10 is not going to rescue it, and must not be planned as
+  though it might.
+- **First practical fact for M10: both feature stores are stale.** `5b5ff06` and `c523266` changed
+  `src/`, and store validation requires **strict git-commit equality**. Any M10 run therefore costs
+  a `REVISION` re-stamp + a **full rebuild of both stores** before the first result. Budget it once,
+  at the start, for the whole milestone — not per experiment.
 
-## The blocking decision (this is the whole handoff)
+## Where everything is
 
-**What happened.** Step 12's Exp A re-runs completed cleanly at `f9dee54` (jobs 49779546 / 49779550,
-cohorts 73 / 72). `load_exp_a_radar` then gave:
+**Git.** Branch `v1_milestone_9a` (main branch is `main`). Milestone-9 tip commits, newest first:
 
-    10ghz: *** FAILED *** predictions_10ghz.csv is NOT bit-identical to the M7 artifact
-    77ghz: BIT-IDENTICAL OK | n_seeds=5 | subjects=16 | verified=True
+    5b5ff06  store sidecars record `packages` (built WITH, not only built FROM)
+    c523266  fix the merge summary crashing on a COMPLETE merge (PosixPath not serializable)
+    14def09  version-control the M7 reference artifacts; ignore dcgm/; per-band timing
+    951da3b  SECOND_CHAPTER §8 — Experiments C and D
+    3f465ab  (analysis commit of the Exp D results)
+    f0a46aa  (analysis commit of the Exp A / B / C results)
 
-10 GHz: 11 of 149 rows differ, `max |Δy_pred| = 5.14e-14`, `max |Δy_true| = 0`.
+**Which commit produced which artifact.** Exp A/B/C artifacts carry `f0a46aa`; Exp D carries
+`3f465ab`. The diff between them touches only `experiments/run_baselines.py` (Exp D's driver) and
+its test — nothing Exp A/B/C uses. That is a legitimate two-commit result set, not an inconsistency;
+say so if an examiner asks.
 
-**What was eliminated, each by direct test (full detail in HISTORY.md):**
+**IBEX.** `/ibex/user/floresge/dehy_radar_new/` — clone of the public GitHub repo, with `data/` and
+`results/features/` preserved in place. `configs/ibex.yaml` holds those four paths. GPU work goes
+through `scripts/ibex/*.sbatch` + the `submit_*.sh` wrappers (all four are mode 100755 in git now —
+that was a real M9 failure).
 
-| candidate | how it was killed |
-|---|---|
-| raw data | `provenance.inputs` sha256 identical; `manifest`, `folds`, seeds identical |
-| model selection drift | `selection_table_10ghz.csv` **byte-identical** — no tie-break flipped |
-| IBEX node hardware | both jobs on `cpu_amd_epyc_9655` (Turin), identical feature strings |
-| run-to-run nondeterminism | 3 independent runs at `f9dee54` → one hash |
-| package / env drift | only `f9dee54` touched `uv.lock` (torch cu126 + `nvidia-*`); numpy/scipy/kymatio/sklearn untouched |
-| the store rebuild | **M7's own code (`f36c4fb2`, throwaway worktree) reproduces the current M9 store bit-exactly** |
-| Exp A code path | `exp_a.py`/`splits.py`/`extraction.py` unchanged; harness `score_fn=None` is the identical call; regressors is pure extraction; `SIMPLICITY_RANK` base entries unchanged |
-| sbatch resources (8→16 cores) | 8-core control run (job 49848293, `workers : 8` confirmed) → same hash as the 16-core runs |
+**Feature stores.** v2, both bands, last built at `3f465ab` (10 GHz: 73 eligible sessions; 77 GHz:
+72). Building is bit-reproducible on IBEX and locally. **Stale as of `5b5ff06`** — see TL;DR.
 
-**The one structural finding.** The divergence correlates *perfectly* with one estimator family:
+**Run dirs (local `results/runs/`).**
 
-| selected family | folds | differing |
+    20260803T143704568296Z_f0a46aa6   Exp A 10 GHz
+    20260803T151715023672Z_f0a46aa6   Exp A 77 GHz
+    20260803T143705048534Z_f0a46aa6   Exp C 10 GHz
+    20260803T160645780475Z_f0a46aa6   Exp C 77 GHz
+    20260803T172827484892Z_f0a46aa6   Exp C 10 GHz (cross-vendor determinism control)
+    20260806T104207854321Z_3f465abc   Exp D 10 GHz
+    20260806T110156650286Z_3f465abc   Exp D 77 GHz
+    20260727T111437230187Z_f36c4fb2   M7 reference, 10 GHz  ] now tracked in git,
+    20260727T115046533408Z_f36c4fb2   M7 reference, 77 GHz  ] `-text` in .gitattributes
+
+Exp B's artifacts and the frame-split outputs live under `results/` per their own drivers; the frame
+split is quarantined in `results/exploratory_frame_split/`.
+
+## The results milestone 10 must be planned around
+
+| experiment | 10 GHz | 77 GHz |
 |---|---|---|
-| **svr** | 5 | **5** |
-| knn | 7 | 0 |
-| gbm | 3 | 0 |
-| rf | 1 | 0 |
+| **A** radar MAE vs session-index baseline | +0.200 [0.145, 0.261] **worse**, p=3.05e-5 | +0.216 [0.129, 0.294] **worse**, p=7.6e-4 |
+| **A** pooled predicted-vs-actual r | −0.138 [−0.286, 0.075] | −0.153 [−0.407, 0.174] |
+| **B** radar − session-mean baseline (primary) | +0.0475 [0.0230, 0.0749] **worse** | +0.0246 [−0.0066, 0.0756] |
+| **C** QWK, arm a / arm b | −0.212 / −0.197 | −0.278 / +0.025 |
+| **D** best family (all six) | `session_index` 0.269 | `session_index` 0.278 |
 
-`SVR` is libsvm's iterative SMO solver with a convergence tolerance — the only family in the grid
-that amplifies a sub-ULP difference into visible output. **But 77 GHz has 8 SVR folds and still
-matched M7 exactly**, so SVR is the amplifier, not the source. The 10 GHz-specific sub-ULP source
-is unidentified. The M7-era store no longer exists and the M7 venv's BLAS build was never recorded,
-so it is not reconstructible.
+Every arm loses to the clock. The frame-split demonstration (10 GHz Frank-Hall QWK −0.197 → **+0.819**,
+80.3% accuracy, same features/models/data) is the measured account of why the original analysis
+looked strong. It is allowed in §8 **once**, as a labelled leaky-by-construction demonstration, in
+the methods discussion, in no results table — that was the owner's explicit decision.
 
-**Known weakness in the evidence:** the session used for the store-reproducibility check
-(`s10_10am`) belongs to subject 10, which selected **knn** — insensitive by construction. Re-running
-that check on IBEX with M7 code against the **SVR** subjects' sessions (1, 7, 8, 11, 14) is the one
-test that could still localize the source. ~15 min. It would not change the recommendation.
+## What milestone 10 is
 
-**The recommendation put to the owner (NOT yet accepted — do not implement unprompted):** amend
-O-M9-5 to a conjunction —
-  1. `selection_table_{band}.csv` byte-identical (already true, both bands — this is the real gate:
-     any genuine drift changes which model is picked), **and**
-  2. `max |Δy_pred| ≤ 1e-10`, with the observed maximum recorded in the run log.
+ROADMAP §7 item 9: **Fusion (G), interpretability (E), confound check (F), statistics (H)** → §9 of
+`SECOND_CHAPTER.md` (currently a one-line stub). Then M11 is figures/tables.
 
-1e-10 is ~4 orders above the observed noise and ~9 below anything meaningful for Δm% of order
-0.1-1. **Cost if accepted:** it changes `src/`, so the commit moves → trap 18 → both stores rebuilt
-→ steps 11 and 12 re-run (~4 CPU-hours). There is no local-only path: step 13's comparison stage
-calls `load_exp_a_radar` on IBEX. The amendment is **post-hoc**, made after seeing a failure, and
-carries the same §8 disclosure obligation as the A-M9/O-M9 completions.
+**Status of each: designs are FROZEN, code does not exist.**
 
-## Step 11 results (done, no action needed)
-
-Full-cohort Exp C, ordinal S0-S4, both bands, 16 LOSO folds, `seed_set=[1,2,3,4,5]`, cohorts 73/72.
-
-| band | arm | QWK | adjacent acc. | class-unit MAE |
+| | design | config | code | notes |
 |---|---|---|---|---|
-| 10 GHz | a | −0.213 [−0.365, −0.030] | 0.534 | 1.553 |
-| 10 GHz | b | −0.198 [−0.317, −0.075] | 0.534 | 1.644 |
-| 77 GHz | a | −0.278 [−0.461, −0.077] | 0.558 | 1.492 |
-| 77 GHz | b | +0.025 [−0.281, +0.243] | 0.611 | 1.347 |
+| E | plan L1056–1109 | `configs/exp_e.yaml` (17 ln) | none | `ExpEConfig` exists in `config.py` |
+| F | plan L1110–1158 | `configs/exp_f.yaml` (13 ln) | none | `ExpFConfig` exists |
+| G | plan L1159–1296 | `configs/exp_g_fusion.yaml` (10 ln) | none | `ExpGConfig` exists |
+| H | plan L1299–1448 | `configs/stats.yaml` | **mostly built** | see below |
 
-**Negative result — write it as one.** Three of four CIs sit entirely below zero, but this is "no
-usable ordinal signal", NOT inverse predictive ability: predictions collapse into the middle classes
-and then run counter to truth. Adjacent accuracy (0.53-0.61) looks fine precisely because
-middle-collapsed predictions land within ±1 of much of the truth — QWK stays the headline, adjacent
-accuracy is never quoted alone. Supporting no-signal evidence: arm-a family choice is heterogeneous
-across folds (no family dominates); `n_evaluable_inner_folds = 5` everywhere with empty
-`viability_reason_counts`; and the O-M9-8/8a QWK-undefinedness instrumentation is a **clean zero**
-in both bands (`n_qwk_nan = 0`, `n_single_class_truth_val_folds = 0`) — worth stating in §8 because
-it was a contested design point.
+There is no `exp_e.py` / `exp_f.py` / `exp_g.py` and no entrypoint in `experiments/`. The three
+configs were transcribed and validated at the **milestone-6 config freeze**, before any result
+existed — they are pre-registrations. **They are not to be redesigned in the M10 plan.** Any change
+needs an explicit owner-approved amendment with the same post-hoc disclosure obligation §8 carries
+for the O-M9-5 amendment.
 
-**Known cosmetic defect, deliberately NOT fixed** (fixing it costs a store rebuild for one metadata
-integer): `metrics_exp_c_*.json`'s top-level `n_seeds` reads `1` for both bands but is arm-b-only —
-`exp_c.py:745-750` overwrites `cohort` inside the per-arm loop. Arm a realizes 5 seeds when it picks
-rf/gbm. No metric is affected. **§8 must state realized seed count per arm and never quote that
-field.**
+**H is largely already implemented and in use.** `eval/metrics.py` has BCa subject-cluster
+bootstrap, session-weighted bootstrap, `holm_adjusted`, `wilcoxon_signed_rank`, `mean_difference_ci`
+and the ordinal metrics — all exercised by A/B/C/D. Two pieces are **not** built: the
+**selection-variance robustness bootstrap** (`stats.robustness_replicates_r = 200`,
+`robustness_min_distinct_subjects = 4`, `robustness_min_successful_replicates = 100`, classical
+models only) exists only as config; and the chapter-level assembly (per-subject spread, the
+cross-experiment comparison table). Plan H as *assembly + one new component*, not as a rebuild.
 
-## Where things are
+## Three planning questions the M10 plan must answer (raise these first)
 
-**Run dirs** (IBEX paths are `results/runs/<stamp>_f9dee54e/`; the owner's local copies sit under
-the extra folders `results/runs/step11/` and `results/runs/validate_step11/`, which is NOT where
-`record_run` writes — don't let those nested paths get cited):
+1. **What is Exp E for, now?** Its pre-registered purpose is *supporting evidence that a signal is
+   physical* — "alignment between the informative band and the expected water-driven permittivity
+   shift". There is no signal to support. Permutation importance over a model that does not beat a
+   constant is measuring noise structure. The options are: run it as pre-registered and report it as
+   a null/uninformative attribution (defensible, and it is pre-registered); reframe it as a
+   *negative-control* reading (do importances look like noise, as they should?); or drop it with a
+   recorded justification. **This is an owner decision, not a planning default** — E is
+   pre-registered, and silently dropping a pre-registered analysis after seeing a null is exactly
+   the selective-reporting failure this project is built to avoid. Note E runs on the **Exp B**
+   model as primary, which means Exp B artifacts must be regenerated at the M10 commit.
+2. **Exp F cannot use heart rate.** ROADMAP §4 says F is a heart-rate confound check; the
+   implementation plan already records that **heart rate was reportedly collected but is not in the
+   delivered data**. The frozen F design is instead four nested ridge models sharing one clock
+   encoding (clock / clock+covariates / clock+radar / clock+radar+covariates) plus the
+   algebraic-coupling sensitivity analysis (`m0` and BMI sit in Δm%'s denominator). The plan should
+   state the ROADMAP–plan divergence explicitly so the chapter does not read as a silent scope cut.
+3. **Exp G fuses two null arms.** Both bands lose to the clock, so the pre-specified primary
+   contrast (fused vs 10-only) is a comparison between two things that already failed. It is still
+   worth running — it is pre-registered, and "fusion does not rescue it" is a real finding — but the
+   plan must say up front what a *positive* fused result would mean if one appeared (almost
+   certainly selection noise on 21 α grid points), and pre-commit to that reading before seeing it.
+   G also needs the **matched subject-session intersection** population built and reported
+   (`N_subjects,G` and the number of matched cells are distinct numbers, both reported).
 
-    20260801T133513697136Z_f9dee54e   Exp C 10 GHz   (step 11)
-    20260801T141211973935Z_f9dee54e   Exp C 77 GHz   (step 11)
-    20260801T162357722390Z_f9dee54e   Exp A 10 GHz   (step 12, gate FAILED)
-    20260801T165841260326Z_f9dee54e   Exp A 77 GHz   (step 12, gate PASSED)
-    20260801T190220062895Z_f9dee54e   Exp A 10 GHz   (determinism control A)
-    20260801T190223956644Z_f9dee54e   Exp A 10 GHz   (determinism control B)
-    20260802T093302331078Z_f9dee54e   Exp A 10 GHz   (8-core control, job 49848293)
+## Process traps that survived milestone 9 — carry them forward
 
-M7 references: `results/runs/20260727T111437230187Z_f36c4fb2/` (10 GHz) and
-`.../20260727T115046533408Z_f36c4fb2/` (77 GHz). Present both locally and on IBEX.
-
-Hashes worth carrying: M7 10 GHz `4bd21201cb87a62aed32b19e7f5fbb478fd7354a6a2c08040cfad6a377145c57`;
-every M9 10 GHz run `453a22ba2e6ac06ea846037dba551587d9c0f36ef58498162fc2dee51a18ef8f`.
-
-**Git state.** Branch `v1_milestone9`. Local HEAD is `d1c531d` (journal-only commit) plus
-uncommitted HISTORY/HANDOFF edits from this session. **IBEX's `REVISION` still reads `f9dee54` and
-must NOT be re-stamped for journal-only commits** — the source there is byte-identical to `f9dee54`,
-and re-stamping would invalidate both v2 stores and force a rebuild for zero code change. Trap 18's
-blanket "land a commit → re-stamp" rule needs this carve-out; it explicitly permits journal files to
-merge after 9.5. Re-stamp only when actual code ships.
-
-Both v2 stores remain valid at `f9dee54` (10 GHz 73 sessions, 77 GHz 72). Store building is
-confirmed bit-reproducible on both IBEX and locally.
-
-## Next steps once the decision lands
-
-- **If the amendment is accepted:** implement the two-part criterion in `load_exp_a_radar`, re-stamp
-  `REVISION`, sync to IBEX, rebuild both stores, re-run steps 11 and 12, then proceed to step 13.
-- **If not:** the owner names the alternative; do not invent one.
-- **Step 13** — Exp D cheap baselines both bands, then the 8 CNN fold-array groups
-  (`ARRAY_TIME`: `cnn1d_raw` `03:00:00`, other three `02:00:00`, measured at step 10), then
-  comparisons last. `submit_exp_d_cnn.sh` already loads `configs/gpu.yaml` uniformly across
-  init/fold/merge — a partial overlay fails `_validate_group_lineage` on `config_hash`.
-- **Step 14** — the 16-run exploratory frame split, after every LOSO result exists. Output only
-  under `results/exploratory_frame_split/`, `never_report` markers, absent from §8.
-- **Step 15** — `SECOND_CHAPTER.md` §8 from the real LOSO results, disclosing every A-M9/O-M9
-  completion's true chronology (now including the O-M9-5 amendment if it happens).
-
-`SECOND_CHAPTER.md` §8 is still deliberately empty: CLAUDE.md says write at milestone *completion*,
-and M9 is mid-build (step 12 of 15). `AGENTS.md` / `ROADMAP.md` are static reference.
+- **A commit move invalidates both stores** (strict commit equality in `store._check_match`). Plan
+  M10 so code lands in as few store-invalidating waves as possible: write all of E/F/G, land once,
+  stamp once, rebuild once, then run. This is the single biggest schedule lever in the milestone.
+- **Every real bug in M9 lived in an untested success path while every component test was green** —
+  the comparison stage (fixtures gave six families one shared `config_hash`, which production never
+  does), the merge summary (the test pinned the `Path` shape and never serialized), and the M7
+  reference CSVs (nothing would have caught line-ending normalization until the gate failed against
+  its own reference). **For each new M10 driver, write one end-to-end test on real lineages**, not
+  only component tests. This has cost three separate incidents; do not learn it a fourth time.
+- **`core.autocrlf=true` on this machine.** Any byte-exact reference artifact committed to the repo
+  needs a `-text` entry in `.gitattributes`.
+- **Don't wholesale-replace local `results/runs/`** — it is gitignored except the `*_f36c4fb2/`
+  references. Pull specific dirs.
+- **`provenance.platform` now records `cpu_model` and `slurm_nodelist`**, and store sidecars now
+  record `packages`. Both were added because M9 lost two days to a 5.14e-14 divergence that was
+  unreconstructible without them. Use them.
+- **Sub-ULP numeric differences are expected across CPU vendors.** O-M9-5 is now a conjunction:
+  `selection_table_{band}.csv` byte-identical **and** `max |Δy_pred| ≤ 1e-10`. It is a post-hoc
+  amendment and is disclosed as one in §8.
+- **The M9 CNN sbatch timings are per-band** — 77 GHz needs more wall time than 10 GHz for the same
+  stage; `submit_exp_d_cnn.sh`'s header records how to measure `ARRAY_TIME` / `INIT_TIME`.
 
 ## Hard invariants (unchanged, never violate)
 
-LOSO at subject level for every reported result; fit-on-train-only at both CV levels; no test-set
-tuning; primary target continuous Δm%; ordinal metrics only for the 5-class task; folds only from
-`splits.py`; tie-breaks only via `eval/selection.py`; numpy backs all reported WST features (GPU
-authorized only for the Exp D DL baselines, confirmed working on IBEX); `protocol_freeze_guard`
-before every fit/write; `tests/test_no_leakage.py` frozen (`git diff --exit-code` is an acceptance
-step). GPU training is never claimed bit-deterministic. The frame split is the one sanctioned
-reporting exception: structurally quarantined, never reported, absent from §8.
+LOSO at subject level for every reported result; fit-on-train-only at both CV levels (including Exp
+B's residualization μ_s and Exp G's α); no test-set tuning; primary target continuous Δm%; ordinal
+metrics only for the 5-class task; folds only from `eval/splits.py`; tie-breaks only via
+`eval/selection.py`; numpy backs all reported WST features (GPU authorized only for the Exp D DL
+baselines); `protocol_freeze_guard` before every fit/write; `tests/test_no_leakage.py` frozen
+(`git diff --exit-code` on it is an acceptance step). GPU training is never claimed bit-deterministic.
+The frame split is reported **only** as the labelled demonstration described above. Do not report
+frame-level accuracy as a headline, do not claim causal isolation of hydration from time of day, do
+not overclaim clinical readiness.
 
-## Process traps worth carrying forward
+## Chapter state
 
-- **Stamping `REVISION` breaks `test_provenance.py::test_git_degrades_to_none_without_env`** —
-  fixed in that one test, not the shared fixture. If a "no git, no env" test fails right after a
-  stamp, check this before assuming a regression.
-- **`provenance.platform` records OS/Python/machine but no CPU model or `NodeList`.** Had it
-  recorded either, this session's milestone stop would have been a two-minute diagnosis. Fixing it
-  is a code change (trap 18) — post-M9 list, not now.
-- **Store sidecars record what a store was built FROM (`git`, `spec_hash`, `qc_config_hash`,
-  `raw_sha256`) but not what it was built WITH** — no package versions. That gap is exactly why the
-  M7 divergence is unreconstructible. Same post-M9 list.
-- **Don't wholesale-replace local `results/runs/`** — it is gitignored with no safety net. A
-  previous sync deleted both M7 reference dirs (recovered from the Recycle Bin). Pull specific dirs.
+`SECOND_CHAPTER.md` §0–§8 are complete (framing, protocol, data, preprocessing, WST, 77 GHz
+front-end, config freeze, Exp A, Exp B, Exp C+D). §9 is the M10 stub. The agreed chapter arc is:
+present the original work as an accepted feasibility study first, then the rigorous rebuild and its
+null results — that framing decision is the owner's and is already reflected in §8's closing.
