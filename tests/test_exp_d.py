@@ -22,6 +22,7 @@ import dataclasses
 import hashlib
 import json
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -1462,7 +1463,16 @@ def test_merge_produces_the_family_summary_only_when_every_fold_is_present(tmp_p
     assert merged["completed_folds"] == [0, 1, 2, 3]
     assert merged["missing_folds"] == [] and merged["noop_folds"] == []
     for name in ("predictions", "metrics", "selection", "per_subject"):
-        assert merged["artifacts"][name].exists()
+        assert Path(merged["artifacts"][name]).exists()
+
+    # The caller writes this dict straight to JSON, so the whole merge summary must be
+    # serializable. It was not: `artifacts` held Path objects, which made every COMPLETE
+    # merge raise TypeError after the four artifacts were already on disk, while every
+    # PARTIAL merge (artifacts=None) succeeded — an inverted success signal that left six
+    # M9 families in a valid state behind merge jobs recorded as FAILED. The paths are
+    # strings, and this asserts the property that actually matters rather than their type.
+    assert all(isinstance(p, str) for p in merged["artifacts"].values())
+    json.dumps(merged, indent=2, sort_keys=True)
 
     loaded = load_family_artifacts(run_dir, "77ghz", "cnn1d_raw")
     assert sorted(loaded.per_subject_mae) == [1, 2, 3, 4]

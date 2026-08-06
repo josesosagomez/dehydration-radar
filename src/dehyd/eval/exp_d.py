@@ -1834,7 +1834,7 @@ def merge_exp_d_folds(band, family, run_dir) -> dict:
         return merged
 
     stats = provenance["config"]["stats"]
-    merged["artifacts"] = write_family_artifacts(
+    artifacts = write_family_artifacts(
         band, family, run_dir,
         prediction_rows=prediction_rows, selection_rows=selection_rows,
         deterministic=deterministic,
@@ -1844,6 +1844,13 @@ def merge_exp_d_folds(band, family, run_dir) -> dict:
         lineage={"analysis_commit": analysis_commit, "config_hash": config_hash,
                  "run_group_id": run_dir.name},
     )
+    # str, not Path: the caller serializes this dict straight to JSON, and `Path` is not
+    # JSON-serializable. Because the partial branch above returns `artifacts = None`, leaving
+    # these as Paths made every COMPLETE merge crash while every PARTIAL one succeeded --
+    # inverting the success signal, and only after the four family artifacts were already on
+    # disk. Found during M9 step 13 with six families sitting in a valid state behind merge
+    # jobs recorded as FAILED.
+    merged["artifacts"] = {name: str(path) for name, path in artifacts.items()}
     return merged
 
 
