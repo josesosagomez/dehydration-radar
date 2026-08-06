@@ -182,6 +182,34 @@ def test_build_session_npz_10ghz_has_all_keys_and_reconstructs(config):
 # `:902-904`, `:921-935`, A-M6-2 (i)/(i-ablation)), never against what the builder returned.
 
 
+def test_the_fingerprint_records_package_versions_but_never_validates_against_them(
+    stored_session,
+):
+    """What a store was built WITH is recorded for diagnosis, and is NOT an acceptance criterion.
+
+    M9's O-M9-5 investigation cost two days to a 5.14e-14 divergence whose cause was the
+    realized numerical environment: `uv.lock`'s DECLARED versions were identical throughout,
+    while what was actually installed was not, and nothing recorded the difference. The
+    sidecar now carries it.
+
+    It deliberately does not fail closed. A store must be attributable to a clean revision,
+    not to a byte-identical environment — making a scipy patch bump force a full
+    re-extraction would be a far worse trade than the ~1e-13 differences at stake, which
+    provably never changed a model selection. So this asserts BOTH halves: the field is
+    populated, and a store whose environment has moved still validates.
+    """
+    store_dir, expected, _, _, _ = stored_session
+    fingerprint = expected[(1, "10am")]
+
+    assert fingerprint["packages"], "package versions must be recorded"
+    assert any(v is not None for v in fingerprint["packages"].values())
+
+    moved_environment = dict(fingerprint, packages={"numpy": "0.0.0-not-what-built-this"})
+    commit = fingerprint["git"]["commit"]
+    validate_store("10ghz", store_dir, {(1, "10am"): moved_environment},
+                   analysis_commit=commit)   # must NOT raise
+
+
 def test_store_version_is_two_and_travels_in_the_fingerprint(config, tmp_path):
     """The bump is what makes every v1 store fail closed — the intended behaviour."""
     from dehyd.features.store import STORE_VERSION

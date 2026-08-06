@@ -4,6 +4,68 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-06 — MILESTONE 9 CLOSED (§8 written), and the four post-M9 items cleared. Each had been blocked purely because a commit move would have invalidated both stores and every run.
+
+**§8 written** — `SECOND_CHAPTER.md` Experiments C and D, from the full-cohort results at
+`3f465ab`. Four drafting decisions worth recording, because each is a judgement call an examiner
+could probe:
+
+- **The composite win is not led with.** It is reported and then immediately qualified: at
+  10 GHz the composite's inner CV selected `spec2d_raw` — the *worst* of the six families — in
+  **16 of 16 folds**, so the composite simply IS `spec2d_raw`, and "radar beats the composite"
+  reduces to radar beating the weakest alternative. An inner-CV procedure that consistently picks
+  the worst family is itself evidence that inner scores carry no information about outer
+  performance. Leaving that for a reader to find would have been worse than stating it.
+- **The frame split does NOT claim to reproduce 96-98%.** 80.3% is lower, and the residual gap is
+  attributed to the original's different classifier rather than glossed.
+- **The non-convergence story is labelled a hypothesis**, with its counter-evidence (10 GHz arm b
+  converged) in the same paragraph.
+- **The closing paragraph draws the defensible line**: not evidence that radar hydration sensing
+  is infeasible, but evidence that this study cannot demonstrate it — with the bounds named as
+  the study's own (n=16, Δm% mostly under 1%, single objective reference, fasting design).
+
+The owner's decision on the frame split was **allow as a labelled demonstration**: it appears
+once, in the methods discussion, explicitly leaky-by-construction, not comparable with any LOSO
+figure, in no results table.
+
+**Then the four deferred items, in three commits** (deliberately not one — a fingerprint-schema
+change does not belong on the same commit as unrelated hygiene):
+
+**1. The M7 reference artifacts are now version-controlled**, plus `dcgm/` ignored and per-band
+timing recorded. `results/runs/` became `results/runs/*` so the `!results/runs/*_f36c4fb2/`
+negation can take — git cannot re-include a path whose parent is excluded. **The subtle part:**
+this machine has `core.autocrlf=true`, so committing the reference CSVs would have let git
+normalize their line endings on checkout, the working-tree bytes would stop matching the M7
+originals, and **the O-M9-5 gate would fail against its own reference**. `.gitattributes` marks
+`results/runs/*_f36c4fb2/** -text`; verified that the stored blob is byte-identical to disk and
+still hashes to `4bd21201...`. Committing them without that attribute would have quietly broken
+the thing they exist for.
+
+**2. The `PosixPath` merge crash is fixed.** `merged["artifacts"]` now holds strings. Recorded in
+the entry below; the notable part is *why it survived a green suite*: the complete-merge test
+asserted `merged["artifacts"][name].exists()`, i.e. it pinned the `Path` shape and never
+serialized. The test now asserts the values are strings, the paths exist, and the whole summary
+is JSON-serializable.
+
+**3. Store sidecars now record `packages`** — what a store was built WITH, alongside everything
+recording what it was built FROM. This is the other half of the gap that made O-M9-5
+unresolvable: `uv.lock`'s declared versions were identical throughout while the realized
+environment was not, and nothing recorded the difference. **It deliberately does not fail
+closed**, and the new test pins both halves: the field is populated, and a store whose
+environment has moved still validates. A store must be attributable to a clean revision, not to
+a byte-identical environment — making a scipy patch bump force a full re-extraction would be a
+far worse trade than the ~1e-13 differences at stake, which provably never changed a model
+selection.
+
+**4. Per-band timing recorded** in `submit_exp_d_cnn.sh`'s header: measure `ARRAY_TIME` and
+`INIT_TIME` per band, with the M9 evidence (six 77 GHz fold tasks lost to the limit; the 22 GB
+raw-cohort hash in `record_run` needing ~1h36m against a 1-hour default).
+
+**Note for the next store rebuild.** These commits move the analysis commit past `3f465ab`, so
+the stores and all M9 runs are stale by construction — which is fine, M9 is closed and its
+artifacts stand as records at `3f465ab`. The next rebuild will produce sidecars carrying
+`packages` for the first time.
+
 ## 2026-08-06 — The frame split DEMONSTRATES the leakage mechanism: 10 GHz Frank-Hall goes from QWK -0.197 (LOSO) to +0.819 / 80.3% accuracy (frame-level), on identical features, models and data.
 
 **These numbers are LEAKY BY CONSTRUCTION and are never a result.** They are recorded here as a

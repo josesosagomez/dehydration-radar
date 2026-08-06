@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from ..config import Config, config_to_dict
-from ..provenance import _git_info, sha256_file
+from ..provenance import _git_info, _package_versions, sha256_file
 
 STORE_VERSION = 2
 POOLING_CONTRACT_VERSION = "pool_stats_v1"  # bump if the pooling element order ever changes
@@ -129,6 +129,26 @@ def frame_ids_sha256(frame_ids) -> str:
 
 
 def compute_fingerprint(config: Config, band: str, *, frame_ids, raw_path, session_eligible: bool) -> dict:
+    """The fingerprint binding a store to what produced it.
+
+    Every field above `packages` records what the store was built FROM — the code revision,
+    the spec, the QC config, the exact frame membership, the raw bytes. `packages` records
+    what it was built WITH, and it is deliberately NOT one of the fields `_check_match`
+    compares.
+
+    Why it exists: M9 lost two days to a 5.14e-14 divergence between an M7 Exp A artifact and
+    its re-run. Data, splits, seeds, model selection, node hardware, run-to-run determinism
+    and the store rebuild were each eliminated by direct test, and M7's own code was shown to
+    reproduce the store bit-for-bit — so the cause lay in the realized numerical environment.
+    That could not be checked, because nothing recorded it. The declared versions in uv.lock
+    were identical throughout; what differed was what was actually installed.
+
+    Why it does not fail closed: a store must be attributable to a clean revision, not to a
+    byte-identical environment. Refusing a store because scipy moved a patch version would
+    make every environment refresh a full re-extraction, and the numerical differences at
+    stake are ~1e-13 and provably never changed a model selection. This is diagnostic
+    evidence for a future investigator, not an acceptance criterion.
+    """
     return {
         "git": _git_info(),
         "spec_hash": spec_hash(config, band),
@@ -139,6 +159,7 @@ def compute_fingerprint(config: Config, band: str, *, frame_ids, raw_path, sessi
         "raw_sha256": sha256_file(raw_path),
         "session_eligible": bool(session_eligible),
         "store_version": STORE_VERSION,
+        "packages": _package_versions(),
     }
 
 
