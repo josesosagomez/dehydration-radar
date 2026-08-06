@@ -4,6 +4,65 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-06 — STEP 13 COMPLETE. Exp D's primary result is strongly NEGATIVE: the session-index baseline beats radar in both bands, on every subject at 10 GHz. Radar does beat the DL/physics composite at 10 GHz.
+
+**Reports.** `results/runs/20260806T104207854321Z_3f465abc/metrics_exp_d_10ghz.json` and
+`.../20260806T110156650286Z_3f465abc/metrics_exp_d_77ghz.json`, both at `3f465ab`, n_eval=16.
+
+**The primary, pre-registered comparison — radar vs session-index.** Positive difference means
+radar is WORSE (subject-balanced session MAE, lower is better).
+
+| band | radar MAE | session-index MAE | radar - baseline | Wilcoxon p | W |
+|---|---|---|---|---|---|
+| 10 GHz | 0.4695 [0.407, 0.568] | **0.2691** [0.212, 0.377] | **+0.2004** [+0.145, +0.261] | 3.05e-05 | **0.0** |
+| 77 GHz | 0.4947 [0.403, 0.648] | **0.2784** [0.216, 0.372] | **+0.2163** [+0.129, +0.294] | 7.63e-04 | 8.0 |
+
+Both CIs lie entirely above zero. **W = 0.0 at 10 GHz means all 16 subjects were better
+predicted by the baseline** — not a majority, every one. This reproduces on the full cohort what
+the M7-era Exp A run found at `f36c4fb2` (entry far below), so it is not a one-off.
+
+**The composite comparison — radar vs best-of-three chosen per fold by inner CV** (members:
+`cnn1d_raw`, `spec2d_raw`, `physics`; single uncorrected comparison):
+
+| band | composite MAE | radar - composite |
+|---|---|---|
+| 10 GHz | 0.5687 | **-0.0992** [-0.189, -0.049] |
+| 77 GHz | 0.5300 | -0.0353 [-0.092, +0.021] |
+
+So at 10 GHz the frozen WST + classical pipeline genuinely beats the deep-learning and physics
+baselines, CI entirely below zero; at 77 GHz they are indistinguishable.
+
+**Per-family exploratory (Holm family of 3), radar minus family.** 10 GHz: `cnn1d_raw`
++0.0016 [-0.051, +0.059] p=0.940; `physics` p=0.348; `spec2d_raw` p=0.00214 (radar better).
+77 GHz: all p >= 0.252. Per-family subject-balanced MAE puts `session_index` at 0.269 / 0.278
+and everything else in a band from 0.446 to 0.569 — the baseline is not marginally better, it is
+in a different class.
+
+**How to read this, and how §8 must write it.** The session-index baseline is strong *by
+construction*: Δm% grows monotonically through the day, so the session index very nearly encodes
+the target. That is precisely why it was pre-registered as THE primary comparison rather than a
+soft one — it is the honest test of whether radar adds anything beyond knowing when a recording
+happened. **It does not; it performs materially worse.** Among radar approaches the ranking is
+coherent (the frozen pipeline is best or tied-best, and beats the DL baselines at 10 GHz), but
+the whole family loses to a lookup on time of day.
+
+This agrees with Exp C, where the ordinal task collapsed into the middle classes. Two
+independent experiments point the same way, and together they turn the project's standing
+constraint from a caution into a finding: **this study cannot separate hydration from
+time-of-day, and where the two compete directly, time-of-day wins.** §8 must state that plainly
+and must NOT hedge it into a partial success.
+
+**Gate status inside the real pipeline.** Both reports carry `reproducibility_verified: true`
+with `max_abs_pred_delta` = 2.330e-13 (10 GHz) and 0.0 (77 GHz) against
+`o_m9_5_pred_tolerance` = 1e-10. This is the first time the amended O-M9-5 gate ran inside
+`run_baselines.py` rather than a standalone check, and it behaved exactly as designed.
+
+**One operational note.** The 10 GHz comparison was refused by `submit_ibex.sh` for a DIRTY tree
+that turned out to be an untracked `dcgm/` directory — NVIDIA GPU telemetry dropped in by the
+phase-4 jobs. `git status --porcelain` counts untracked files, so a stray directory reads as
+dirty. Moved outside the repo; no tracked file had changed and the QC/eligibility artifacts were
+untouched. `dcgm/` belongs in `.gitignore` — post-M9 list, since that is a tracked-file change.
+
 ## 2026-08-05 — Step 13 phase 4: a REAL code bug found in the merge stage (`PosixPath` not JSON-serializable) — deliberately NOT fixed — plus 77 GHz fold timeouts. The bug inverts the success signal: complete merges crash, partial merges succeed.
 
 **The bug.** `run_baselines.py:202` writes the merge summary with
