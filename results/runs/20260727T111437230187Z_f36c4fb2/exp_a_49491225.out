@@ -1,0 +1,11 @@
+Exp A: band=10ghz mode=full commit=f36c4fb2428127f590c415d0799fe677faa12c14
+config : configs/exp_a_regression.yaml, configs/ibex.yaml  band 10ghz  mode full
+sessions: 73  subjects: 16
+provenance: /ibex/user/floresge/dehy_radar/results/runs/20260727T111437230187Z_f36c4fb2/provenance.json
+workers   : 16 (folds run in parallel; result is order-independent)
+  metrics         : /ibex/user/floresge/dehy_radar/results/runs/20260727T111437230187Z_f36c4fb2/metrics_exp_a_10ghz.json
+  predictions     : /ibex/user/floresge/dehy_radar/results/runs/20260727T111437230187Z_f36c4fb2/predictions_10ghz.csv
+  selection_table : /ibex/user/floresge/dehy_radar/results/runs/20260727T111437230187Z_f36c4fb2/selection_table_10ghz.csv
+  scatter         : /ibex/user/floresge/dehy_radar/results/runs/20260727T111437230187Z_f36c4fb2/scatter_10ghz.png
+
+full-cohort Exp A complete — the config freeze is now spent.

@@ -14,9 +14,18 @@
 #
 # ARRAY_TIME is REQUIRED and defaults only to the pre-measurement placeholder 08:00:00 -- size
 # it from the step-10 single-fold GPU smoke's measured wall-time, then record the measurement
-# (the C8 lesson: arrays are sized from measurement, never from a guess). INIT_TIME defaults to
-# 01:00:00 (record_run's raw-file hashing plus one full spine build is genuine I/O work, never
-# a login-node step, C23).
+# (the C8 lesson: arrays are sized from measurement, never from a guess).
+#
+# MEASURE IT PER BAND. M9 sized ARRAY_TIME from a 10 GHz single-fold smoke and reused those
+# values for 77 GHz; six 77 GHz fold tasks then died on the time limit (cnn1d_matched lost folds
+# 0/1/3/8/9 and spec2d_raw lost fold 2 at 02:00:00, while 77 GHz cnn1d_raw folds needed up to
+# 2:10 even with a 3-hour limit). A 10 GHz measurement is not a 77 GHz estimate.
+#
+# INIT_TIME defaults to 01:00:00 (record_run's raw-file hashing plus one full spine build is
+# genuine I/O work, never a login-node step, C23) -- but that default is a 10 GHz figure too.
+# For 77 GHz, record_run sha256s the ~22 GB raw cohort: the M9 Exp D cheap job needed ~1h36m for
+# that alone and a later one was cancelled at a 2-hour limit mid-way through its second family.
+# Pass INIT_TIME=04:00:00 for 77 GHz groups.
 #
 # ARRAY_SPEC is that measurement's own knob: it defaults to the full 1-16, and step 10's
 # single-fold GPU smoke sets it to 1-1 so ONE real fold runs on a real GPU and its wall-time

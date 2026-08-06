@@ -1,3 +1,10 @@
 # sbatch scripts are developed on Windows but run on Linux; a CRLF line ending breaks the
 # shebang (`/bin/bash^M: bad interpreter`). Force LF on checkout for the IBEX scripts.
 scripts/ibex/* text eol=lf
+
+# The milestone-7 Exp A reference artifacts exist to be compared BYTE-FOR-BYTE: O-M9-5 sha256s
+# predictions_{band}.csv and selection_table_{band}.csv against every later Exp A re-run. This
+# machine has core.autocrlf=true, so without `-text` git would normalise these CSVs on checkout,
+# the working-tree bytes would differ from the M7 originals, and the gate would fail against its
+# own reference. Marking them binary is what makes committing them safe.
+results/runs/*_f36c4fb2/** -text
