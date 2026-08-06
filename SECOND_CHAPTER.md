@@ -1082,7 +1082,252 @@ neither band demonstrates a radar-based fluid-loss signal that outperforms simpl
 session-mean statistics in this cohort — a genuinely negative result for the study's central
 hypothesis, reported here in full rather than as a footnote, per the plan's own framing.
 
-## 8. Ordinal classification & baselines — Experiments C, D  *(fill at milestone 9)*
+## 8. Ordinal classification & baselines — Experiments C, D  *(complete — full-cohort results below)*
+
+Experiments C and D close the question §6 and §7 opened. Exp A found the radar regressor losing
+to a time-of-day baseline; Exp B found it losing to a session mean even *within* a fixed session.
+What remained was whether the negative result was an artifact of posing the problem as
+regression (C), or of the WST feature choice (D). Neither turns out to be the case. All results
+below are at commit `3f465ab`, full cohort, 16 subjects.
+
+### Experiment C — method
+
+- **The task.** The paper's 5-class S0–S4 staging, kept as an **ordered** task. The target is
+  two-column, `y = [L, class]`, with the frozen sign convention `L = −Δm%` so that class order
+  increases monotonically with fluid loss. `class_idx` **is** the session index: S0 = 08:00
+  through S4 = 16:00. That identity is not incidental and is returned to below.
+- **One search space, not a second copy** (A-M9-1). Family (a) reuses Exp A's frozen enumeration
+  and store-backed feature path unchanged; only the target, the objective and the estimator head
+  differ. Nothing about the feature search was re-opened for this experiment.
+- **Two frozen arms sharing one Stage-1 feature key.** Arm (a) is regress-then-threshold: the
+  five base families wrapped in the frozen thresholding rule. Arm (b) is Frank-Hall — K−1 = 4
+  independent binary logistic fits on `1[class > k]`, each carrying train-only inverse-frequency
+  class weights, over the frozen C grid.
+- **The objective** is pooled class-unit MAE as the harness `score_fn`, with the §2.3 inner-fold
+  aggregation over *evaluable folds only*. That aggregation lives in `exp_c.py` rather than the
+  harness deliberately: the class-coverage viability predicate is candidate-independent, so a
+  plain `np.mean` over all inner folds would go NaN for every candidate whenever one inner
+  training set lost a class — silently promoting "one inner fold lost a class" into "this outer
+  fold produced no ordinal result", which is stricter than the frozen rule.
+- **Metrics are ordinal only**: quadratic-weighted kappa, adjacent accuracy, class-unit MAE, plus
+  the confusion matrix. Plain accuracy is not reported, per the framing locked in §0.
+- **No baseline comparison** (plan §5 trap 16). The session-index baseline predicts the Exp C
+  class *perfectly* by construction — the class is the session index — so any radar-vs-baseline
+  framing would be degenerate. Exp C reports its ordinal metrics absolutely.
+
+### Experiment C — provenance of the choices
+
+- **The QWK-undefinedness rule (O-M9-8, decision 8a, owner-approved 2026-07-30).** Undefinedness
+  is decided by the actual denominator, not by a class-count pre-check: kappa is NaN iff the
+  input is empty or the expected disagreement is exactly zero, which on this fixed 5×5 grid
+  happens only when both marginals concentrate on the *same* single class. A single-class truth
+  side alone does not trigger it as long as the other side varies. This was a contested design
+  point, so the instrumentation counting how often it fires is reported below rather than
+  assumed negligible.
+- **`max_iter = 1000` in Frank-Hall is a solver convergence bound, not a tuned quantity**, and a
+  `ConvergenceWarning` from lbfgs is promoted to an exception: a non-converged threshold fit must
+  stop the run rather than contribute coefficients to a reported result. `exp_c.py` asserts the
+  bound against an independently-stated constant so the guard cannot drift.
+
+### Experiment C — results
+
+16 subjects evaluable in both bands (73 sessions at 10 GHz, 72 at 77 GHz). Seed counts are
+**realized per arm**: arm (a) reaches the full 5-seed set on folds selecting a seed-sensitive
+family, while arm (b) is Frank-Hall throughout and is deterministic, so it realizes 1.
+
+| band | arm | realized seeds | QWK | adjacent accuracy | class-unit MAE |
+|---|---|---|---|---|---|
+| 10 GHz | a (regress-then-threshold) | 5 | **−0.212 [−0.365, −0.030]** | 0.534 [0.432, 0.631] | 1.553 [1.369, 1.772] |
+| 10 GHz | b (Frank-Hall) | 1 | **−0.197 [−0.312, −0.075]** | 0.521 [0.459, 0.597] | 1.658 [1.477, 1.833] |
+| 77 GHz | a | 5 | **−0.278 [−0.461, −0.077]** | 0.558 [0.465, 0.636] | 1.492 [1.317, 1.700] |
+| 77 GHz | b | 1 | +0.025 [−0.281, 0.243] | 0.611 [0.487, 0.712] | 1.347 [1.137, 1.680] |
+
+**Three of the four arms have kappa confidence intervals lying entirely below zero.** The correct
+reading is *no usable ordinal signal*, not inverse predictive ability: the predictions collapse
+toward the middle classes and then run counter to truth, which is what a no-signal predictor
+looks like under a chance-corrected metric. The fourth arm (77 GHz, Frank-Hall) sits at
+essentially zero with a CI spanning it.
+
+**Adjacent accuracy must not be quoted alone.** Values of 0.52–0.61 look respectable, but that is
+precisely what middle-collapsed predictions produce: a prediction parked near S2 lands within ±1
+of a large share of the truth without tracking it. QWK is the headline; adjacent accuracy is
+reported for completeness and interpreted only alongside it.
+
+Two supporting observations. Arm (a)'s selected family is heterogeneous across folds (10 GHz:
+ridge 8, gbm 4, rf 2, svr 2; 77 GHz: gbm 8, ridge 4, rf 2, svr 2) with no family dominating —
+when a real signal exists one family tends to win consistently. And the O-M9-8 instrumentation
+is a **clean zero in both bands**: `n_qwk_nan = 0` and `n_single_class_truth_val_folds = 0` across
+9280 (10 GHz) and 4240 (77 GHz) inner evaluation cells, and across 56 and 72 outer cells. The
+contested undefinedness rule never fired, so no result below depends on which side of that
+decision was taken.
+
+### Experiment D — method
+
+Experiment D contests "WST wins" by putting the frozen pipeline against five alternatives under
+the identical LOSO harness, on both bands.
+
+- **The six families.** Four deep-learning families — `cnn1d_raw` and `cnn1d_matched` (1D CNN on
+  the raw beat signal), `spec2d_raw` and `spec2d_matched` (spectrogram + small 2D CNN) — plus
+  `physics` (in-band reflected-power / two-band power ratio) and `session_index` (time-of-day
+  lookup, no radar data at all). The CNN families are the **only** authorized GPU consumers; the
+  frozen numpy-backend policy for reported WST features is untouched, and every non-CNN family is
+  refused if it names a device other than CPU.
+- **The run-group architecture.** Each CNN family × band runs as three stages: a single-task
+  `--init-run-group` that validates the store, builds the frame spine and writes the
+  authoritative per-fold row census; a 16-task GPU array, one outer fold per task; and a merge
+  gated on the array. A fold index beyond the selectable list exits zero with a named no-op
+  marker, and a partial merge is a **named non-reportable state** — a subset of the selectable
+  folds is never silently treated as a smaller cohort.
+- **The primary comparison** is radar versus `session_index`, pre-registered, on per-subject
+  session MAE, via Wilcoxon signed-rank plus a subject-cluster bootstrap CI on the mean
+  difference.
+- **The composite** is one uncorrected comparison against a per-fold best-of-three
+  (`cnn1d_raw`, `spec2d_raw`, `physics`) chosen by inner CV. It splices at the **per-subject
+  metric** level, not the prediction level: a prediction-level splice is undefined across
+  families of different seed multiplicity, and averaging predictions across seeds is forbidden.
+- **Per-family comparisons** form an exploratory Holm family of exactly 3. The two matched-
+  preprocessing families are **ablations**: reported descriptively, entering no comparison
+  family, with no p-value and no Holm slot (O-M9-3).
+
+### Experiment D — results
+
+| | 10 GHz | 77 GHz |
+|---|---|---|
+| radar MAE | 0.469 [0.409, 0.568] | 0.495 [0.403, 0.648] |
+| **session-index MAE** | **0.269 [0.212, 0.377]** | **0.278 [0.216, 0.372]** |
+| radar − session-index | **+0.200 [0.145, 0.261]** | **+0.216 [0.129, 0.294]** |
+| Wilcoxon p | 3.05×10⁻⁵ | 7.63×10⁻⁴ |
+| Wilcoxon statistic | **0.0** | 8.0 |
+
+**A baseline that never looks at the radar — it knows only which session of the day a recording
+came from — beats every radar-based method in both bands.** At 10 GHz the Wilcoxon statistic is
+exactly zero, meaning *all sixteen* subjects were better predicted by the baseline, not a
+majority. This reproduces on the full cohort what §6 found for Exp A at `f36c4fb2`, and it is not
+a one-off.
+
+Per-family subject-balanced MAE (lower is better):
+
+| family | 10 GHz | 77 GHz |
+|---|---|---|
+| session_index | **0.269** | **0.278** |
+| physics | 0.446 | 0.479 |
+| cnn1d_matched *(ablation)* | 0.451 | 0.497 |
+| radar (WST + classical) | 0.469 | 0.495 |
+| cnn1d_raw | 0.468 | 0.492 |
+| spec2d_matched *(ablation)* | 0.528 | 0.478 |
+| spec2d_raw | 0.569 | 0.531 |
+
+Every radar-based representation — including two that **learn their own features end to end from
+the raw signal**, inheriting no WST assumption — lands between 0.45 and 0.57, and every one loses
+to the clock. That is the strongest available evidence that the negative result is not an
+artifact of the feature choice.
+
+Against the composite, radar wins at 10 GHz (−0.099 [−0.192, −0.050]) and is indistinguishable at
+77 GHz (−0.037 [−0.093, +0.019]). In the exploratory Holm family of three, radar ties `cnn1d_raw`
+(10 GHz +0.002, Holm p = 0.94) and `physics` (+0.024, Holm p = 0.70), and beats `spec2d_raw`
+(−0.099, Holm p = 0.0064); at 77 GHz nothing separates (all Holm p ≥ 0.76).
+
+**These wins should not be led with, and one detail shows why.** At 10 GHz the composite's inner
+CV selected `spec2d_raw` in **16 of 16 folds** — the *worst* of the six families — so the
+composite is simply `spec2d_raw`, and radar "beating the composite" reduces to radar beating the
+weakest alternative. An inner-CV procedure that consistently selects the worst-performing family
+is itself evidence that inner scores carry no information about outer performance. Being the best
+of several approaches that all lose to a time-of-day lookup is not a positive result.
+
+### Reproducibility, and a post-hoc amendment disclosed in full
+
+Experiment D's radar side is Exp A's own output, so the comparison is only meaningful if that
+output is the one §6 reported. Acceptance criterion **O-M9-5** required the M9 Exp A re-run to
+reproduce the milestone-7 artifacts.
+
+**The criterion was amended after it failed, and the chapter states this plainly.** As originally
+written, O-M9-5 required `predictions_{band}.csv` to be bit-identical to the M7 artifact. On the
+first M9 re-run that failed for 10 GHz while 77 GHz passed: 11 of 149 rows differed, by at most
+5.14×10⁻¹⁴, with `Δy_true` exactly zero, and `selection_table_10ghz.csv` byte-identical. The
+cause was pursued to exhaustion — raw data, splits, seeds, model selection, node hardware,
+run-to-run nondeterminism, declared package versions, the store rebuild, the Exp A code path and
+core count were each eliminated by direct test, and M7's own code was shown to reproduce the
+current feature store bit-for-bit across all five SVR-selected subjects (2277 arrays, 23
+sessions). What remained was floating-point summation order in the fit path, amplified by
+libsvm's SMO convergence tolerance.
+
+The amended criterion is a **conjunction**, ordered so the second part is unreachable unless the
+first passes: `selection_table_{band}.csv` byte-identical, **and** `max |Δy_pred| ≤ 10⁻¹⁰` with
+the observed value recorded on every run. The tolerance is four orders above the largest
+difference ever observed and about nine below anything that could reach a reported digit for a
+Δm% of order 0.1–1. The selection table is what makes this safe rather than merely convenient:
+which model a fold selects is a discrete, tolerance-free outcome that any genuine drift must
+change. **A limitation to state honestly:** part 1 detects any change in a discrete decision,
+whatever its origin — not only real drift.
+
+Two findings from that investigation stand on their own. First, the pipeline is **bit-reproducible
+across CPU microarchitectures** for Exp C in both bands and for Exp A at 77 GHz — verified by an
+AMD Turin versus Intel Skylake comparison of byte-identical selection tables and predictions.
+Second, 10 GHz Exp A is *not*: it is sensitive both to CPU microarchitecture and to the realized
+software environment, at the 10⁻¹³ level, and in no case did that ever change a single model
+selection. The final reported runs satisfy the amended criterion on both bands
+(2.33×10⁻¹³ and 0.0 against the 10⁻¹⁰ tolerance).
+
+### A measurement of the protocol itself — the frame-split demonstration
+
+The chapter's opening claim is that the published ~96–98% five-class accuracy is a product of
+frame-level, subject-dependent splitting rather than of a hydration signal. That claim can be
+measured rather than asserted, and the sanctioned exploratory frame split does so.
+
+**The numbers in this subsection are leaky by construction and are not results.** They appear
+once, here, as a measurement of the evaluation protocol. They are not comparable with any LOSO
+figure in this chapter, they appear in no results table, and no conclusion about hydration rests
+on them.
+
+Holding the features, the models, the selected configurations and the data fixed, and changing
+*only* the split — subject-level hold-out replaced by 5-fold random assignment of the 7168
+individual frames — the 10 GHz ordinal task moves as follows:
+
+| arm | LOSO (reported) | frame-level split (leaky) |
+|---|---|---|
+| a (regress-then-threshold) | QWK −0.212 | QWK +0.405, accuracy 0.307 |
+| b (Frank-Hall) | QWK −0.197 | QWK **+0.819**, accuracy **0.803** |
+
+Frank-Hall swings by more than a full unit of kappa, and from no usable signal to 80.3% five-class
+accuracy, on the split alone. The obvious objection — that the frame split simply has more
+training rows — is the leakage restated: those 5734 training frames come from the same 73
+sessions and carry no new information, because frames within a session are near-duplicates
+sharing one label.
+
+This does **not** reproduce the published 96–98% exactly; 80.3% is lower, and the residual gap is
+plausibly the original's different classifier and feature pipeline. What it establishes is the
+*regime*: an honest protocol on this data says no signal, and frame-level splitting on the same
+machinery says strong classifier.
+
+One further observation, offered as a hypothesis rather than a conclusion. The arm that exploits
+the leakage hardest is the discriminative one — Frank-Hall reaches 0.803 accuracy where
+regress-then-threshold reaches 0.307 — and Frank-Hall at 77 GHz is precisely the one cell of the
+sixteen that could not be computed, because its logistic fits failed to converge at the frozen
+bound and the guard refused to return coefficients from an unconverged fit. Logistic regression
+fails to converge when classes become near-perfectly separable, which is what leakage
+manufactures. If that is the mechanism, the refusal is a symptom of the leakage rather than a
+solver accident. The 10 GHz arm converged, so this is not universal and is not claimed as
+established.
+
+### What Experiments C and D establish
+
+Four independent lines now agree: Exp A's null pooled correlation and defeat by a time-of-day
+baseline (§6), Exp B's failure to beat a session mean within a fixed session (§7), Exp C's ordinal
+collapse, and Exp D's defeat by the same baseline across six representations including two
+learned end to end.
+
+**In this cohort, at this dehydration range, with this hardware, the radar features carry no
+recoverable information about fluid loss beyond what the time of day already supplies.**
+
+The claim is bounded deliberately, and the bounds are the study's own. Sixteen subjects. A Δm%
+range from 0.000 to −2.020, with most sessions well under 1%, so the physical effect being asked
+for is a permittivity change from a fraction of a percent of body mass. Body mass as the single
+objective reference, with no osmolality and no temperature record. And a fasting design that ties
+hydration to time of day, which §7 reduces but cannot remove.
+
+This is not evidence that radar-based hydration sensing is infeasible. It is evidence that this
+study cannot demonstrate it, and — through the frame-split measurement above — an account of why
+an earlier analysis of the same data appeared to.
 
 ## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
