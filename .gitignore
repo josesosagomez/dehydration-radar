@@ -43,6 +43,13 @@ dcgm/
 # the committed curated CSV (results/wst/wst_diagnostics_77ghz.csv). Regenerable.
 results/wst/shards/
 
+# The sanctioned exploratory frame-split output (run_frame_split_exploratory.py). Run
+# output, regenerable, and exploratory-only — it is never a reported artifact. Ignored for
+# the same operational reason as dcgm/: it was sitting untracked in the IBEX tree, and an
+# untracked directory counts toward `git status --porcelain`, so it made submit_ibex.sh
+# refuse to submit a "DIRTY tree" that contained no source change at all.
+results/exploratory_frame_split/
+
 # The milestone-7 per-session feature store (npz + fingerprint sidecars). Large and fully
 # regenerable from a clean commit by experiments/extract_features.py; never committed.
 results/features/
