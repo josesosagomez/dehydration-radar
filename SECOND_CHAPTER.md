@@ -1331,41 +1331,64 @@ an earlier analysis of the same data appeared to.
 
 ## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
-Not yet written — milestone 10 is unstarted as of 2026-08-06. Recorded here so the section's scope
-and its three known framing problems are fixed *before* any result exists, in the same spirit as the
-milestone-6 config freeze.
+Not yet written — milestone 10 is unstarted as of 2026-08-07. Recorded here so the section's scope
+and its known framing problems are fixed *before* any result exists, in the same spirit as the
+milestone-6 config freeze. **`plans/MILESTONE_10_PLAN.md` (independently reviewed and accepted
+2026-08-07) is the authoritative design for all four experiments; this section is a chapter-facing
+summary of it, not a second source of design decisions.** Where anything below and the plan appear to
+disagree, the plan governs and this section is stale and needs updating.
 
-**What the section will contain.** Experiment G (cross-band 10 + 77 GHz fusion on the matched
-subject-session intersection, constrained convex combiner with α on a 21-point grid fit on
-cross-fitted out-of-fold predictions, primary contrast fused vs 10-only); Experiment E (pre-registered
-path-grouped permutation interpretability, 4-fold subject-grouped CV, run on the Exp B model);
-Experiment F (four nested ridge models sharing one clock encoding, plus the algebraic-coupling
-sensitivity analysis); Experiment H (per-subject performance spread, the pre-specified comparisons
-with subject-cluster CIs and Holm correction, and the selection-variance robustness bootstrap). All
-four designs were frozen at milestone 6, before any outer-fold result existed, and are transcribed in
-`configs/exp_e.yaml`, `exp_f.yaml`, `exp_g_fusion.yaml` and `stats.yaml`.
+**What the section will contain.** Experiment G (matched-session decision-level fusion: independent
+per-band Exp-A staged selection refit on the matched cohort, a constrained convex combiner with α on
+a 21-point grid fit from *selection-honest* nested cross-fitted out-of-fold predictions — never the
+harness's ordinary first-seed-only inner predictions — primary contrast fused vs 10-only); Experiment
+E (a fixed, pre-registered ridge model on Exp-B residual targets, scored under ordinary outer LOSO,
+with per-path importance from **leave-one-path-group-out refit and rescore**, not a permutation CV);
+Experiment F (the heart-rate confound check ROADMAP §4 describes is not estimable — no HR observation
+exists anywhere in the delivered data — reported as such, alongside four nested ridge models on the
+clock plus static covariates as a separately named available-covariate sensitivity analysis, plus the
+algebraic-coupling sensitivity variants); Experiment H (per-subject performance spread, the
+pre-specified comparisons with subject-cluster CIs and Holm correction, and a selection-variance
+**empirical percentile range** — not a BCa interval — from full-procedure subject resampling). All
+four designs were frozen at milestone 6 and are transcribed in `configs/exp_e.yaml`, `exp_f.yaml`,
+`exp_g_fusion.yaml` and `stats.yaml`; six explicit post-freeze protocol amendments (A-M10-1..6,
+`plans/MILESTONE_10_PLAN.md` §0.2), made after A-D's results were visible, are disclosed here by
+reference and will be restated with their full reasoning when this section is written in full.
 
-**Three things this section must not paper over.**
+**Things this section must not paper over.**
 
-1. **Experiment E was designed to support a signal that §6–§8 show does not exist.** Its stated
-   purpose is alignment between the informative scattering paths and the Cole-Cole water-driven
-   permittivity expectation — supporting evidence that a real signal is physical. With no signal,
-   permutation importance describes the structure of noise. Whatever is done — reported as a null
-   attribution, reframed as a negative control, or dropped — the chapter states which, and why, and
-   states that the analysis was pre-registered before the null was known. Silently dropping a
-   pre-registered analysis after seeing a null result is precisely the selective-reporting failure
-   this rebuild exists to correct.
-2. **Experiment F is not the heart-rate confound check the paper's framing implies.** Heart rate was
-   reportedly collected but is **not present in the delivered data**, so the confound check is built
-   on the clock plus static covariates (age, height, baseline mass, BMI) instead. The chapter says
-   this plainly rather than letting the absence read as a scope cut, and repeats that skin
-   temperature and glucose were never controlled (temperature logs lost, glucose never measured).
+1. **Experiment E's design changed under review (A-M10-1) and its reporting stance is outcome-neutral
+   by design (A-M10-6).** The milestone-6 freeze specified a standalone 4-fold permutation CV; review
+   found this violated the project-wide LOSO requirement and was undefined for incomplete validation
+   trajectories. The accepted replacement — leave-one-path-group-out refit under ordinary outer LOSO —
+   is the *documented alternative* the frozen text already named, so no new method was invented
+   post-hoc, only the already-specified fallback was promoted to primary. Separately: E's stated
+   original purpose was alignment between informative scattering paths and the Cole-Cole water-driven
+   permittivity expectation — supporting evidence a real signal is physical — and §6–§8 show no such
+   signal. The accepted resolution is **not** to pre-label the per-path result "null" or "physical"
+   before it exists (A-M10-6: "a desired narrative must not be encoded as a software acceptance
+   criterion"); instead, the chapter states plainly, before presenting the path table, that the fixed
+   model's predictive context is already known to be weak (§6–§8), so any attribution describes what
+   the model relied on, not a validated physical mechanism — then reports the table as measured, with
+   no framing that predetermines whether a path's importance reads as "signal" or "noise structure."
+   This supersedes the 2026-08-06/2026-08-07 "report as a null attribution" framing recorded in an
+   earlier draft of this section, which the review correctly identified as pre-encoding an outcome.
+2. **Experiment F is not the heart-rate confound check the paper's framing implies, and the software
+   says so explicitly rather than silently substituting.** Heart rate was reportedly collected but
+   **zero HR observations exist anywhere in the delivered data** (verified: no HR file, no HR column
+   in the weight/subject workbook). The accepted design (A-M10-2) makes this a first-class, machine-checked
+   status — `status="not_estimable_missing_heart_rate"`, `n_hr_observations=0` — never a silent
+   substitution and never a proxy correlation. The clock-plus-static-covariate analysis (age, height,
+   baseline mass, BMI) that *does* run is reported as a separately named available-covariate
+   sensitivity analysis, not relabelled as the HR check. Skin temperature and glucose remain
+   uncontrolled (temperature logs lost, glucose never measured).
 3. **Experiment G fuses two arms that both already lost to the clock.** The pre-registered primary
    contrast is therefore a comparison between two failures, and the reading of a *positive* fused
    result is pre-committed here, before the result is seen: with α selected over 21 grid points on a
    16-subject matched population, a small fused improvement is far more consistent with selection
    noise than with complementary information across bands, and would be reported as such unless its
-   subject-cluster CI excludes zero by a margin comparable to the §6 effects.
+   subject-cluster CI excludes zero by a margin comparable to the §6 effects. Feature-level fusion is
+   explicitly deferred (A-M10-4) and is not a milestone-10 completion criterion.
 
 ## Provenance index
 
