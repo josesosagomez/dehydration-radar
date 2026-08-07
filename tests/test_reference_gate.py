@@ -469,6 +469,63 @@ def test_entrypoint_snapshot_writes_the_manifest(world, tmp_path, monkeypatch):
     assert manifest["reference_grade"] == gate.GRADE_AUTHORITATIVE
 
 
+# ------------------------------------------- a superseded run whose store no longer exists
+
+
+def test_a_superseded_run_is_recorded_artifact_only_and_proves_the_substitution_is_safe(
+    world, tmp_path
+):
+    """M10's real situation: the plan named the `f0a46aa6` Exp A runs, but that store was
+    already rebuilt away, so the reference had to move to the `3f465abc` pair. The manifest
+    has to say *why that was safe* — which is a table comparison, not feature evidence."""
+    superseded = _write_run_dir(tmp_path / "superseded", world.sessions, commit="f" * 40)
+    manifest = gate.snapshot(
+        {BAND: world.config}, {BAND: world.run_dir},
+        hash_npz=False, superseded_run_dirs={BAND: [superseded]},
+    )
+    record = manifest["bands"][BAND]["superseded_runs"][0]
+
+    assert record["store_recomputable"] is False       # its store is gone; only tables remain
+    assert record["commit"] == "f" * 40
+    assert record["vs_reference"]["status"] == "equivalent"
+    assert record["vs_reference"]["selection_table_byte_identical"] is True
+    assert record["vs_reference"]["max_abs_pred_delta"] == 0.0
+    # It is provenance, not a second gate: an equivalent superseded run changes nothing.
+    assert manifest["reference_grade"] == gate.GRADE_AUTHORITATIVE
+
+
+def test_a_superseded_run_that_selected_different_features_is_reported_as_differing(
+    world, tmp_path
+):
+    """The finding this exists to surface: if the two runs disagree on which feature key a
+    fold selected, moving the reference silently would change what Exp F consumes."""
+    flipped = {s: FK_OFF for s in range(1, N_SUBJECTS + 1)}
+    superseded = _write_run_dir(tmp_path / "superseded", world.sessions,
+                                commit="f" * 40, selection=flipped)
+    manifest = gate.snapshot(
+        {BAND: world.config}, {BAND: world.run_dir},
+        hash_npz=False, superseded_run_dirs={BAND: [superseded]},
+    )
+    verdict = manifest["bands"][BAND]["superseded_runs"][0]["vs_reference"]
+    assert verdict["status"] == "differs"
+    assert verdict["selected_feature_keys_identical"] is False
+
+
+def test_a_superseded_run_beyond_the_prediction_tolerance_differs(world, tmp_path):
+    superseded = _write_run_dir(tmp_path / "superseded", world.sessions, commit="f" * 40,
+                                pred_noise=gate.pred_tolerance() * 100)
+    manifest = gate.snapshot(
+        {BAND: world.config}, {BAND: world.run_dir},
+        hash_npz=False, superseded_run_dirs={BAND: [superseded]},
+    )
+    verdict = manifest["bands"][BAND]["superseded_runs"][0]["vs_reference"]
+    assert verdict["status"] == "differs"
+    assert verdict["selected_feature_keys_identical"] is True    # same models, moved numbers
+    assert verdict["max_abs_pred_delta"] > gate.pred_tolerance()
+
+
+# ------------------------------------------------------------------------ the entrypoint
+
 SBATCH = Path(__file__).resolve().parents[1] / "scripts" / "ibex" / "validate_exp_a_reference.sbatch"
 
 
@@ -511,10 +568,18 @@ def test_the_ibex_wrapper_carries_its_own_resources_and_both_modes():
     assert "experiments/validate_exp_a_reference.py --snapshot" in text
     assert "experiments/validate_exp_a_reference.py --compare" in text
     for flag in ("--reference-10", "--reference-77", "--reference-manifest",
-                 "--final-10-file", "--final-77-file", "--config configs/ibex.yaml"):
+                 "--final-10-file", "--final-77-file", "--config configs/ibex.yaml",
+                 "--superseded-10", "--superseded-77"):
         assert flag in text
     # Fail closed on a mistyped MODE rather than silently doing neither.
     assert "exit 2" in text
+
+    # The reference defaults must be the runs the LIVE stores back (3f465abc), with the
+    # plan-named f0a46aa6 pair demoted to superseded — the whole point of the correction.
+    assert "REF10=${REF10:-results/runs/20260804T150841445054Z_3f465abc}" in text
+    assert "REF77=${REF77:-results/runs/20260804T171005433711Z_3f465abc}" in text
+    assert "SUP10=${SUP10:-results/runs/20260803T143704568296Z_f0a46aa6}" in text
+    assert "SUP77=${SUP77:-results/runs/20260803T151715023672Z_f0a46aa6}" in text
 
 
 def test_entrypoint_returns_nonzero_for_a_degraded_snapshot(tmp_path, monkeypatch):

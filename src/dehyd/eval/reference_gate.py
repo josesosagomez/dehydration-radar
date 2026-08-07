@@ -480,6 +480,70 @@ def prediction_evidence(by_subject, test_subject) -> dict:
 # ----------------------------------------------------------------------- store evidence
 
 
+def superseded_run_evidence(run_dir, band, reference_evidence: dict) -> dict:
+    """Artifact-only evidence for an Exp-A run whose backing store no longer exists.
+
+    Milestone 10 named the `*_f0a46aa6` Exp-A runs as its reference. By the time
+    implementation started, the IBEX stores had already been rebuilt at `3f465ab` (the
+    commit move HISTORY 2026-08-04 records), so those runs' *feature* evidence — stored
+    vectors, raw tensors, the fold-local ε — is not recomputable on any machine. Their
+    **artifacts** still exist, and that is enough to answer the only question the
+    substitution raises: does moving the reference to the `3f465abc` pair change any of
+    Exp A's answers?
+
+    So this records the superseded run's tables and compares them to the new reference by
+    the O-M9-5 criterion — selection-table byte-identity, then bounded |Δy_pred|. It never
+    contributes to `reference_grade`: it is provenance for why the reference moved, not a
+    second gate. A `differs` status is not fatal here, but it *is* a finding, because it
+    would mean the two runs selected different features for at least one fold.
+    """
+    run_dir = Path(run_dir).resolve()
+    provenance = read_run_provenance(run_dir, band)
+    selected = read_selection_table(run_dir, band)
+    predictions = read_predictions(run_dir, band)
+
+    artifacts = {
+        name: {"path": str(path), "sha256": sha256_file(_require_file(path, name))}
+        for name, path in run_artifacts(run_dir, band).items()
+    }
+    folds = [
+        {
+            "test_subject": fold.test_subject,
+            "feature_key_repr": repr(fold.feature_key),
+            "predictions": prediction_evidence(predictions, fold.test_subject),
+        }
+        for fold in selected
+    ]
+
+    tolerance = pred_tolerance()
+    max_delta, fault = _max_pred_delta({"selected_folds": folds}, reference_evidence)
+    selection_identical = (
+        artifacts["selection_table"]["sha256"] == reference_evidence["selection_table_sha256"]
+    )
+    keys_identical = (
+        {f["test_subject"]: f["feature_key_repr"] for f in folds}
+        == _fold_map(reference_evidence, "feature_key_repr")
+    )
+    equivalent = selection_identical and keys_identical and fault is None and max_delta <= tolerance
+
+    return {
+        "path": str(run_dir),
+        "name": run_dir.name,
+        "commit": provenance["git"]["commit"],
+        "store_recomputable": False,
+        "artifacts": artifacts,
+        "selected_feature_keys": {f["test_subject"]: f["feature_key_repr"] for f in folds},
+        "vs_reference": {
+            "criterion": f"selection-table byte-identity AND max|dy_pred| <= {tolerance:.1e} (O-M9-5)",
+            "selection_table_byte_identical": selection_identical,
+            "selected_feature_keys_identical": keys_identical,
+            "max_abs_pred_delta": None if fault else max_delta,
+            "fault": fault,
+            "status": "equivalent" if equivalent else "differs",
+        },
+    }
+
+
 def store_evidence(config, band, sessions, store_dir, *, hash_npz=True) -> dict:
     """Paths, sidecar fingerprints and file hashes of the store backing this band."""
     band_directory = store_mod.band_dir(store_dir, band)
@@ -520,7 +584,7 @@ def store_evidence(config, band, sessions, store_dir, *, hash_npz=True) -> dict:
 
 
 def build_band_evidence(config, band, run_dir, *, hash_npz=True,
-                        allow_store_commit_divergence=False) -> dict:
+                        allow_store_commit_divergence=False, superseded_run_dirs=()) -> dict:
     """Every evidence class for one band, from one Exp-A full-cohort run directory.
 
     The store is validated fail-closed against the RUN's commit (not the current HEAD):
@@ -609,7 +673,7 @@ def build_band_evidence(config, band, run_dir, *, hash_npz=True,
         for name, path in run_artifacts(run_dir, band).items()
     }
 
-    return {
+    evidence = {
         "band": band,
         "reference_grade": grade,
         "run": {
@@ -632,6 +696,10 @@ def build_band_evidence(config, band, run_dir, *, hash_npz=True,
         "selection_table_sha256": artifacts["selection_table"]["sha256"],
         "predictions_sha256": artifacts["predictions"]["sha256"],
     }
+    evidence["superseded_runs"] = [
+        superseded_run_evidence(path, band, evidence) for path in superseded_run_dirs
+    ]
+    return evidence
 
 
 def _config_payload(config) -> dict:
@@ -651,13 +719,19 @@ def _config_payload(config) -> dict:
 # ------------------------------------------------------------------------------ snapshot
 
 
-def snapshot(configs, run_dirs, *, hash_npz=True, allow_store_commit_divergence=False) -> dict:
+def snapshot(configs, run_dirs, *, hash_npz=True, allow_store_commit_divergence=False,
+             superseded_run_dirs=None) -> dict:
     """The immutable pre-rebuild reference manifest for both bands.
 
     `configs` / `run_dirs` are {band: value}. A band may be omitted, which is recorded as
     such — a partial snapshot is honest and still useful, and `compare` refuses to approve
     a band the snapshot never covered.
+
+    `superseded_run_dirs` is {band: [run_dir, ...]}: earlier Exp-A runs whose stores are
+    already gone, recorded artifact-only alongside the live reference (see
+    `superseded_run_evidence`).
     """
+    superseded_run_dirs = superseded_run_dirs or {}
     bands = {}
     for band in BANDS:
         if band not in run_dirs:
@@ -665,6 +739,7 @@ def snapshot(configs, run_dirs, *, hash_npz=True, allow_store_commit_divergence=
         bands[band] = build_band_evidence(
             configs[band], band, run_dirs[band],
             hash_npz=hash_npz, allow_store_commit_divergence=allow_store_commit_divergence,
+            superseded_run_dirs=superseded_run_dirs.get(band, ()),
         )
 
     if not bands:

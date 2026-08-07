@@ -96,6 +96,60 @@ to the owner, not done unilaterally.
 **Not done:** the authoritative snapshot (needs IBEX), step 2's multiplicity foundation (blocked by
 the snapshot), and every later step.
 
+### Follow-up the same day — the IBEX check landed, and it moves the reference runs. **A-M10-7.**
+
+Owner ran the store/run inventory on IBEX. Result:
+
+    10ghz: 73 sessions, store commit(s): 3f465abcd38d2f9f451c2292779b9fcfe1bb5b52
+    77ghz: 72 sessions, store commit(s): 3f465abcd38d2f9f451c2292779b9fcfe1bb5b52
+    exp-a-full runs present: *_f36c4fb2 (x2), *_f0a46aa6 (x2), *_3f465abc (x2)
+
+So **the stores that backed the `f0a46aa6` Exp-A runs no longer exist anywhere.** The commit move to
+`3f465ab` rebuilt them — exactly the cost HISTORY 2026-08-04 recorded accepting at the time ("the
+commit moves, so trap 18 applies again: both stores rebuilt, Exp A re-run on both bands"). The
+milestone-10 plan, written three days later, named the `f0a46aa6` pair in §1.3 without re-checking
+that it was still current. It was not.
+
+**A-M10-7 (inventory correction, not a protocol amendment).** The reference Exp-A runs are
+`20260804T150841445054Z_3f465abc` (10 GHz) and `20260804T171005433711Z_3f465abc` (77 GHz) — the runs
+the live stores actually back. This changes no computation, no estimand and no acceptance criterion;
+it corrects which two directories the word "reference" points at. Plan §1.3's own wording is
+"validates the **current** M9 stores/runs", so this is what it already asked for. Recorded as an
+amendment anyway, because "which artifact is the reference" is exactly the kind of fact that must not
+change silently between a plan and its implementation.
+
+**The substitution is not asserted to be safe — it is measured.** `superseded_run_evidence` was added
+so the manifest records the demoted `f0a46aa6` runs artifact-only (their tables still exist even
+though their store does not) and compares them to the new reference by the O-M9-5 criterion:
+selection-table byte-identity, selected-feature-key equality per fold, then bounded |Δy_pred|. If the
+two pairs ever disagreed on which feature key a fold selected, moving the reference would change what
+Exp F consumes — so that is reported rather than assumed. `reference_grade` is deliberately not
+affected: this is provenance for *why* the reference moved, not a second gate.
+
+Also verified before trusting the checkout: between `3f465ab` and this branch, the only change under
+`features/`/`preprocess/`/`data/` is `store.py` gaining the `packages` fingerprint field (`5b5ff06`),
+which `_check_match` deliberately ignores. `wst.py`, `pooling.py` and `extraction*.py` are
+byte-unchanged, so checking out `v1_milestone_10` on IBEX reconstructs tuned matrices with exactly
+the code the reference run used. Had that not held, the snapshot would have had to be taken from a
+worktree pinned at `3f465ab`.
+
+**Two IBEX-tree hygiene fixes, both of which had blocked `submit_ibex.sh` on a "DIRTY" tree carrying
+no source change at all:** `dcgm/` was already ignored as of `14def09` (IBEX sits at `3f465ab`, which
+predates it, so the checkout alone fixes it), and `results/exploratory_frame_split/` is now ignored
+too, for the identical reason the `dcgm/` entry gives.
+
+**Local test status, stated exactly.** `tests/test_reference_gate.py` 27/27. Full suite: 1177 passed,
+**5 failed**, 16 skipped. The five are pre-existing and Windows-only — `test_exp_b_ibex_scripts.py` /
+`test_exp_d_ibex_scripts.py` hand `bash` a Windows path whose backslashes Git Bash eats
+(`C:UsersjosemsosagDesktop...`) and run inline `bash -c` strings that return empty here. They
+reference `run_exp_b.sbatch`/`run_exp_c.sbatch`, never any M10 file. Worth recording because writing
+the new wrapper's own syntax test reproduced the same class for real: Python's `subprocess` with
+`text=True` rewrites `\n` to `os.linesep` on the way into the pipe, and a CRLF landing after a
+line-continuation backslash ends the command early, so `bash -n` reports a syntax error in a
+perfectly valid script. Fixed by feeding bytes with LF forced. That is the CRLF-breaks-the-shell
+failure `.gitattributes`'s `scripts/ibex/* text eol=lf` rule exists to prevent, met from a new
+direction. `git diff --exit-code -- tests/test_no_leakage.py` clean throughout.
+
 ## 2026-08-07 — `plans/MILESTONE_10_PLAN.md` independently reviewed and accepted, with six protocol amendments (A-M10-1..6); `SECOND_CHAPTER.md` §9 reconciled to match; HANDOFF.md rewritten for implementation kickoff. Still no code.
 
 The plan drafted earlier today went through independent review before implementation, per this

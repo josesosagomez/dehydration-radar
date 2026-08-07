@@ -92,6 +92,15 @@ def _print_snapshot(manifest) -> None:
         print(f"    folds     : {evidence['folds']['n_selectable']}/{evidence['folds']['n_folds']} selectable")
         print(f"    stage 1   : {evidence['stage1_candidates']['n_candidates']} candidates")
         print(f"    features  : {len(evidence['feature_inputs'])} distinct selected feature keys")
+        for superseded in evidence.get("superseded_runs", []):
+            verdict = superseded["vs_reference"]
+            detail = verdict["fault"] or (
+                f"max|dy_pred| = {verdict['max_abs_pred_delta']:.3e}"
+                if verdict["max_abs_pred_delta"] is not None else "n/a"
+            )
+            print(f"    superseded: {superseded['name']} ({superseded['commit'][:8]}) "
+                  f"-> {verdict['status']}; selection table identical="
+                  f"{verdict['selection_table_byte_identical']}; {detail}")
 
 
 def _print_comparison(sources) -> None:
@@ -119,6 +128,11 @@ def main(argv=None) -> int:
 
     parser.add_argument("--reference-10", metavar="RUN_DIR", help="M9 Exp A 10 GHz run directory")
     parser.add_argument("--reference-77", metavar="RUN_DIR", help="M9 Exp A 77 GHz run directory")
+    parser.add_argument("--superseded-10", action="append", metavar="RUN_DIR",
+                        help="an earlier 10 GHz Exp A run whose store is already gone; recorded "
+                             "artifact-only and compared to the reference (repeatable)")
+    parser.add_argument("--superseded-77", action="append", metavar="RUN_DIR",
+                        help="same, for 77 GHz")
     parser.add_argument("--reference-manifest", metavar="PATH", help="the snapshot to compare against")
     parser.add_argument("--final-10-file", metavar="PATH", help="pointer file naming the final 10 GHz run dir")
     parser.add_argument("--final-77-file", metavar="PATH", help="pointer file naming the final 77 GHz run dir")
@@ -142,10 +156,12 @@ def main(argv=None) -> int:
         if not run_dirs:
             parser.error("--snapshot needs --reference-10 and/or --reference-77")
 
+        superseded = {"10ghz": args.superseded_10 or [], "77ghz": args.superseded_77 or []}
         configs = _configs(args, sorted(run_dirs))
         manifest = gate.snapshot(
             configs, run_dirs, hash_npz=hash_npz,
             allow_store_commit_divergence=args.allow_store_commit_divergence,
+            superseded_run_dirs=superseded,
         )
         path = gate.write_json(args.output, manifest)
         _print_snapshot(manifest)
