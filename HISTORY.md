@@ -4,6 +4,202 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-07 — M10 step 1a: the Exp-A reference gate is built and tested — and the plan's premise for *where* to run it is wrong. The authoritative M9 stores are on IBEX, not this machine, so the snapshot cannot be taken locally.
+
+Branch `v1_milestone_10` created off `fee9172`. First job per `plans/MILESTONE_10_PLAN.md` §4.2 step 1
+and HANDOFF's "do this first": build `validate_exp_a_reference.py` and snapshot
+`reference_exp_a_manifest.json` from the M9 stores **before** any structural edit or store rebuild.
+
+**The finding that changes the sequencing — checked, not assumed.** HANDOFF asserted that "both M9
+stores (`results/features/{10ghz,77ghz}/`) ... are still present on disk right now". The directories
+are present; the stores they are supposed to hold are not the reference ones:
+
+- **77 GHz: 1 of 72 sessions present locally** (`s1_8am.npz` only, 13 MB). The 72-session store the
+  reference run consumed was never on this machine.
+- **10 GHz: complete (73/73 sessions, 5.23 GB) but built at the wrong commit.** Every one of the 73
+  sidecars records `git.commit = dab8f708`; both reference Exp A runs record `f0a46aa6`. Since
+  `store._check_match` is strict commit equality, that store *could not have backed those runs* —
+  and HISTORY 2026-08-04 says so directly: "the stores were rebuilt at `f0a46aa`" (on IBEX).
+
+So the plan's step-1 command, written as a local one, would have hashed a store that is not evidence
+about the reference runs, and (for 77 GHz) would simply have failed on a missing session. The gate is
+therefore **run on IBEX**, where the `f0a46aa6` stores live, via a new
+`scripts/ibex/validate_exp_a_reference.sbatch`. Consequence: the snapshot now needs a commit + push +
+IBEX pull first, which is safe (a new file is not a structural edit and rebuilds nothing) but does
+mean step 2 — the multiplicity foundation, the one edit every other experiment depends on — stays
+blocked until the manifest comes back.
+
+*Why the local store's commit divergence is only a provenance problem, not a numerical one, and why
+that does not rescue it:* `git diff dab8f708 f0a46aa6` touches nothing under `features/`,
+`preprocess/`, `data/`, or the WST configs (only `config.py` overlays, `exp_c`/`exp_d`, provenance,
+scripts, tests). The arrays are very probably identical. But "very probably identical" is not what a
+reference gate is for, and M9 already paid two days for assuming an environment was equivalent
+(O-M9-5). The tool records the divergence and refuses the grade instead of reasoning about it.
+
+**What was built.**
+
+- `src/dehyd/eval/reference_gate.py` — the evidence builder. Plan §4.1 lists only the entrypoint;
+  the logic lives in `src/` per CLAUDE.md's "tested library code in `src/` over notebook scripts", so
+  this module is a disclosed addition to that file list (additive, touches no shared code).
+- `experiments/validate_exp_a_reference.py` — thin CLI, `--snapshot` / `--compare`, the plan's §6
+  literal command still valid (band configs default to the canonical Exp-A configs; `--config` adds
+  the IBEX paths overlay to both bands).
+- `scripts/ibex/validate_exp_a_reference.sbatch` — `MODE=snapshot|compare`, 4 cores / 64 G / 4 h,
+  git-free `DEHYD_GIT_COMMIT` pattern. Covered by the existing `.gitattributes` `scripts/ibex/*
+  eol=lf` rule, so the CRLF-shebang trap is already paid for.
+- `tests/test_reference_gate.py` — 22 tests, all green, on a synthetic four-subject world.
+
+**Design decisions worth recording.**
+
+- *Evidence is branch-aware because the branches are not the same kind of thing.* `off`/`frozen` read
+  a stored, data-independent session vector — hashing that array is the complete input evidence.
+  `tuned` is reconstructed fold-locally, so its evidence is raw/prelog/order **plus** the fold's
+  training subjects, the ε they produce, and the hash of the matrix rebuilt from them. The real-data
+  run proves why this matters: subjects 1/2/3/4/13/15 all select `(1,'A','mag',0,'tuned')` and get
+  ε₁ = 9.209e-05, while subjects 5 and 16 select the same key and get 9.100e-05 — the train-only
+  median moved when a different subject was held out. A vector-only snapshot would have recorded one
+  number for six different fitted quantities.
+- *Nothing re-implements Exp A.* Folds come from `nested_loso_splits`, candidates from
+  `exp_a.stage1_candidates`/`stage2_candidates`, feature matrices from Exp A's own
+  `StoreBackedFeatures.data_for`. One subtlety pinned by test: `exp_a.run_exp_a` calls
+  `nested_loso_splits(subjects)` with **no** split kwargs, so it takes the module defaults, not
+  `config.split`. The gate calls it identically and records which constants that resolved to.
+- *The comparison criterion is O-M9-5's, not a new one.* Every discrete outcome (population, folds,
+  both candidate enumerations, which feature key each fold selected, the stored arrays those keys
+  read, the fold-local ε, the reconstructed matrices, the selection table) is compared with **no
+  tolerance at all**. Only `predictions`/`scores` carry one, bounded by `exp_d.O_M9_5_PRED_TOLERANCE`
+  = 1e-10 imported from its single definition (lazily — `exp_d` imports torch at module scope and
+  this gate is a torch-free pre-fit tool). Inventing a second tolerance constant here is exactly the
+  drift the single-definition rule exists to stop. The tolerance can never rescue a genuine drift,
+  because a genuine drift changes a model selection, which lands in the tolerance-free class first.
+- *A degraded snapshot is written, not refused outright, and can never be promoted.* Running against
+  a store whose build commit differs from the reference run's stamps the manifest
+  `degraded_store_commit_divergence`, exits 3, and `--compare` refuses such a manifest by schema
+  check. That is what let the tool be exercised on real data today without producing something that
+  could later be mistaken for the milestone reference.
+
+**Real-data mechanism check (local 10 GHz store, degraded grade, written to scratchpad — deliberately
+NOT to `results/milestone10/`).** Completed end to end: 16 subjects, 73 sessions, 16/16 selectable
+folds, 72 Stage-1 candidates, 6 distinct selected feature keys, all 16 tuned/frozen fold matrices
+reconstructed, manifest 0.4 MB. Per-subject seed-mean MAE reproduces the M9 negative result's scale
+(0.29–0.91 Δm% points). So the tool is proven on real store data before it costs an IBEX round trip —
+the handoff's own warning that "every real M9 bug lived in an untested success path" applied directly.
+
+**A second inventory fact, found while checking the first.** `results/runs/*_f0a46aa6/` and
+`*_3f465abc/` are **not** version-controlled — only the two M7 `*_f36c4fb2` dirs are (`.gitignore:35`
+negates just those). HANDOFF describes all three as tracked exceptions; it is wrong. Those M9
+reference runs exist only on this machine and on IBEX, they were already lost once this project
+(recovered from the Recycle Bin, HISTORY 2026-08-03), and the gate depends on them. They are ~106 KB
+each. Committing them under the same `-text` `.gitattributes` treatment as `*_f36c4fb2` is proposed
+to the owner, not done unilaterally.
+
+**Not done:** the authoritative snapshot (needs IBEX), step 2's multiplicity foundation (blocked by
+the snapshot), and every later step.
+
+## 2026-08-07 — `plans/MILESTONE_10_PLAN.md` independently reviewed and accepted, with six protocol amendments (A-M10-1..6); `SECOND_CHAPTER.md` §9 reconciled to match; HANDOFF.md rewritten for implementation kickoff. Still no code.
+
+The plan drafted earlier today went through independent review before implementation, per this
+project's standing review-before-code discipline. The review found real problems with the
+as-drafted design, not just prose issues, and the plan was substantially rewritten (787 lines) to
+fix them. Six explicit amendments, made after A-D's results were visible and disclosed as such
+(`plans/MILESTONE_10_PLAN.md` §0.2):
+
+- **A-M10-1 (Exp E design).** The milestone-6 freeze's standalone 4-fold permutation CV violates the
+  project-wide "every reported result uses outer LOSO" rule and is undefined for incomplete
+  validation trajectories. Replaced with **leave-one-path-group-out refit under ordinary outer LOSO**
+  — the *documented alternative* the frozen text already named (`implementation_plan.md:1085-1086`),
+  so this promotes an already-specified fallback rather than inventing new design post-hoc.
+- **A-M10-2 (Exp F/HR).** Heart rate is not estimable from the delivered data (confirmed: zero HR
+  observations anywhere). The software must emit `status="not_estimable_missing_heart_rate"`,
+  `n_hr_observations=0`, and the inventory evidence — never a proxy correlation, never a silent
+  relabeling of the static-covariate analysis as an HR check.
+- **A-M10-3 (Exp G OOF predictions).** My original plan proposed reusing
+  `InnerResult.val_predictions` for Exp G's cross-fitted OOF predictions. **This was wrong and the
+  review caught it**: `val_predictions` stores only the first configured seed and reflects folds used
+  during candidate *selection* — reusing it would violate the five-seed contract and leak
+  selection information into the meta-training inputs. The accepted fix is genuine **selection-honest
+  nested cross-fitting**: a further level of `selection_folds` inside each outer-training set, so no
+  subject whose OOF prediction feeds alpha-selection was seen during that prediction's own candidate
+  selection or fit. Worth recording precisely because it was my own design error, not a pre-existing
+  ambiguity — the lesson is that a harness convenience field computed for one purpose (candidate
+  scoring) cannot be silently repurposed for a different purpose (meta-learner training) without
+  re-checking what leakage guarantee it actually carries.
+- **A-M10-4 (Exp G scope).** Feature-level fusion stays explicitly deferred, not a milestone-10
+  completion criterion — no learner/reduction/budget was ever frozen for it, and inventing one now
+  (after two null single-band arms) would be exactly the post-hoc tuning this project exists to avoid.
+- **A-M10-5 (robustness bootstrap CI method).** The `R=200` full-procedure resamples produce an
+  **empirical 2.5th/97.5th percentile range**, not a BCa interval — BCa needs an original-statistic
+  jackknife, which an already-bootstrapped vector of replicate estimates doesn't provide. Labelled
+  `selection_variance_empirical_95pct_range` throughout, never `ci_method=bca`.
+- **A-M10-6 (Exp E reporting stance).** My earlier framing ("report as a null attribution," resolved
+  as an owner decision the same day) is **superseded**: the review's position is that pre-labelling
+  the per-path result "null" or "physical" before it exists encodes a desired narrative as a software
+  acceptance criterion. The accepted stance is outcome-neutral — state the model's known-weak
+  predictive context before the path table, then report the table as measured, with no
+  pre-determined reading of what an important path would mean.
+
+**`SECOND_CHAPTER.md` §9 reconciled to the accepted plan in this session** — it had recorded the
+pre-review framing (4-fold permutation CV, null-attribution stance) as already decided, which was
+now stale and actively contradicted the accepted design. Rewriting a stale pre-registration note to
+match a reviewed design is not the same failure as silently re-deciding after seeing a result: the
+chronology (drafted 2026-08-06/07, corrected by review 2026-08-07, before any M10 result exists) is
+preserved in the section text itself.
+
+**HANDOFF.md rewritten** for a fresh chat to start *implementation* (not planning) of milestone 10,
+pointing into `plans/MILESTONE_10_PLAN.md` by section rather than duplicating it, and flagging the
+one time-sensitive action: `plans/MILESTONE_10_PLAN.md` step 4.2.1 requires snapshotting
+`reference_exp_a_manifest.json` from the still-present, still-valid M9 stores/runs **before** any
+structural edit or store rebuild — that evidence cannot be reconstructed once the stores are
+rebuilt. Verified before writing HANDOFF: no M10 code exists yet (`src/dehyd/eval/exp_e.py` etc. are
+all absent), no `v1_milestone_10` branch exists, and both M9 stores plus every referenced M9 run
+directory (`results/runs/*_f0a46aa6`, `*_3f465abc`) are still present on disk.
+
+## 2026-08-07 — `plans/MILESTONE_10_PLAN.md` written; Exp E's owner decision resolved (null attribution); no code yet.
+
+Read `HANDOFF.md` and produced the milestone-10 implementation plan it hands off as the session's job
+(ROADMAP §7 item 9: G, E, F, H → `SECOND_CHAPTER.md` §9). Before drafting, asked the owner the three
+framing questions `SECOND_CHAPTER.md` §9 already flagged (2026-08-06) as needing resolution:
+
+- **Exp E's disposition — resolved today, the one genuinely new decision.** Of the three options §9
+  left open (null attribution / negative-control reframing / drop-with-justification), the owner chose
+  **null attribution**: run Experiment E exactly as pre-registered and report the permutation
+  importances as descriptive-only, explicitly not supporting the physical-signal hypothesis. `SECOND_CHAPTER.md`
+  §9 point 1 updated in place with this resolution and its chronology (mirrors how M9's O-M9-*
+  decisions were recorded at the moment of resolution, not only at the milestone's close).
+- **Exp F — reconfirmed:** proceed with the frozen four-nested-ridge-models design, disclose the
+  ROADMAP §4 heart-rate divergence plainly (heart rate is not in the delivered data — already recorded
+  in §9 point 2 on 2026-08-06).
+- **Exp G — reconfirmed:** the positive-fused-result reading was already pre-committed in §9 point 3 on
+  2026-08-06; today's answer just re-endorses proceeding on that basis. Nothing further to write.
+
+None of the three changes any frozen computation, so — unlike M9's A-M9-1/O-M9-* — none is a
+protocol-completion amendment to `implementation_plan.md`; all three are chapter-narrative/reporting
+stances, recorded in `SECOND_CHAPTER.md` §9 directly.
+
+**Plan content, briefly (full detail in `plans/MILESTONE_10_PLAN.md`).** Mapped the existing codebase
+before writing a single line of design: confirmed `eval/exp_a.py`'s staged search
+(`stage1_candidates`/`stage2_candidates`) and `eval/exp_b.py`'s residualization
+(`SessionResidualFeatures`, built on `baselines.session_means`) are both directly reusable by E/F/G
+rather than needing reimplementation; confirmed `pooling.session_feature_layout`'s docstring already
+states it exists for exactly Exp E's path-grouped permutation ("This is what M6 and interpretability
+consume"); confirmed `harness.InnerResult.val_predictions` already captures genuine cross-fitted
+out-of-fold predictions as a byproduct of the staged search, which is exactly what Exp G's α-selection
+needs and means no redundant refit is required there; confirmed the 77 GHz primary slow-time I/Q WST
+chain (`extraction_77.py`) is already built and in use by A/B/C/D, so Exp G is purely a combiner over
+existing per-band predictions, not a new feature-extraction task; confirmed zero code currently
+references `stats.robustness_replicates_r`/`robustness_min_distinct_subjects`/etc. outside `config.py`,
+so the selection-variance robustness bootstrap is genuinely unbuilt, matching HANDOFF's "H is assembly
+plus one component" claim. Sequenced the build order so the two reuse patterns G needs (E's "fit one
+pinned candidate, bypass the search" and F's "restrict the staged search to one family") are each
+proven independently, on a simpler driver, before G composes both. Scoped the selection-variance
+robustness bootstrap to Exp A/B/C only (not D — explicitly excluded by the frozen text as too
+expensive; not F/G — an author's-call scope decision, flagged in the plan for the review loop rather
+than assumed silently, since the frozen text doesn't enumerate which experiments it covers).
+
+**Not done this session:** no code, no branch created, no store rebuild, no full-cohort run. Per
+HANDOFF's own scoping, the session's job was the plan; branch `v1_milestone_10` is created off
+`v1_milestone_9a` at implementation start, not now.
+
 ## 2026-08-06 — Journals refreshed for a milestone-10 planning session: HANDOFF.md rewritten, and §9's scope + its three framing problems recorded *before* any M10 result exists.
 
 Owner is starting a fresh chat to plan milestone 10 (ROADMAP §7 item 9: G, E, F, H → §9), so
