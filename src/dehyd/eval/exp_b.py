@@ -189,14 +189,16 @@ def _session_train_subject_counts(provider: SessionResidualFeatures, train_subje
     return counts
 
 
-def _run_single_fold_b(config, band, sessions, store_dir, fold, seeds) -> ExpBFoldResult:
+def _run_single_fold_b(config, band, sessions, store_dir, fold, seeds,
+                       subject_multiplicity=None) -> ExpBFoldResult:
     """Run ONE outer fold end to end. Top-level + picklable so it can run in a worker
     process. Builds its OWN `SessionResidualFeatures` (open npz handles are not shareable
     across processes) and pins single-threaded math, mirroring `exp_a._run_single_fold`."""
     from threadpoolctl import threadpool_limits
 
     with threadpool_limits(1):
-        provider = SessionResidualFeatures(band, sessions, store_dir, config)
+        provider = SessionResidualFeatures(band, sessions, store_dir, config,
+                                           subject_multiplicity=subject_multiplicity)
         anchor = (config.search_10ghz if band == "10ghz" else config.search_77ghz).stage1_anchor_ridge_alpha
 
         def before_fit(candidate):
@@ -231,11 +233,13 @@ def _run_single_fold_b(config, band, sessions, store_dir, fold, seeds) -> ExpBFo
             s1 = harness._score_candidates_on_fold(
                 exp_a.stage1_candidates(config, band, anchor), fold, seeds, before_fit,
                 provider.data_for, score_fn=equal_session_objective,
+                subject_multiplicity=subject_multiplicity,
             )
             w1 = harness.select_stage_winner(s1)
             s2 = harness._score_candidates_on_fold(
                 exp_a.stage2_candidates(config, band, w1.feature_key, dict(w1.active)),
                 fold, seeds, before_fit, provider.data_for, score_fn=equal_session_objective,
+                subject_multiplicity=subject_multiplicity,
             )
             w2 = harness.select_stage_winner(s2)
         except SelectionError as err:
@@ -251,6 +255,7 @@ def _run_single_fold_b(config, band, sessions, store_dir, fold, seeds) -> ExpBFo
             ) from err
         final_fits, _, test_pred, _, seed_outcomes = harness._final_refit(
             w2, fold, seeds, before_fit, provider.data_for, score_fn=equal_session_objective,
+            subject_multiplicity=subject_multiplicity,
         )
 
         test_targets = provider.y_raw[test_rows_mask] - np.array(
@@ -283,7 +288,8 @@ def _run_single_fold_b(config, band, sessions, store_dir, fold, seeds) -> ExpBFo
         )
 
 
-def _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_workers) -> list[ExpBFoldResult]:
+def _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_workers,
+                        subject_multiplicity=None) -> list[ExpBFoldResult]:
     """Shared fold-parallel execution: build folds over `subjects`, run each independently
     (serially, or via a spawn-context Pool), reassemble in canonical test-subject order. Used
     by BOTH the pooled model (`run_exp_b`) and each session-specific search
@@ -294,17 +300,21 @@ def _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_wo
     what is genuinely Exp B's: which folds exist, what a task carries, and the canonical
     test-subject ordering of the reassembled results."""
     folds = [f for f in harness.nested_loso_splits(subjects) if f.selectable]
-    tasks = [(config, band, sessions, store_dir, fold, seeds) for fold in folds]
+    tasks = [
+        (config, band, sessions, store_dir, fold, seeds, subject_multiplicity) for fold in folds
+    ]
     results = fold_parallel.run_folds_parallel(_run_single_fold_b, tasks, n_workers, "exp_b")
     results.sort(key=lambda r: r.test_subject)
     return results
 
 
-def run_exp_b(config, band, sessions, store_dir, *, seeds, n_workers=1) -> list[ExpBFoldResult]:
+def run_exp_b(config, band, sessions, store_dir, *, seeds, n_workers=1,
+              subject_multiplicity=None) -> list[ExpBFoldResult]:
     """Mirrors `exp_a.run_exp_a`'s fold-parallel structure and spawn-context Pool exactly
     (results sorted by test_subject for deterministic reassembly)."""
     subjects = evaluable_subjects_b(sessions)
-    return _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_workers)
+    return _run_folds_parallel(config, band, sessions, store_dir, subjects, seeds, n_workers,
+                               subject_multiplicity)
 
 
 # ----------------------------------------------------------------------------- reporting

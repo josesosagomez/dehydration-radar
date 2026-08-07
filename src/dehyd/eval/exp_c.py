@@ -573,7 +573,8 @@ class _ExpCFoldTrace:
     stage2_by_arm: dict[str, harness.StageOutcome]
 
 
-def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> _ExpCFoldTrace:
+def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds,
+                             subject_multiplicity=None) -> _ExpCFoldTrace:
     """Run one fold and retain both search stages for the load-bearing mutation tests.
 
     Production calls `_run_single_fold_c`, which returns only `trace.result`; no additional
@@ -582,7 +583,8 @@ def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> 
     from threadpoolctl import threadpool_limits
 
     with threadpool_limits(1):
-        provider = OrdinalFeatures(band, sessions, store_dir, config)
+        provider = OrdinalFeatures(band, sessions, store_dir, config,
+                                   subject_multiplicity=subject_multiplicity)
         anchor = (
             config.search_10ghz if band == "10ghz" else config.search_77ghz
         ).stage1_anchor_ridge_alpha
@@ -591,6 +593,7 @@ def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> 
         stage1 = harness._score_candidates_on_fold(
             stage1_candidates_c(config, band, anchor), fold, seeds,
             _before_fit_c(config, "stage1"), provider.data_for, score_fn=ordinal_class_mae_score,
+            subject_multiplicity=subject_multiplicity,
         )
         w1, w1_score, stage1_qwk = _select_ordinal(stage1, sessions, fold, "Stage 1")
 
@@ -604,6 +607,7 @@ def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> 
             stage2 = harness._score_candidates_on_fold(
                 build_candidates(config, band, w1.feature_key, dict(w1.active)), fold, seeds,
                 before_fit, provider.data_for, score_fn=ordinal_class_mae_score,
+                subject_multiplicity=subject_multiplicity,
             )
             stage2_by_arm[arm] = stage2
             winner, winner_score, qwk_exposure = _select_ordinal(
@@ -615,6 +619,7 @@ def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> 
             final_fits, _, test_pred, _, seed_outcomes = harness._final_refit(
                 winner, fold, seeds, before_fit, provider.data_for,
                 score_fn=ordinal_class_mae_score,
+                subject_multiplicity=subject_multiplicity,
             )
             arms[arm] = ExpCArmResult(
                 arm=arm,
@@ -654,22 +659,27 @@ def _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds) -> 
         )
 
 
-def _run_single_fold_c(config, band, sessions, store_dir, fold, seeds) -> ExpCFoldResult:
+def _run_single_fold_c(config, band, sessions, store_dir, fold, seeds,
+                       subject_multiplicity=None) -> ExpCFoldResult:
     """Run ONE outer fold end to end.
 
     Top-level + picklable so it can run in a worker process; builds its own provider and pins
     single-threaded math, mirroring Exp A/B. The internal trace is discarded after returning
     the ordinary result.
     """
-    return _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds).result
+    return _run_single_fold_c_trace(config, band, sessions, store_dir, fold, seeds,
+                                    subject_multiplicity).result
 
 
-def run_exp_c(config, band, sessions, store_dir, *, seeds, n_workers=1) -> list[ExpCFoldResult]:
+def run_exp_c(config, band, sessions, store_dir, *, seeds, n_workers=1,
+              subject_multiplicity=None) -> list[ExpCFoldResult]:
     """The selectable outer folds, run through the shared `fold_parallel` pool and reassembled
     in canonical test-subject order (bit-identical to the serial run). Folds come only from
     `splits.py`."""
     folds = [f for f in harness.nested_loso_splits(evaluable_subjects_c(sessions)) if f.selectable]
-    tasks = [(config, band, sessions, store_dir, fold, seeds) for fold in folds]
+    tasks = [
+        (config, band, sessions, store_dir, fold, seeds, subject_multiplicity) for fold in folds
+    ]
     results = fold_parallel.run_folds_parallel(_run_single_fold_c, tasks, n_workers, "exp_c")
     results.sort(key=lambda r: r.test_subject)
     return results

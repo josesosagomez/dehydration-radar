@@ -429,10 +429,15 @@ def _seed_list(candidate, seeds):
 
 
 def _fit_score_inner(candidate, bundle, inner, seeds, before_fit, *, score_fn=None,
-                     row_multiplicity=None) -> tuple:
+                     subject_multiplicity=None) -> tuple:
     """Fit on inner-train, score inner-val (`score_fn`, mean over seeds; `None` -> the
     original subject-balanced MAE, unchanged)."""
     subjects, X, y = bundle.subjects, bundle.X, bundle.y
+    # Derived from THIS bundle's rows, never from the provider's full row set: Exp B's
+    # provider drops degenerate sessions, and which rows it drops depends on the fold's
+    # training subjects — so a row-aligned array computed once outside would silently
+    # misalign against the bundles that actually get fit.
+    row_multiplicity = subject_row_multiplicity(subjects, subject_multiplicity)
     train_rows = np.isin(subjects, sorted(inner.train_subjects))
     val_rows = np.isin(subjects, sorted(inner.val_subjects))
     audit = _multiplicity_audit(train_rows, row_multiplicity, subjects)
@@ -463,7 +468,7 @@ def _fit_score_inner(candidate, bundle, inner, seeds, before_fit, *, score_fn=No
 
 
 def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, score_fn=None,
-                              row_multiplicity=None) -> StageOutcome:
+                              subject_multiplicity=None) -> StageOutcome:
     n_c, n_f = len(candidates), len(fold.inner_folds)
     inner_scores = np.full((n_c, n_f), np.nan)
     cells: dict = {}
@@ -474,7 +479,10 @@ def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, 
             bundle = data_for(candidate, inner.train_subjects)
             feature_dims[ci] = int(bundle.X.shape[1])
             train_rows = np.isin(bundle.subjects, sorted(inner.train_subjects))
-            reason = _viability_reason(candidate, bundle, train_rows, row_multiplicity)
+            reason = _viability_reason(
+                candidate, bundle, train_rows,
+                subject_row_multiplicity(bundle.subjects, subject_multiplicity),
+            )
             if reason is not None:
                 cells[(ci, fj)] = InnerResult(
                     inner.train_subjects, inner.val_subjects, candidate.candidate_id,
@@ -483,7 +491,7 @@ def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, 
                 continue
             score, val_predictions, fits = _fit_score_inner(
                 candidate, bundle, inner, seeds, before_fit, score_fn=score_fn,
-                row_multiplicity=row_multiplicity,
+                subject_multiplicity=subject_multiplicity,
             )
             inner_scores[ci, fj] = score
             cells[(ci, fj)] = InnerResult(
@@ -518,7 +526,7 @@ def select_stage_winner(stage: StageOutcome) -> Candidate:
 
 
 def _final_refit(candidate, fold, seeds, before_fit, data_for, *, score_fn=None,
-                 row_multiplicity=None) -> tuple:
+                 subject_multiplicity=None) -> tuple:
     """Refit the winner on all outer-training subjects (per seed), predict train + test.
 
     The held-out subject is never resampled: it is one subject with one role, and its score
@@ -528,6 +536,7 @@ def _final_refit(candidate, fold, seeds, before_fit, data_for, *, score_fn=None,
     """
     bundle = data_for(candidate, fold.train_subjects)
     subjects, X, y = bundle.subjects, bundle.X, bundle.y
+    row_multiplicity = subject_row_multiplicity(subjects, subject_multiplicity)
     train_rows = np.isin(subjects, sorted(fold.train_subjects))
     test_rows = np.isin(subjects, [fold.test_subject])
     audit = _multiplicity_audit(train_rows, row_multiplicity, subjects)
@@ -571,12 +580,11 @@ def run_nested_candidates(
     `_score`) without changing fold construction, the tie-break, or anything else."""
     if data_for is None:
         data_for = fixed_feature_provider(dataset)
-    folds = nested_loso_splits(dataset.subject_ids(), **split_kwargs)
     # Folds come from the DISTINCT subject ids either way: plan §2.4's "LOSO roles are
     # constructed over distinct drawn subjects; every copy of one original subject always
     # has one role". Multiplicity changes how much each training subject weighs, never who
     # is held out.
-    row_multiplicity = subject_row_multiplicity(dataset.subjects, subject_multiplicity)
+    folds = nested_loso_splits(dataset.subject_ids(), **split_kwargs)
 
     results = []
     with threadpool_limits(1):
@@ -585,12 +593,12 @@ def run_nested_candidates(
                 continue
             stage = _score_candidates_on_fold(
                 candidates, fold, seeds, before_fit, data_for, score_fn=score_fn,
-                row_multiplicity=row_multiplicity,
+                subject_multiplicity=subject_multiplicity,
             )
             winner = select_stage_winner(stage)
             final_fits, train_pred, test_pred, test_score, seed_outcomes = _final_refit(
                 winner, fold, seeds, before_fit, data_for, score_fn=score_fn,
-                row_multiplicity=row_multiplicity,
+                subject_multiplicity=subject_multiplicity,
             )
             results.append(
                 FoldResult(

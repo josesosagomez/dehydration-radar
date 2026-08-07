@@ -529,6 +529,50 @@ def test_fit_audit_carries_multiplicity_only_under_a_bootstrap():
             assert record.params["weighting_mode"].tobytes() == b"row_duplication"
 
 
+def test_multiplicity_stays_aligned_when_a_provider_drops_rows():
+    """Regression for a real defect. The harness first took `row_multiplicity` as an ndarray
+    (plan §4.1's literal signature), which is only safe if every bundle has the provider's own
+    rows. Exp B's `SessionResidualFeatures` drops the rows of degenerate sessions, and WHICH
+    rows depends on the fold's training subjects — so an array built once outside would attach
+    multiplicities to the wrong rows, silently and without raising.
+
+    This drives the same shape through the harness: a provider whose bundles carry FEWER rows
+    than the dataset spine (one session dropped per subject, mirroring Exp B's degenerate-
+    session rule while leaving every subject represented). If the mapping were expanded
+    against the provider's full spine instead of the bundle's, the per-row counts would slide
+    out of step and land on the wrong subjects.
+    """
+    from dehyd.eval.harness import Candidate, FeatureBundle, run_nested_candidates
+
+    n_sessions = 4
+    dataset = _harness_dataset(n_subjects=5, n_sessions=n_sessions, seed=21)
+    # Drop each subject's last session: 20 spine rows -> 15 bundle rows, all subjects kept.
+    session_position = np.concatenate([np.arange(n_sessions)] * 5)
+    keep = session_position < (n_sessions - 1)
+    kept_per_subject = n_sessions - 1
+
+    def dropping_provider(candidate, train_subjects):
+        return FeatureBundle(dataset.subjects[keep], dataset.features[keep], dataset.targets[keep])
+
+    multiplicity = {1: 3, 2: 1, 3: 2, 4: 1, 5: 4}
+    results = run_nested_candidates(
+        dataset, [Candidate("ridge_1", "ridge", (("alpha", 1.0),))], seeds=(0,),
+        data_for=dropping_provider, subject_multiplicity=multiplicity,
+    )
+
+    audited = [r for fold in results for r in fold.final_fits if "multiplicity_counts" in r.params]
+    assert audited
+    for record in audited:
+        counts = dict(zip(record.params["multiplicity_subjects"].tolist(),
+                          record.params["multiplicity_counts"].tolist()))
+        # Every subject must carry ITS OWN count, not a neighbour's.
+        for subject, count in counts.items():
+            assert count == multiplicity[subject], f"subject {subject} got {count}"
+        # ...and the effective row count must be over the BUNDLE's rows, not the spine's.
+        assert float(record.params["effective_weighted_row_count"][0]) == \
+            sum(multiplicity[s] * kept_per_subject for s in counts)
+
+
 def test_harness_multiplicity_equals_a_physically_duplicated_dataset():
     """The end-to-end statement the milestone rests on.
 

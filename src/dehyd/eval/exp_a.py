@@ -244,7 +244,8 @@ class ExpAFoldResult:
     final_fits: list
 
 
-def _run_single_fold(config, band, sessions, store_dir, session_index, fold, seeds) -> ExpAFoldResult:
+def _run_single_fold(config, band, sessions, store_dir, session_index, fold, seeds,
+                     subject_multiplicity=None) -> ExpAFoldResult:
     """Run ONE outer fold end to end and return its ExpAFoldResult. Top-level + picklable so it
     can run in a worker process. Builds its OWN store-backed provider (open npz handles are not
     shareable across processes) and pins single-threaded math, so a fold's result is bit-identical
@@ -254,7 +255,8 @@ def _run_single_fold(config, band, sessions, store_dir, session_index, fold, see
     from ..models.baselines import fit_session_index_baseline, predict_session_index
 
     with threadpool_limits(1):
-        provider = StoreBackedFeatures(band, sessions, store_dir, config)
+        provider = StoreBackedFeatures(band, sessions, store_dir, config,
+                                       subject_multiplicity=subject_multiplicity)
         anchor = (config.search_10ghz if band == "10ghz" else config.search_77ghz).stage1_anchor_ridge_alpha
 
         def before_fit(candidate):
@@ -263,21 +265,25 @@ def _run_single_fold(config, band, sessions, store_dir, session_index, fold, see
             protocol_freeze_guard(config, active=active)
 
         s1 = harness._score_candidates_on_fold(
-            stage1_candidates(config, band, anchor), fold, seeds, before_fit, provider.data_for
+            stage1_candidates(config, band, anchor), fold, seeds, before_fit, provider.data_for,
+            subject_multiplicity=subject_multiplicity,
         )
         w1 = harness.select_stage_winner(s1)
         s2 = harness._score_candidates_on_fold(
             stage2_candidates(config, band, w1.feature_key, dict(w1.active)),
             fold, seeds, before_fit, provider.data_for,
+            subject_multiplicity=subject_multiplicity,
         )
         w2 = harness.select_stage_winner(s2)
         final_fits, _, test_pred, _, seed_outcomes = harness._final_refit(
-            w2, fold, seeds, before_fit, provider.data_for
+            w2, fold, seeds, before_fit, provider.data_for,
+            subject_multiplicity=subject_multiplicity,
         )
 
         # session-index-only baseline (K=1), fit on the same outer-training subjects.
         base = fit_session_index_baseline(
-            provider.subjects, session_index, provider.y, fold.train_subjects
+            provider.subjects, session_index, provider.y, fold.train_subjects,
+            subject_multiplicity=subject_multiplicity,
         )
         test_rows = np.isin(provider.subjects, [fold.test_subject])
         base_pred = predict_session_index(base.model, session_index[test_rows])
@@ -295,15 +301,22 @@ def _run_single_fold(config, band, sessions, store_dir, session_index, fold, see
         )
 
 
-def run_exp_a(config, band, sessions, store_dir, *, seeds, session_index, n_workers=1) -> list:
+def run_exp_a(config, band, sessions, store_dir, *, seeds, session_index, n_workers=1,
+              subject_multiplicity=None) -> list:
     """Per outer fold: Stage 1 (feature axes at ridge anchor) → Stage 2 (family × grid) → refit,
     plus the session-index-only baseline. The outer folds are independent, so with `n_workers>1`
     they run in parallel worker processes (each single-threaded) and the results are reassembled
     in canonical test-subject order — **bit-identical to the serial run**, just faster. Guard runs
     before every fit inside each fold. Folds come only from `splits.py`."""
     subjects = sorted({int(s["subject"]) for s in sessions})
+    # Folds are built over the DISTINCT subjects either way (plan §2.4: every copy of one
+    # original subject always has one role), so a bootstrap changes how much each training
+    # subject weighs, never who is held out.
     folds = [f for f in harness.nested_loso_splits(subjects) if f.selectable]
-    tasks = [(config, band, sessions, store_dir, session_index, fold, seeds) for fold in folds]
+    tasks = [
+        (config, band, sessions, store_dir, session_index, fold, seeds, subject_multiplicity)
+        for fold in folds
+    ]
 
     if n_workers <= 1 or len(tasks) <= 1:
         results = [_run_single_fold(*t) for t in tasks]

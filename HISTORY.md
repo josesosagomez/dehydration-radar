@@ -190,6 +190,29 @@ subject always has one role"), and the selected candidate, inner-score matrix an
 predictions all agree. *That test caught an error in its own first version:* it compared 4
 predictions against 12, because the reference dataset duplicates the held-out subject's rows too.
 
+**A row-alignment bug caught while threading the orchestration, and the refactor it forced.** The
+harness first took `row_multiplicity` as an ndarray, per plan §4.1's literal signature ("harness
+fit/scoring calls add keyword-only `row_multiplicity: ndarray | None = None`"). That is only safe if
+every bundle a provider returns has the same rows as the provider's own spine — true for Exp A and
+Exp C, and **false for Exp B**, whose `SessionResidualFeatures.data_for` drops the rows of
+degenerate sessions, with *which* sessions drop depending on the fold's training subjects. A single
+array built once outside the harness would therefore have silently misaligned against the bundles
+that actually get fit: no exception, just multiplicities attached to the wrong rows.
+
+Fixed by moving the expansion inside: the harness now takes the `{subject: m_s}` **mapping** and
+calls `subject_row_multiplicity(bundle.subjects, ...)` for each bundle it receives, so alignment is
+established against the same array the fit indexes. This is a deliberate departure from §4.1's
+signature; the mapping is the only representation that cannot go out of step with a bundle whose row
+count is fold-dependent. Found before it could produce a wrong number, but only because Exp B's
+row-dropping was checked rather than assumed — worth recording as the kind of thing "thread a
+parameter through" hides.
+
+**Orchestration.** `subject_multiplicity` now reaches `run_exp_a`/`_run_single_fold`,
+`run_exp_b`/`_run_single_fold_b`/`_run_folds_parallel`, and
+`run_exp_c`/`_run_single_fold_c`/`_run_single_fold_c_trace`, including through the spawn-context
+worker task tuples. Folds are still built over the DISTINCT subjects in all three, so a bootstrap
+changes how much each training subject weighs and never who is held out.
+
 **Providers.** `subject_multiplicity` threaded through `StoreBackedFeatures` (and therefore Exp B's
 `SessionResidualFeatures` and Exp C's `OrdinalFeatures`, which wrap it). The interesting one is
 `tuned_epsilons`: ε is a **median** over training subjects, an order statistic, so a weight cannot
