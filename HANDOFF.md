@@ -1,173 +1,132 @@
-# HANDOFF — resume point for a new chat (MILESTONE 10 PLAN ACCEPTED; next job: **implement** it)
+# HANDOFF — resume point for a new chat (STEPS 1–2 DONE, RE-REVIEW PASSED; next job: **step 3**)
 
-_Written 2026-08-07. The next chat's job: **implement `plans/MILESTONE_10_PLAN.md`** (787 lines,
-independently reviewed and accepted 2026-08-07 — this is the authoritative design, not a summary
-you should re-derive from ROADMAP.md/`implementation_plan.md`, which it amends in six disclosed
-places). Read this file, then `plans/MILESTONE_10_PLAN.md` in full — it is dense and every section is
-load-bearing; do not skim it and start coding from memory of what M10 "should" contain. No code
-exists yet. One action is time-sensitive — see "Do this first," below, before anything else._
+_Written 2026-08-08. The next chat's job: **implement `plans/MILESTONE_10_PLAN.md` §4.2 step 3 — the
+H robustness driver, `src/dehyd/eval/robustness.py`.** Read this file, then the plan's §2.4 (the
+resampling rules — **amended, read the current text, not your memory of it**), §3's four robustness
+artifact rows, §4.2 step 3, §5.5, and §6. Steps 1 and 2 are complete, tested, pushed, and their
+amendments have passed an independent re-review; do not re-litigate them._
 
 ## TL;DR
 
-- **Milestone 9 is closed** (unchanged since the last handoff): branch `v1_milestone_9a`, HEAD
-  `fee9172`, working tree clean except this session's journal edits. The four-legged negative result
-  (Exp A-D) stands; M10 is not going to rescue it.
-- **Milestone 10 now has an accepted, independently-reviewed implementation plan and zero code.**
-  `plans/MILESTONE_10_PLAN.md` was drafted this morning, then went through this project's
-  review-before-code discipline, which found real design problems (not prose issues) and rewrote it
-  substantially — six disclosed amendments, **A-M10-1..6** (`plans/MILESTONE_10_PLAN.md` §0.2). One
-  of them, A-M10-3, corrects a genuine leakage-shaped bug in what I (the planning session) originally
-  proposed for Exp G — worth reading, not just trusting.
-- **`SECOND_CHAPTER.md` §9 has been reconciled to the accepted plan** in this session — an earlier
-  draft of that section recorded the pre-review design and a reporting stance the review superseded
-  (A-M10-1, A-M10-6); it now matches the accepted plan and says so.
-- **Nothing is implemented.** No `src/dehyd/eval/exp_e.py`/`exp_f.py`/`exp_g.py`/`robustness.py`/
-  `assembly.py`, no `v1_milestone_10` branch, no `results/milestone10/` directory. Verified this
-  session by direct filesystem check.
+- **Branch `v1_milestone_10`**, HEAD `a3354fd`, pushed to `origin`. 10 commits since `fee9172`.
+  Working tree clean except untracked `.codex/` (owner's tooling — leave it).
+- **Step 1 done.** The Exp-A reference gate is built and the authoritative snapshot is taken:
+  `results/milestone10/reference_exp_a_manifest.json` (725 KB, `reference_grade: authoritative`,
+  both bands, version-controlled with a `-text` attribute). **The fail-closed precondition on every
+  later structural edit and store rebuild is satisfied** — you do not need to repeat it.
+- **Step 2 done.** The multiplicity foundation reaches models, harness, providers and A/B/C
+  orchestration, byte-neutral by default for Experiments A–D.
+- **Three amendments were raised during implementation and have PASSED re-review** (A-M10-7/8/9,
+  `plans/MILESTONE_10_PLAN.md` §0.2). They are now ordinary parts of the design. The plan's §1.3,
+  §2.4, §4.1, §5.5, §6, §8.2 and §9.1 were all revised to match, so **the plan is internally
+  consistent — trust its current text**.
+- **Step 3 is the next job and is unblocked.**
 
-## Do this first — time-sensitive, before any other M10 work
+## What already exists that step 3 must REUSE, never reimplement
 
-`plans/MILESTONE_10_PLAN.md` §4.2 step 1 requires snapshotting a **reference Exp-A manifest** from the
-M9 stores and run artifacts **while they still exist**, before any structural edit or store rebuild:
+`plans/MILESTONE_10_PLAN.md` §4.2 step 3 is explicit: "Reuse A/B/C candidate enumeration and
+orchestration with the exact multiplicity contract." All of this is built and tested:
 
-```
-uv run python experiments/validate_exp_a_reference.py --snapshot \
-  --reference-10 results/runs/20260803T143704568296Z_f0a46aa6 \
-  --reference-77 results/runs/20260803T151715023672Z_f0a46aa6 \
-  --output results/milestone10/reference_exp_a_manifest.json
-```
+| Need | Use |
+|---|---|
+| Run one experiment under a bootstrap draw | `exp_a.run_exp_a(..., subject_multiplicity=)`, `exp_b.run_exp_b(...)`, `exp_c.run_exp_c(...)` — all take it, including through their spawn-context workers |
+| Apply multiplicity to a fit | `models.regressors.fit_pipeline(pipe, X, y, row_multiplicity=)` — the single dispatch; expands rows contiguously (A-M10-8) |
+| Expand rows | `models.regressors.expand_by_multiplicity` |
+| Per-row copy counts from a `{subject: m_s}` map | `harness.subject_row_multiplicity(subjects, mapping)` |
+| Weighted baselines / session means | `models.baselines.fit_session_index_baseline(..., subject_multiplicity=)`, `session_means(...)`, `fit_session_mean_baseline(...)` |
+| Tuned-ε under a draw | `harness.tuned_epsilons(..., subject_multiplicity=)` — repeats each subject's scale `m_s` times **before** the median |
+| CIs, Wilcoxon, Holm, ordinal metrics | `eval/metrics.py` — already complete; H reuses it, does not rebuild it |
 
-(`validate_exp_a_reference.py` does not exist yet — writing it is part of step 1 itself, §4.1/§3's "A
-reference gate" row.) **Why this can't wait:** M10 will rebuild both feature stores, and
-`store._check_match` enforces strict git-commit equality — once the stores move, the M9-era
-evidence (stored session-vector hashes, tuned-branch raw/prelog/order data, fold/candidate/selection/
-prediction hashes) is gone and cannot be reconstructed from the rebuilt stores. Verified this session:
-both M9 stores (`results/features/{10ghz,77ghz}/`) and every M9 run directory the plan cites
-(`results/runs/*_f0a46aa6`, `results/runs/*_3f465abc`) are still present on disk right now. This
-snapshot is what later lets `validate_exp_a_reference.py --compare` prove the M10 rebuild didn't
-silently change Exp A's answers before Exp F trusts its feature-selection output.
+**Pass the `{subject: m_s}` MAPPING down, never a row-aligned array.** The harness expands it against
+each bundle's own rows because Exp B's provider drops degenerate sessions, so a row array built once
+outside would attach multiplicities to the wrong rows silently. See plan §4.1 and
+`tests/test_multiplicity.py::test_multiplicity_stays_aligned_when_a_provider_drops_rows`.
 
-## The six amendments (A-M10-1..6) — read `plans/MILESTONE_10_PLAN.md` §0.2 for full reasoning
+## Step 3's own requirements (from the plan — read them there in full)
 
-| ID | What changed | One-line why |
-|---|---|---|
-| A-M10-1 | Exp E: 4-fold permutation CV → **leave-one-path-group-out refit under outer LOSO** | The 4-fold design broke the project's "every reported result is outer LOSO" rule; LOPGO was already the frozen text's documented fallback |
-| A-M10-2 | Exp F: HR check → **machine-checked `not_estimable_missing_heart_rate`** status, never a proxy or silent relabel | Zero HR observations exist anywhere in the delivered data |
-| A-M10-3 | Exp G: OOF predictions for α come from **selection-honest nested cross-fitting**, not `InnerResult.val_predictions` | `val_predictions` is first-seed-only and reflects selection-time folds — reusing it leaks selection info into the meta-learner. **This corrects an error in my own original Exp G design** — see HISTORY.md 2026-08-07 for why |
-| A-M10-4 | Exp G: feature-level fusion **explicitly deferred**, not a milestone-10 completion criterion | No learner/reduction/budget was ever frozen for it |
-| A-M10-5 | Robustness bootstrap: **empirical 2.5th/97.5th percentile range**, not BCa | BCa needs an original-statistic jackknife an already-bootstrapped estimate vector doesn't have |
-| A-M10-6 | Exp E reporting: **outcome-neutral**, no pre-labelled "null"/"physical" framing | Pre-labelling the result before it exists encodes a desired narrative as an acceptance criterion — supersedes the "report as null attribution" stance recorded earlier the same day |
+- **Estimands** (§2.4): Exp A both bands — selected radar subject-balanced MAE **and** radar −
+  session-index MAE difference; Exp B both bands — the primary equal-session aggregate radar −
+  baseline difference; Exp C both bands — class-unit MAE for arm a and arm b (adjacent accuracy and
+  QWK get no refit-robustness range).
+- **Skip rules, in order**: < 4 distinct drawn subjects; Exp C additionally needs all 5 classes.
+  These are *coarse prechecks, not permission to summarize a partial run* — if any nested selection
+  has no surviving candidate, any outer prediction is missing, or Exp B's four-session aggregate is
+  unavailable, the **whole result replicate** is skipped with the first canonical reason. Never
+  computed over the remaining easier folds. Reasons are counted.
+- **`R=200`**; fewer than **100** successful replicates ⇒ the result is **inconclusive**. The
+  threshold is never scaled — the `R=8` smoke must *intentionally* report inconclusive.
+- **RNG freeze**: `SeedSequence([robustness_seed, experiment_code, band_code, replicate])` with
+  `a,b,c → 1,2,3` and `10ghz,77ghz → 10,77`. One draw is **shared by all arms/contrasts of that
+  experiment-band replicate**. Model seeds stay the configured model seeds and are *not* derived
+  from the resampling seed. Save the tuple and the generated 128-bit state.
+- **Percentiles**: exactly `np.quantile(successful_estimates, [0.025, 0.975], method="linear")`
+  after sorting by replicate ID. Label `selection_variance_empirical_95pct_range` — **never**
+  `ci_method=bca` (A-M10-5).
+- **Artifacts** (§3): `robustness_replicates.csv`, `robustness_selection.csv`,
+  `fit_audit_robustness.csv`, `robustness_summary.csv`, `metrics_robustness.json`. Column lists are
+  in §3; the fit-audit companion JSON stores canonical subject/multiplicity maps keyed by hash.
+- Also in step 3's scope per §4.1: `experiments/run_robustness.py` and
+  `scripts/ibex/run_robustness.sbatch`.
 
-## Where everything is
+## The one genuinely open decision
 
-**The plan.** `plans/MILESTONE_10_PLAN.md`, 787 lines, all sections load-bearing:
-§0 invariants + the six amendments · §1 verified repository contracts (read before assuming any
-function signature) · §2 the four frozen designs in full mechanistic detail · §3 exact artifact
-schemas (every CSV/JSON column, per experiment) · §4 planned files + the **14-step ordered
-implementation sequence** (§4.2) · §5 the risk-based test plan by category · §6 exact validation
-commands and the exact full-cohort IBEX launch matrix (copy-pasteable, already sequenced with
-`--wait`) · §7 objective pass/fail criteria per experiment · §8 known limitations + the methodological
-citations behind each amendment · §9 the workflow gate (below).
+**Where does `robustness_seed` come from?** `StatsConfig` has `robustness_replicates_r`,
+`robustness_min_distinct_subjects`, `robustness_min_successful_replicates` and
+`robustness_ordinal_min_classes` — but **no `robustness_seed`**. The M6 sections are frozen records,
+so adding a field is a config change, not a free choice. The obvious candidate is `config.run.seed`
+(20260721). Decide it explicitly, record it in HISTORY, and pin it by test — do not let it be an
+accident of whatever the first implementation reached for.
 
-**Git.** Branch `v1_milestone_9a` (main branch `main`), HEAD `fee9172`. No `v1_milestone_10` branch
-exists yet — create it off this HEAD at implementation start, following the M7-M9 branch-per-milestone
-precedent (not specified by name in the plan itself, so this is a carried-forward convention, not a
-plan requirement).
+## The three amendments in force (full text + evidence in plan §0.2 and §8.2)
 
-**Stores and runs.** M9 stores present but stale-by-commit (`5b5ff06`/`c523266` moved `src/` after the
-last rebuild — unchanged fact from the last handoff). M10 rebuilds both once, per plan §4.2 step 11,
-**after** the reference snapshot (above) and **after** the independent-review retest gate (below) —
-not at the start. Referenced M9 run directories (all still present):
+| ID | One line |
+|---|---|
+| **A-M10-7** | Reference Exp-A runs are the `*_3f465abc` pair, not `*_f0a46aa6` — the latter's stores were rebuilt away. Provenance only: selection tables byte-identical, **no estimand changed**. Scoped to Exp A; Exp C/D `f0a46aa6` assembly sources remain valid. |
+| **A-M10-8** | Multiplicity is applied by **contiguous row duplication for every family**, not `sample_weight` — which is not duplication-equivalent for `svr` (data-dependent `gamma="scale"`) or `rf` (bootstrap draws `n_samples`). Both mechanisms are pinned by test. |
+| **A-M10-9** | Exp C arm (b) keeps the frozen **multiclass** O-M9-7 weights; the plan's per-threshold binary rule would change Exp C at multiplicity one and break byte-neutrality. |
 
-    20260803T143704568296Z_f0a46aa6   Exp A 10 GHz  ] the M9 reference controls §1.3 cites;
-    20260803T151715023672Z_f0a46aa6   Exp A 77 GHz  ] superseded as F's authoritative source by a
-                                                        fresh M10-commit Exp-A rerun once stores rebuild
-    20260803T143705048534Z_f0a46aa6   Exp C 10 GHz   — authoritative source for H assembly
-    20260803T160645780475Z_f0a46aa6   Exp C 77 GHz   — authoritative source for H assembly
-    20260803T172827484892Z_f0a46aa6   Exp C 10 GHz (cross-vendor determinism control, not headline)
-    20260806T104207854321Z_3f465abc   Exp D 10 GHz   — authoritative source for H assembly
-    20260806T110156650286Z_3f465abc   Exp D 77 GHz   — authoritative source for H assembly
+## Process traps that are still live
 
-**No current authoritative Exp B run directory exists** (plan §1.3) — this is a resolved inventory
-fact, not something to search harder for. M10 runs primary Exp B fresh for both bands at the final
-commit (plan §4.2 step 12) and registers those directories before H assembly.
-
-## Implementation sequence (condensed from plan §4.2 — read it there for the full detail)
-
-1. **Protocol/inventory/schema pin** — apply A-M10-1..6 to configs/docs, pin current A-D byte
-   behavior, take the reference snapshot above **while the M9 stores still exist**.
-2. **Multiplicity foundation** — optional `subject_multiplicity`/`row_multiplicity` threaded through
-   providers/harness/estimators, byte-neutral by default (every existing A-D call site must stay
-   byte-identical — this is the one edit that touches shared code every other experiment depends on).
-3. **H robustness driver** (`eval/robustness.py`) — reuses A/B/C's own candidate enumeration, never
-   reimplements it.
-4. **Exp G** (`eval/exp_g.py`) — `selection_folds` in `splits.py` first, then matched population,
-   selection-honest nested cross-fitting, alpha selection, outer refits.
-5. **Exp E** (`eval/exp_e.py`) — LOSO path-group ablation, band-aware physical metadata.
-6. **Exp F** (`eval/exp_f.py`) — HR-availability record, four nested models, sensitivities, contrasts.
-7. **Drivers/assembly** (`eval/assembly.py` + five entrypoints) — explicit run-directory maps, no glob
-   discovery anywhere.
-8. **Independent tests** — a tester who did not write the implementation runs the targeted + full +
-   real-data suites on the candidate tree.
-9. **Independent code review** — a reviewer who did not implement it checks the tested candidate for
-   leakage/lineage/statistical defects; blockers return to the writer.
-10. **Corrections + mandatory retest** — original writer fixes findings, adds regression coverage;
-    independent tester reruns everything. **Only this post-correction green tree is eligible for the
-    final commit** — not the pre-review result.
-11. **Final commit + one store rebuild**, validated.
-12. **Exp A/B reruns** at the final commit, both bands; bit-identity/lineage assert against the
-    reference snapshot; register new Exp B directories.
-13. **Mechanism-only local smokes, then full E/F/G + `R=200` robustness on IBEX CPU** — every job is
-    `sbatch`, never a login-shell run (plan §6's launch matrix is exact and copy-pasteable).
-14. **Assembly** — explicit `run_manifest.json`, final tables, **only then** update
-    `SECOND_CHAPTER.md` §9 with real results.
-
-**The workflow gate is a hard sequencing constraint, not a suggestion** (plan §9): one implementation
-writer → independent risk-based tests → independent code review → corrections + mandatory retest →
-documentation only after verification. No structural edit or store rebuild without the validated
-reference snapshot; no full E/F/G/H IBEX job before the post-review retest gate is green; no Exp F or
-assembly after any reference/lineage/schema mismatch.
-
-## Planned new files (plan §4.1 has the full list with responsibilities)
-
-`eval/exp_e.py`, `exp_f.py`, `exp_g.py`, `robustness.py`, `assembly.py` (new); `eval/splits.py` gains
-public `selection_folds`; `eval/harness.py` gains one optional, byte-neutral-by-default
-subject-multiplicity path; `eval/exp_a.py`/`exp_b.py`/`exp_c.py`, `models/baselines.py`,
-`models/ordinal.py`, `models/regressors.py`, `eval/selection.py` (new `select_alpha`) all get small,
-additive changes — no rewrites. Five entrypoints (`run_interpretability.py`, `run_confound.py`,
-`run_fusion.py`, `run_robustness.py`, `run_stats_assembly.py`) + `validate_exp_a_reference.py`. Five
-new `scripts/ibex/*.sbatch`, git-free/`REVISION`-wrapped from the start (the M9 C14-C25 lesson —
-learned once, not relearned).
-
-## Process traps carried forward from M9 (still true, still costly if ignored)
-
-- **A commit move invalidates both stores** (`store._check_match`, strict commit equality) — why the
-  reference snapshot above must happen before any structural edit, and why steps 1-10 land as green
-  commits without a store rebuild until step 11.
-- **Every real M9 bug lived in an untested success path while component tests stayed green** (the
-  comparison stage, the merge summary, the M7 reference CSVs — three separate incidents). Plan §5 is
-  the risk-based test plan by category; use it, and give each new driver the end-to-end
-  real-lineage test it specifies, not only component tests.
-- **`core.autocrlf=true` on this machine** — any byte-exact reference artifact committed needs a
-  `-text` entry in `.gitattributes`.
-- **Don't wholesale-replace local `results/runs/`** — gitignored except the `*_f36c4fb2/`/`*_f0a46aa6/`/
-  `*_3f465abc/` references; pull specific dirs.
-- **Heavy work is always `sbatch`, never a login-shell run** (plan §6 says this explicitly for M10;
-  it was already true for M7-M9).
+- **Do not rebuild the stores.** Steps 3–10 land as green commits with **no** store rebuild; step 11
+  stamps `REVISION` once and rebuilds both bands once. A commit move invalidates both stores
+  (`store._check_match`, strict commit equality), which is why the work is batched this way.
+- **The local 77 GHz store is 1 of 72 sessions.** Any real-data 77 GHz work must run on IBEX. The
+  local 10 GHz store is complete but built at `dab8f708`, which is *not* the reference commit.
+- **IBEX** sits on `v1_milestone_9a` at `3f465ab` unless someone has moved it; it needs
+  `git fetch origin && git checkout v1_milestone_10`. Both former dirty-tree offenders (`dcgm/`,
+  `results/exploratory_frame_split/`) are now gitignored, so `submit_ibex.sh` will not refuse.
+- **Heavy work is always `sbatch`**, never a login-shell run.
+- **`tests/test_no_leakage.py` is frozen** — `git diff --exit-code` on it is an acceptance step at
+  every stage. It has stayed untouched through steps 1–2; keep it that way.
+- **5 pre-existing test failures on this Windows machine**, all in
+  `tests/test_exp_b_ibex_scripts.py` / `tests/test_exp_d_ibex_scripts.py`: Git Bash eats the
+  backslashes in a Windows path (`C:UsersjosemsosagDesktop…`) and inline `bash -c` strings return
+  empty. They touch no M10 file. Baseline for the full suite is therefore
+  **1225 passed, 5 failed, 16 skipped** — if you see a 6th failure, it is yours.
+  (When feeding a script to `bash -n`, pass **bytes** with LF forced: `text=True` rewrites `\n` to
+  `\r\n` and a CRLF after a line-continuation backslash breaks the parse.)
+- **`core.autocrlf=true` here** — any byte-exact reference artifact committed needs a `-text` entry
+  in `.gitattributes` (`results/milestone10/*.json` already has one).
 
 ## Hard invariants (unchanged, never violate)
 
 LOSO at subject level for every reported result; fit-on-train-only at every CV level; no test-set
-tuning; primary target continuous Δm% (Exp F's signed-kg sensitivity variant is a disclosed secondary
-check, not a redefinition); folds only from `eval/splits.py` (including the new `selection_folds`);
-tie-breaks only via `eval/selection.py`; `protocol_freeze_guard` before every fit/write;
-`tests/test_no_leakage.py` frozen (`git diff --exit-code` on it is an acceptance step at every stage);
-GPU claims never apply here (E/F/G/H are entirely CPU). Do not report frame-level accuracy as a
-headline, do not claim causal isolation of hydration from time of day, do not overclaim clinical
-readiness, do not tune E/F/G toward a more favorable result because A-D came out negative (plan §0).
+tuning; primary target continuous Δm%; folds only from `eval/splits.py`; tie-breaks only via
+`eval/selection.py`; `protocol_freeze_guard` before every fit/write; E/F/G/H are entirely CPU.
+Do not report frame-level accuracy as a headline, do not claim causal isolation of hydration from
+time of day, do not overclaim clinical readiness, and **do not tune E/F/G/H toward a more favourable
+result because A–D came out negative**.
+
+## Remaining sequence after step 3 (plan §4.2)
+
+4. Exp G (`selection_folds` in `splits.py` first) · 5. Exp E · 6. Exp F · 7. drivers + assembly ·
+8. independent tests · 9. independent code review · 10. corrections + mandatory retest ·
+11. final commit + **one** store rebuild · 12. Exp A/B reruns at the final commit, then
+`validate_exp_a_reference.py --compare` against the committed manifest · 13. local smokes then the
+full E/F/G + `R=200` IBEX jobs · 14. assembly, and **only then** `SECOND_CHAPTER.md` §9.
 
 ## Chapter state
 
-`SECOND_CHAPTER.md` §0-§8 complete. §9 is reconciled to the accepted plan (this session) but still a
-pre-registration stub, not the real chapter section — per plan §4.2 step 14 and CLAUDE.md's journal
-rules, it is written in full **only after** verified full-cohort M10 artifacts exist, never before.
+`SECOND_CHAPTER.md` §0–§8 complete. §9 is still the pre-registration stub reconciled to the accepted
+plan; it is written in full **only after** verified full-cohort M10 artifacts exist, never before.
+It must disclose **A-M10-1..9**.

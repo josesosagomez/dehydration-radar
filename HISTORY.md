@@ -158,6 +158,23 @@ milestone-7 keys); and Exp B's `session_means`, where multiplicity weights subje
 minimum-viability rule deliberately still counts **distinct** subjects, since drawing one subject
 three times gives a session no more independent information than drawing it once.
 
+## 2026-08-08 — The focused plan re-review PASSED. A-M10-7..9 stand as written; step 3 is unblocked.
+
+Owner reports the §9.1 re-review closed and passed. Consequences, recorded so the standing of the
+code is unambiguous for whoever picks this up:
+
+- **A-M10-7, A-M10-8 and A-M10-9 are accepted** and are now ordinary parts of the authoritative
+  design, not provisional deviations. `plans/MILESTONE_10_PLAN.md` needs no further amendment for
+  them.
+- **Steps 1 and 2 stop being provisional.** No commit is revised, nothing is rolled back; the code
+  as committed is the accepted implementation.
+- **The harness signature correction stays inside A-M10-8** rather than being promoted to A-M10-10.
+  It was flagged for exactly this decision (HISTORY follow-up 6) and the review did not ask for the
+  split, so §4.1's in-place documentation of the mapping-vs-ndarray change is its final form.
+- **Step 3 (the H robustness driver) is unblocked**, and is the next implementation job.
+
+`HANDOFF.md` refreshed at the owner's request for a fresh chat to start step 3.
+
 ### Follow-up 6 — owner directs the plan be synchronized now; A-M10-7..9 written into the authoritative design, and step 3 gated behind one focused re-review.
 
 Branch pushed (`origin/v1_milestone_10` at `085f137`). Owner's direction on the amendments, with a
