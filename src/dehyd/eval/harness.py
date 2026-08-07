@@ -37,7 +37,13 @@ from .metrics import subject_balanced_mae
 from .selection import CandidateScore, select_candidate
 from .splits import nested_loso_splits
 from ..models.ordinal import N_CLASSES
-from ..models.regressors import SEED_SENSITIVE, SIMPLICITY_RANK, build_estimator, fitted_state_params
+from ..models.regressors import (
+    SEED_SENSITIVE,
+    SIMPLICITY_RANK,
+    build_estimator,
+    fit_pipeline,
+    fitted_state_params,
+)
 
 # The exact set of `active` protocol keys the guard requires per band (C5). The guard
 # validates only present keys, so the harness enforces completeness fail-closed before use.
@@ -216,7 +222,51 @@ def tuned_epsilons(prelog_by_subject, train_subjects, *, k: float = 0.1, fallbac
     return eps
 
 
-def _viability_reason(candidate: Candidate, bundle: FeatureBundle, train_rows) -> str | None:
+def subject_row_multiplicity(subjects, subject_multiplicity) -> np.ndarray | None:
+    """Expand a {subject: m_s} map to one integer copy-count per ROW, aligned to `subjects`.
+
+    The milestone-10 robustness bootstrap resamples subjects, so multiplicity is naturally
+    per-subject; everything downstream of here works per-row. `None` in, `None` out, so a
+    caller can pass it straight through without branching.
+    """
+    if subject_multiplicity is None:
+        return None
+    return np.array(
+        [int(subject_multiplicity.get(int(s), 1)) for s in np.asarray(subjects)], dtype=int
+    )
+
+
+def _effective_rows(train_rows, row_multiplicity) -> int:
+    """How many rows a fit actually sees: the plain count, or the duplicated count."""
+    if row_multiplicity is None:
+        return int(np.count_nonzero(train_rows))
+    return int(np.asarray(row_multiplicity)[train_rows].sum())
+
+
+def _weighted_subject_balanced_mae(subjects, y_true, y_pred, subject_weights) -> float:
+    """`subject_balanced_mae` with each DISTINCT subject weighted by its copy count.
+
+    Plan §2.4: "inner-validation objectives and outer replicate summaries weight each subject
+    by m_s". Repeating rows would not achieve this — the metric is subject-BALANCED, so
+    duplicating a subject's rows leaves its own mean unchanged and the outer average over
+    distinct subjects untouched. The weight has to enter at the across-subject average, which
+    is what a duplicated cohort's subject-balanced mean actually is.
+    """
+    subjects = np.asarray(subjects)
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    ordered = sorted(set(subjects.tolist()))
+    per_subject, weights = [], []
+    for s in ordered:
+        mask = subjects == s
+        per_subject.append(np.abs(y_true[mask] - y_pred[mask]).mean())
+        # Multiplicity is per SUBJECT, so every row of a subject carries the same count.
+        weights.append(float(np.asarray(subject_weights)[mask][0]))
+    return float(np.average(per_subject, weights=weights))
+
+
+def _viability_reason(candidate: Candidate, bundle: FeatureBundle, train_rows,
+                      row_multiplicity=None) -> str | None:
     """Explicit, enumerated PRE-FIT viability predicates (C6/C21). Returns a reason code
     if the candidate cannot be fit on these training rows, else None. NOT a catch-all: any
     unexpected fit/predict exception is left to propagate loudly.
@@ -244,7 +294,11 @@ def _viability_reason(candidate: Candidate, bundle: FeatureBundle, train_rows) -
         therefore candidate-independent by construction, but is still evaluated and recorded
         per cell, matching "such configs are skipped in ordinal selection (recorded)".
     """
-    n_train_rows = int(np.count_nonzero(train_rows))
+    # Under a bootstrap the knn rule must count the rows the fit ACTUALLY sees. A candidate
+    # with k = 15 is non-viable on 10 unique training rows but viable once a drawn subject's
+    # rows are duplicated to 17 — and it is the duplicated cohort that gets fit, so using the
+    # unique count here would reject candidates the replicate can legitimately evaluate.
+    n_train_rows = _effective_rows(train_rows, row_multiplicity)
     params = candidate.params()
     if "n_neighbors" in params:
         k = params["n_neighbors"]
@@ -267,11 +321,23 @@ def _bundle_fits(bundle: FeatureBundle, role: str, subjects) -> list:
     return [FitRecord(q, role, frozenset(subjects), p) for q, p in bundle.extra_fits]
 
 
-def _score(score_fn, bundle: FeatureBundle, rows, y_pred) -> float:
+def _score(score_fn, bundle: FeatureBundle, rows, y_pred, row_multiplicity=None) -> float:
     """The one scoring choke point. `score_fn=None` -> the CURRENT, UNCHANGED call to
     `subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)`. A supplied
     `score_fn` additionally receives `bundle.session_idx[rows]` (or None if the bundle
-    carries none): `score_fn(subjects, y_true, y_pred, session_idx) -> float`."""
+    carries none): `score_fn(subjects, y_true, y_pred, session_idx) -> float`.
+
+    `row_multiplicity` (milestone 10) enters differently for the two cases, because the two
+    metric shapes need different things (plan §2.4):
+
+      * the built-in subject-balanced MAE is weighted at the across-subject average, since
+        repeating a subject's rows cannot change a subject-balanced mean;
+      * a supplied `score_fn` (Exp B's equal-session residual MAE, Exp C's ordinal metrics)
+        is pooled or ordinal, so its evaluation rows are deterministically REPEATED by m_s
+        before it is called — "evaluation rows are deterministically repeated by m_s before
+        metric calculation". Repetition is the general rule; weighting is the special case
+        that a subject-balanced statistic requires.
+    """
     if score_fn is None:
         if bundle.y.ndim != 1:
             # Fail-fast (M9 step 4, plan §5 trap 1). `subject_balanced_mae` is defined on a
@@ -283,29 +349,68 @@ def _score(score_fn, bundle: FeatureBundle, rows, y_pred) -> float:
                 f"target, but this bundle's y has shape {bundle.y.shape}. A 2-column ordinal "
                 "y must be scored by an explicit score_fn (Exp C always supplies one)."
             )
-        return subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)
+        if row_multiplicity is None:
+            return subject_balanced_mae(bundle.subjects[rows], bundle.y[rows], y_pred)
+        return _weighted_subject_balanced_mae(
+            bundle.subjects[rows], bundle.y[rows], y_pred, np.asarray(row_multiplicity)[rows]
+        )
     session_idx = bundle.session_idx[rows] if bundle.session_idx is not None else None
-    return score_fn(bundle.subjects[rows], bundle.y[rows], y_pred, session_idx)
+    if row_multiplicity is None:
+        return score_fn(bundle.subjects[rows], bundle.y[rows], y_pred, session_idx)
+    copies = np.asarray(row_multiplicity)[rows]
+    return score_fn(
+        np.repeat(bundle.subjects[rows], copies, axis=0),
+        np.repeat(bundle.y[rows], copies, axis=0),
+        np.repeat(np.asarray(y_pred), copies, axis=0),
+        None if session_idx is None else np.repeat(session_idx, copies, axis=0),
+    )
 
 
-def _fit_once(candidate, X, y, train_rows, seed, before_fit):
+def _fit_once(candidate, X, y, train_rows, seed, before_fit, row_multiplicity=None):
     if before_fit is not None:
         before_fit(candidate)
     pipe = build_estimator(candidate.family, candidate.params(), seed=seed)
-    pipe.fit(X[train_rows], y[train_rows])
+    train_multiplicity = None if row_multiplicity is None else np.asarray(row_multiplicity)[train_rows]
+    # `fit_pipeline(row_multiplicity=None)` executes the literal `pipe.fit(...)` this line
+    # used to be, so Experiments A-D are byte-identical through this path.
+    fit_pipeline(pipe, X[train_rows], y[train_rows], row_multiplicity=train_multiplicity)
     return pipe
 
 
-def _model_and_scaler_fits(pipe, candidate, role, subjects) -> tuple[FitRecord, FitRecord]:
+def _multiplicity_audit(train_rows, row_multiplicity, subjects) -> dict:
+    """The extra audit fields a bootstrap fit must carry (plan §2.4).
+
+    Returned EMPTY when nothing was resampled, so an ordinary fit record keeps exactly the
+    keys milestones 7-9 wrote and "byte-neutral by default" holds of the audit too.
+    """
+    if row_multiplicity is None:
+        return {}
+    copies = np.asarray(row_multiplicity)[train_rows]
+    fitted_subjects = np.asarray(subjects)[train_rows]
+    distinct = sorted(set(fitted_subjects.tolist()))
+    return {
+        "multiplicity_subjects": np.array(distinct, dtype=np.int64),
+        "multiplicity_counts": np.array(
+            [int(copies[fitted_subjects == s][0]) for s in distinct], dtype=np.int64
+        ),
+        "effective_weighted_row_count": np.array([float(copies.sum())], dtype=float),
+        # "row_duplication" is the only mode A-M10-8 leaves; recorded explicitly so an
+        # artifact says how it was weighted instead of leaving it to be inferred.
+        "weighting_mode": np.frombuffer(b"row_duplication", dtype=np.uint8),
+    }
+
+
+def _model_and_scaler_fits(pipe, candidate, role, subjects, audit=None) -> tuple[FitRecord, FitRecord]:
+    audit = audit or {}
     scaler = pipe.named_steps["scaler"]
     scaler_fit = FitRecord(
         "scaler", role, frozenset(subjects),
-        {"mean_": scaler.mean_.copy(), "scale_": scaler.scale_.copy()},
+        {"mean_": scaler.mean_.copy(), "scale_": scaler.scale_.copy(), **audit},
     )
     model = pipe.named_steps["model"]
     model_fit = FitRecord(
         candidate.family, role, frozenset(subjects),
-        fitted_state_params(candidate.family, model),
+        {**fitted_state_params(candidate.family, model), **audit},
     )
     return scaler_fit, model_fit
 
@@ -314,24 +419,28 @@ def _seed_list(candidate, seeds):
     return tuple(seeds) if candidate.family in SEED_SENSITIVE else (seeds[0],)
 
 
-def _fit_score_inner(candidate, bundle, inner, seeds, before_fit, *, score_fn=None) -> tuple:
+def _fit_score_inner(candidate, bundle, inner, seeds, before_fit, *, score_fn=None,
+                     row_multiplicity=None) -> tuple:
     """Fit on inner-train, score inner-val (`score_fn`, mean over seeds; `None` -> the
     original subject-balanced MAE, unchanged)."""
     subjects, X, y = bundle.subjects, bundle.X, bundle.y
     train_rows = np.isin(subjects, sorted(inner.train_subjects))
     val_rows = np.isin(subjects, sorted(inner.val_subjects))
+    audit = _multiplicity_audit(train_rows, row_multiplicity, subjects)
 
     per_seed_scores = []
     val_preds_first = None
     scaler_fit = None
     model_fits = []
     for seed in _seed_list(candidate, seeds):
-        pipe = _fit_once(candidate, X, y, train_rows, seed, before_fit)
+        pipe = _fit_once(candidate, X, y, train_rows, seed, before_fit, row_multiplicity)
         preds = pipe.predict(X[val_rows])
-        per_seed_scores.append(_score(score_fn, bundle, val_rows, preds))
+        per_seed_scores.append(_score(score_fn, bundle, val_rows, preds, row_multiplicity))
         if val_preds_first is None:
             val_preds_first = preds
-        sfit, mfit = _model_and_scaler_fits(pipe, candidate, "inner_train", inner.train_subjects)
+        sfit, mfit = _model_and_scaler_fits(
+            pipe, candidate, "inner_train", inner.train_subjects, audit
+        )
         if scaler_fit is None:
             scaler_fit = sfit
         model_fits.append(mfit)
@@ -344,7 +453,8 @@ def _fit_score_inner(candidate, bundle, inner, seeds, before_fit, *, score_fn=No
     return score, val_predictions, fits
 
 
-def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, score_fn=None) -> StageOutcome:
+def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, score_fn=None,
+                              row_multiplicity=None) -> StageOutcome:
     n_c, n_f = len(candidates), len(fold.inner_folds)
     inner_scores = np.full((n_c, n_f), np.nan)
     cells: dict = {}
@@ -355,7 +465,7 @@ def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, 
             bundle = data_for(candidate, inner.train_subjects)
             feature_dims[ci] = int(bundle.X.shape[1])
             train_rows = np.isin(bundle.subjects, sorted(inner.train_subjects))
-            reason = _viability_reason(candidate, bundle, train_rows)
+            reason = _viability_reason(candidate, bundle, train_rows, row_multiplicity)
             if reason is not None:
                 cells[(ci, fj)] = InnerResult(
                     inner.train_subjects, inner.val_subjects, candidate.candidate_id,
@@ -363,7 +473,8 @@ def _score_candidates_on_fold(candidates, fold, seeds, before_fit, data_for, *, 
                 )
                 continue
             score, val_predictions, fits = _fit_score_inner(
-                candidate, bundle, inner, seeds, before_fit, score_fn=score_fn
+                candidate, bundle, inner, seeds, before_fit, score_fn=score_fn,
+                row_multiplicity=row_multiplicity,
             )
             inner_scores[ci, fj] = score
             cells[(ci, fj)] = InnerResult(
@@ -397,23 +508,33 @@ def select_stage_winner(stage: StageOutcome) -> Candidate:
     return by_id[winner.candidate_id]
 
 
-def _final_refit(candidate, fold, seeds, before_fit, data_for, *, score_fn=None) -> tuple:
-    """Refit the winner on all outer-training subjects (per seed), predict train + test."""
+def _final_refit(candidate, fold, seeds, before_fit, data_for, *, score_fn=None,
+                 row_multiplicity=None) -> tuple:
+    """Refit the winner on all outer-training subjects (per seed), predict train + test.
+
+    The held-out subject is never resampled: it is one subject with one role, and its score
+    is the replicate's estimate for it. So `_score` on the test rows sees the multiplicities
+    of the test subject alone (all 1 under the plan's LOSO-over-distinct-drawn-subjects
+    construction), and only the TRAINING side is duplicated.
+    """
     bundle = data_for(candidate, fold.train_subjects)
     subjects, X, y = bundle.subjects, bundle.X, bundle.y
     train_rows = np.isin(subjects, sorted(fold.train_subjects))
     test_rows = np.isin(subjects, [fold.test_subject])
+    audit = _multiplicity_audit(train_rows, row_multiplicity, subjects)
 
     seed_outcomes = []
     scaler_fit = None
     model_fits = []
     for seed in _seed_list(candidate, seeds):
-        pipe = _fit_once(candidate, X, y, train_rows, seed, before_fit)
+        pipe = _fit_once(candidate, X, y, train_rows, seed, before_fit, row_multiplicity)
         train_preds = pipe.predict(X[train_rows])
         test_preds = pipe.predict(X[test_rows])
         test_score = _score(score_fn, bundle, test_rows, test_preds)
         seed_outcomes.append(SeedOutcome(seed, train_preds, test_preds, test_score))
-        sfit, mfit = _model_and_scaler_fits(pipe, candidate, "outer_train", fold.train_subjects)
+        sfit, mfit = _model_and_scaler_fits(
+            pipe, candidate, "outer_train", fold.train_subjects, audit
+        )
         if scaler_fit is None:
             scaler_fit = sfit
         model_fits.append(mfit)
@@ -431,6 +552,7 @@ def run_nested_candidates(
     before_fit=None,
     data_for=None,
     score_fn=None,
+    subject_multiplicity=None,
     **split_kwargs,
 ) -> list[FoldResult]:
     """Single-stage nested LOSO over `candidates`. Folds come only from `splits.py`;
@@ -441,6 +563,11 @@ def run_nested_candidates(
     if data_for is None:
         data_for = fixed_feature_provider(dataset)
     folds = nested_loso_splits(dataset.subject_ids(), **split_kwargs)
+    # Folds come from the DISTINCT subject ids either way: plan §2.4's "LOSO roles are
+    # constructed over distinct drawn subjects; every copy of one original subject always
+    # has one role". Multiplicity changes how much each training subject weighs, never who
+    # is held out.
+    row_multiplicity = subject_row_multiplicity(dataset.subjects, subject_multiplicity)
 
     results = []
     with threadpool_limits(1):
@@ -448,11 +575,13 @@ def run_nested_candidates(
             if not fold.selectable:
                 continue
             stage = _score_candidates_on_fold(
-                candidates, fold, seeds, before_fit, data_for, score_fn=score_fn
+                candidates, fold, seeds, before_fit, data_for, score_fn=score_fn,
+                row_multiplicity=row_multiplicity,
             )
             winner = select_stage_winner(stage)
             final_fits, train_pred, test_pred, test_score, seed_outcomes = _final_refit(
-                winner, fold, seeds, before_fit, data_for, score_fn=score_fn
+                winner, fold, seeds, before_fit, data_for, score_fn=score_fn,
+                row_multiplicity=row_multiplicity,
             )
             results.append(
                 FoldResult(

@@ -383,6 +383,160 @@ def test_session_means_weight_by_subject_copies_but_keep_the_distinct_subject_ru
     assert np.isclose(plain[1], np.mean([-0.5, -0.9]))
 
 
+# ------------------------------------------------------------------------- the harness
+
+
+def _harness_dataset(n_subjects=5, n_sessions=4, seed=11):
+    from dehyd.eval.harness import Dataset
+
+    rng = np.random.default_rng(seed)
+    subjects = np.repeat(np.arange(1, n_subjects + 1), n_sessions)
+    X = rng.standard_normal((subjects.size, 3)) + subjects[:, None] * 0.1
+    y = -0.2 * subjects + 0.3 * X[:, 0] + 0.05 * rng.standard_normal(subjects.size)
+    return Dataset(subjects=subjects, features=X, targets=y)
+
+
+def test_subject_multiplicity_expands_to_one_count_per_row():
+    from dehyd.eval.harness import subject_row_multiplicity
+
+    subjects = np.array([1, 1, 2, 3, 3, 3])
+    assert subject_row_multiplicity(subjects, None) is None
+    counts = subject_row_multiplicity(subjects, {1: 2, 3: 4})
+    assert counts.tolist() == [2, 2, 1, 4, 4, 4]      # absent subjects default to 1
+
+
+def test_subject_balanced_mae_is_weighted_across_subjects_not_by_repeating_rows():
+    """The metric is subject-BALANCED, so duplicating a subject's rows leaves its own mean —
+    and hence the average over distinct subjects — completely unchanged. The weight has to
+    enter at the across-subject average, which is what a drawn cohort's value actually is."""
+    from dehyd.eval.metrics import subject_balanced_mae
+    from dehyd.eval.harness import _weighted_subject_balanced_mae
+
+    subjects = np.array([1, 1, 2, 2])
+    y_true = np.array([0.0, 0.0, 0.0, 0.0])
+    y_pred = np.array([1.0, 1.0, 5.0, 5.0])
+    assert subject_balanced_mae(subjects, y_true, y_pred) == 3.0        # (1 + 5) / 2
+
+    # repeating rows changes nothing...
+    repeated = np.repeat(subjects, 3)
+    assert subject_balanced_mae(repeated, np.repeat(y_true, 3), np.repeat(y_pred, 3)) == 3.0
+    # ...while weighting subject 2 three times moves it, as a drawn cohort would.
+    weighted = _weighted_subject_balanced_mae(
+        subjects, y_true, y_pred, np.array([1, 1, 3, 3])
+    )
+    assert weighted == pytest.approx((1.0 * 1 + 5.0 * 3) / 4)
+
+
+def test_a_pooled_score_fn_receives_rows_repeated_by_multiplicity():
+    """Exp B's and Exp C's objectives are pooled/ordinal, so plan §2.4's general rule applies
+    to them: repeat the evaluation rows, then call the metric."""
+    from dehyd.eval.harness import FeatureBundle, _score
+
+    bundle = FeatureBundle(
+        subjects=np.array([1, 1, 2]), X=np.zeros((3, 2)), y=np.array([1.0, 2.0, 3.0]),
+        session_idx=np.array([0, 1, 0]),
+    )
+    rows = np.array([True, True, True])
+    seen = {}
+
+    def score_fn(subjects, y_true, y_pred, session_idx):
+        seen.update(n=len(subjects), subjects=subjects.tolist(), sessions=session_idx.tolist())
+        return 0.0
+
+    _score(score_fn, bundle, rows, np.array([1.0, 1.0, 1.0]), np.array([1, 1, 3]))
+    assert seen["n"] == 5
+    assert seen["subjects"] == [1, 1, 2, 2, 2]
+    assert seen["sessions"] == [0, 1, 0, 0, 0]
+
+
+def test_knn_viability_counts_the_rows_the_fit_actually_sees():
+    """k = 15 is non-viable on 10 unique training rows but viable once a drawn subject's rows
+    are duplicated to 17 — and the duplicated cohort is what gets fit, so judging viability on
+    the unique count would reject a candidate the replicate can legitimately evaluate."""
+    from dehyd.eval.harness import Candidate, FeatureBundle, _viability_reason
+
+    subjects = np.arange(10)
+    bundle = FeatureBundle(subjects=subjects, X=np.zeros((10, 2)), y=np.zeros(10))
+    train_rows = np.ones(10, dtype=bool)
+    candidate = Candidate("c", "knn", (("n_neighbors", 15),))
+
+    assert _viability_reason(candidate, bundle, train_rows) == "knn_n_neighbors_15_gt_train_rows_10"
+    m = np.array([1, 3, 1, 2, 1, 1, 4, 1, 2, 1])          # 17 effective rows
+    assert _viability_reason(candidate, bundle, train_rows, m) is None
+
+
+def test_fit_audit_carries_multiplicity_only_under_a_bootstrap():
+    from dehyd.eval.harness import Candidate, run_nested_candidates
+
+    dataset = _harness_dataset()
+    candidates = [Candidate("ridge_1", "ridge", (("alpha", 1.0),))]
+
+    plain = run_nested_candidates(dataset, candidates, seeds=(0,))
+    for record in plain[0].final_fits:
+        assert "multiplicity_counts" not in record.params      # exactly the M7-M9 keys
+
+    multiplicity = {1: 3, 2: 2}
+    resampled = run_nested_candidates(dataset, candidates, seeds=(0,),
+                                      subject_multiplicity=multiplicity)
+    for fold in resampled:
+        audited = [r for r in fold.final_fits if "multiplicity_counts" in r.params]
+        assert audited, "a bootstrap fit must record its multiplicity map"
+        for record in audited:
+            counts = dict(zip(record.params["multiplicity_subjects"].tolist(),
+                              record.params["multiplicity_counts"].tolist()))
+            # The held-out subject must never appear in a fitted multiplicity map — the same
+            # invariant `fit_audit` exists to police, now extended to the bootstrap fields.
+            assert fold.test_subject not in counts
+            assert set(counts) == set(fold.train_subjects)
+            for subject, count in counts.items():
+                assert count == multiplicity.get(subject, 1)
+            effective = float(record.params["effective_weighted_row_count"][0])
+            assert effective == sum(counts[s] * 4 for s in counts)   # 4 sessions per subject
+            assert record.params["weighting_mode"].tobytes() == b"row_duplication"
+
+
+def test_harness_multiplicity_equals_a_physically_duplicated_dataset():
+    """The end-to-end statement the milestone rests on.
+
+    The comparison dataset repeats ROWS while keeping the original subject ids, so both runs
+    build the SAME outer folds from the same distinct subjects — which is exactly plan §2.4's
+    "LOSO roles are constructed over distinct drawn subjects; every copy of one original
+    subject always has one role". Anything that differs afterwards is the multiplicity
+    implementation, not the fold construction.
+    """
+    from dehyd.eval.harness import Candidate, Dataset, run_nested_candidates
+
+    dataset = _harness_dataset()
+    multiplicity = {1: 3, 2: 1, 3: 2, 4: 1, 5: 2}
+    counts = np.array([multiplicity[int(s)] for s in dataset.subjects])
+    duplicated = Dataset(
+        subjects=np.repeat(dataset.subjects, counts),
+        features=np.repeat(dataset.features, counts, axis=0),
+        targets=np.repeat(dataset.targets, counts),
+    )
+
+    candidates = [
+        Candidate("ridge_1", "ridge", (("alpha", 0.1),)),
+        Candidate("ridge_2", "ridge", (("alpha", 10.0),)),
+        Candidate("knn_3", "knn", (("n_neighbors", 3),)),
+    ]
+    weighted = run_nested_candidates(dataset, candidates, seeds=(0,),
+                                     subject_multiplicity=multiplicity)
+    reference = run_nested_candidates(duplicated, candidates, seeds=(0,))
+
+    assert [r.test_subject for r in weighted] == [r.test_subject for r in reference]
+    for a, b in zip(weighted, reference):
+        assert a.selected.candidate_id == b.selected.candidate_id
+        assert np.allclose(a.inner_scores, b.inner_scores, rtol=0, atol=1e-12, equal_nan=True)
+        # The weighted run predicts the held-out subject's UNIQUE rows; the reference run's
+        # dataset repeated those rows too, contiguously, so its unique predictions sit at
+        # every m-th position. Comparing the raw arrays would compare 4 values against 12.
+        stride = multiplicity[a.test_subject]
+        assert b.test_predictions.size == a.test_predictions.size * stride
+        assert np.allclose(a.test_predictions, b.test_predictions[::stride],
+                           rtol=0, atol=1e-9)
+
+
 def test_session_mean_baseline_threads_multiplicity_through():
     subjects, session_idx, targets = _baseline_cohort()
     outcome = fit_session_mean_baseline(
