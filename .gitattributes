@@ -8,3 +8,11 @@ scripts/ibex/* text eol=lf
 # the working-tree bytes would differ from the M7 originals, and the gate would fail against its
 # own reference. Marking them binary is what makes committing them safe.
 results/runs/*_f36c4fb2/** -text
+
+# The milestone-10 reference gate's immutable evidence. Same reasoning as the M7 artifacts
+# above, with one difference that makes it stronger: this file is NOT regenerable at all
+# after M10 rebuilds the stores, because the branch-aware feature evidence it records (stored
+# session vectors, raw pre-log tensors, the fold-local tuned epsilon) belongs to a store that
+# will no longer exist. `--compare` reads it as JSON, so EOL conversion would not break the
+# gate — but it is evidence, and evidence whose bytes change on checkout is worth less.
+results/milestone10/*.json -text
