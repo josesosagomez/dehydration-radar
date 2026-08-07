@@ -96,6 +96,103 @@ to the owner, not done unilaterally.
 **Not done:** the authoritative snapshot (needs IBEX), step 2's multiplicity foundation (blocked by
 the snapshot), and every later step.
 
+### Follow-up 4 — step 2 (multiplicity foundation), models layer. **A-M10-8: multiplicity is applied by row duplication, not `sample_weight`.**
+
+Plan §2.4/§4.1 prescribes `sample_weight` for the four families that accept one, with row
+expansion reserved for knn ("weighted families pass row multiplicity to both
+`StandardScaler.fit(sample_weight=...)` and estimator `fit(sample_weight=...)`"). Implemented as
+written, then tested against the plan's OWN acceptance criterion (§5.5: "direct-equivalence
+fixtures compare the multiplicity implementation with an explicitly duplicated cohort"). **It fails
+for two of the five families**, and not by a tolerance — by a mechanism. Both were diagnosed rather
+than worked around, and both are now pinned by test:
+
+- **svr.** The frozen grid leaves `gamma` at sklearn's default `"scale"` =
+  `1 / (n_features * X.var())`. `X.var()` is computed from the rows actually passed to `fit` and
+  **ignores `sample_weight`**, so a weighted fit uses the unique rows' variance (1.346 on the
+  fixture) and a duplicated fit the drawn cohort's (1.154). Different kernel width, different
+  model: max|Δŷ| = 5.8e-02. Pinning `gamma` to a constant makes the two agree at **exactly 0.0**,
+  which is what identifies the cause instead of merely observing a difference.
+- **rf.** A forest bootstraps `n_samples` rows uniformly, and `n_samples` is 10 for the weighted
+  fit and 17 for the duplicated one — the resampling differs before any weight is consulted.
+  max|Δŷ| = 4.9e-01 at `bootstrap=True`, which is the default and therefore the frozen setting.
+  (First draft of this entry also claimed divergence at `bootstrap=False`. **That was wrong** — it
+  is data-dependent: 4.8e-01 on one fixture, exactly 0 on another, because the per-split feature
+  permutation consumes a different number of RNG draws at n=10 than at n=17. The test now asserts
+  only the frozen configuration, since a data-dependent claim is not evidence for an amendment.)
+
+**A-M10-8.** `regressors.fit_pipeline` therefore duplicates rows for **every** family.
+`row_multiplicity=None` still runs the literal `pipe.fit(X, y)` statement, so A–D stay
+byte-identical. Ridge, gbm and the logistic thresholds are genuinely weight-equivalent, so this
+changes nothing for them; it just replaces a per-family argument about which families are
+duplication-equivalent with one rule that **is** duplication. The cost is nil — a replicate draws N
+subjects with replacement, so the expanded cohort has about the same row count as the original;
+expansion is size-neutral here, not a blow-up.
+
+The simplification it buys is larger than the amendment: with rows expanded before the pipeline,
+the scaler automatically sees the drawn population, Exp C's estimators compute their existing
+`n / (K_present · n_c)` weights on the expanded labels — which **is** §2.4's
+`m_s · n_eff / (K_present · n_c_eff)` — and arm (a)'s cutpoint quantiles are automatically over
+"in-sample predictions repeated contiguously by m_s". So §4.1's `model__row_multiplicity` plumbing
+through `ThresholdedOrdinalRegressor.fit` / `FrankHallOrdinal.fit` is **not implemented**: it would
+be dead API. Both ordinal estimators are left byte-unchanged.
+
+**A second plan/code conflict, resolved the same way and flagged for review.** §2.4 says arm (b)
+should recompute *binary* inverse-frequency weights per Frank-Hall threshold. The frozen M9
+implementation weights all four threshold fits by the single **multiclass** O-M9-7 vector. These
+are different weightings (`n/(2·n_{>k})` vs `n/(5·n_c)`), so adopting the plan's wording would
+change Exp C's output at m_s = 1 and break the byte-neutrality the same plan makes a hard
+requirement of this step. Byte-neutrality is the stronger constraint, so the multiclass rule
+stands unchanged. Raised, not silently resolved.
+
+*(Also noted for the plan's own correction: §4.1 names the arm-(b) class
+`CumulativeOrdinalClassifier`; the class is `FrankHallOrdinal`.)*
+
+**Built and green (37 tests, `tests/test_multiplicity.py`):** the expansion primitive and its
+contiguous-original-order guarantee; byte-neutrality of `row_multiplicity=None` for all five
+families plus both ordinal arms, compared against the pre-existing functions directly; direct
+equivalence with an explicitly duplicated cohort for every family, both ordinal arms, and the
+scaler; knn's neighbour table actually growing; the two A-M10-8 mechanism pins above; Exp A's
+session-index baseline (weighted means **and** both effective denominators, which the audit
+record now carries — added only under a bootstrap, so the unweighted record keeps exactly the
+milestone-7 keys); and Exp B's `session_means`, where multiplicity weights subject copies but the
+minimum-viability rule deliberately still counts **distinct** subjects, since drawing one subject
+three times gives a session no more independent information than drawing it once.
+
+### Follow-up 3 — the authoritative snapshot is taken. Step 1 is CLOSED; A-M10-7 provably cost nothing.
+
+Job ran on IBEX at `a5ef299` against the `3f465abc` stores. `grade: authoritative`, both bands:
+
+    10ghz  run 20260804T150841445054Z_3f465abc  store 73 sessions @3f465abc
+           16 subjects / 73 sessions, 16/16 selectable folds, 72 stage-1 candidates, 6 feature keys
+           superseded *_f0a46aa6 -> equivalent; selection table identical; max|dy_pred| = 2.330e-13
+    77ghz  run 20260804T171005433711Z_3f465abc  store 72 sessions @3f465abc
+           16 subjects / 72 sessions, 16/16 selectable folds, 9 stage-1 candidates, 4 feature keys
+           superseded *_f0a46aa6 -> equivalent; selection table identical; max|dy_pred| = 0.000e+00
+
+**The candidate counts are a free structural check and both pass:** 10 GHz 2 gates x 2 reductions x
+2 channels x 3 tilings x 3 branches = 72; 77 GHz 3 tilings x 3 branches = 9 (reduction/channel/gate
+are scalars there, not axes). The 77 GHz "4 distinct feature keys" also matches its selection table
+by hand — `(1,'tuned')`, `(2,'frozen')`, `(2,'off')`, `(1,'off')`.
+
+**A-M10-7 is now measured to have cost nothing.** The selection tables are **byte-identical** in both
+bands between the demoted `f0a46aa6` runs and the new `3f465abc` reference — so every fold selects
+the same feature key, and Exp F will consume exactly what it would have under the plan's original
+naming. The move was a change of pointer, not of analysis.
+
+**The 2.330e-13 is an independent three-way consistency confirmation, not just a small number.**
+HISTORY's own O-M9-5 table (2026-08-04) records `f0a46aa` vs M7 = **0.0** on 10 GHz — i.e. `f0a46aa`
+reproduced M7 bitwise — and `3f465ab` vs M7 = **2.33e-13**. If both hold, then `3f465ab` vs `f0a46aa`
+must itself be 2.33e-13, which is exactly what the gate reported. And the local check run earlier
+today closed the third side: `f36c4fb2` vs `f0a46aa6` = 0.000e+00. Three edges of the triangle agree,
+produced by two independently written code paths (`exp_d`'s O-M9-5 check and `reference_gate`), on
+two different machines and two different CPU vendors. That is a much stronger statement than either
+comparison alone, and it is the reason the 2.33e-13 can be attributed to the known Intel-vs-AMD BLAS
+sensitivity rather than to anything the store rebuild did.
+
+**Step 1 (plan §4.2) is closed.** `results/milestone10/reference_exp_a_manifest.json` exists at
+authoritative grade; the fail-closed precondition on every later structural edit and store rebuild is
+satisfied. Step 2 (the multiplicity foundation) is unblocked.
+
 ### Follow-up the same day — the IBEX check landed, and it moves the reference runs. **A-M10-7.**
 
 Owner ran the store/run inventory on IBEX. Result:

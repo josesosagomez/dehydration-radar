@@ -50,6 +50,14 @@ from .ordinal import (
 
 RIDGE_SOLVER = "cholesky"  # deterministic; matches the frozen reference procedure
 MODEL_FAMILIES = ("ridge", "svr", "rf", "gbm", "knn")
+
+# Families whose `.fit` accepts `sample_weight` at all. Recorded because it is the obvious
+# first thing to reach for when implementing the milestone-10 bootstrap -- and, for svr and
+# rf, the wrong thing: accepting a weight is not the same as being equivalent to duplicating
+# a row. See `fit_pipeline` (amendment A-M10-8) for the two mechanisms and the tests that
+# pin them. knn accepts no weight at all, which is also why the frozen
+# `ExpCConfig.class_weight_unsupported_families` lists it.
+SAMPLE_WEIGHT_SUPPORTED = frozenset({"ridge", "svr", "rf", "gbm"})
 # The six authorized Exp C family ids (arm (a) = one per base family, arm (b) = one).
 ORDINAL_FAMILIES = tuple(ORDINAL_A_PREFIX + f for f in MODEL_FAMILIES) + (ORDINAL_B_FAMILY,)
 SEED_SENSITIVE = frozenset({"rf", "gbm", "ord_a_rf", "ord_a_gbm"})  # the rest ignore the seed
@@ -64,9 +72,12 @@ __all__ = [
     "MODEL_FAMILIES",
     "ORDINAL_FAMILIES",
     "SEED_SENSITIVE",
+    "SAMPLE_WEIGHT_SUPPORTED",
     "RIDGE_SOLVER",
     "build_estimator",
     "enumerate_grid",
+    "expand_by_multiplicity",
+    "fit_pipeline",
     "fitted_state_params",
 ]
 
@@ -140,6 +151,81 @@ def _ordinal_model(family: str, params: dict, *, seed: int):
     elif family == ORDINAL_B_FAMILY:
         return FrankHallOrdinal(params["C"])
     raise RegressorError(f"unknown family {family!r} (expected one of {ORDINAL_FAMILIES})")
+
+
+# ------------------------------------------------- milestone 10: multiplicity-aware fitting
+#
+# The robustness bootstrap (plan §2.4) resamples SUBJECTS with replacement, so a training
+# subject can appear m_s > 1 times. The frozen requirement is that this equals an explicitly
+# duplicated cohort -- "multiplicity must reach the complete procedure" -- and that the
+# default path stays byte-identical to Experiments A-D. Both are enforced here, in ONE
+# dispatch, rather than at each of the harness's call sites.
+
+
+def expand_by_multiplicity(row_multiplicity, *arrays):
+    """Repeat each row `m` times, contiguously, in the caller's original row order.
+
+    `np.repeat` on axis 0 gives exactly the frozen order (plan §2.4: "row order is original
+    canonical order with each row repeated contiguously"), so the expanded cohort is a
+    deterministic function of the inputs -- no sort, no shuffle, no RNG.
+    """
+    m = np.asarray(row_multiplicity)
+    if m.ndim != 1:
+        raise RegressorError(f"row_multiplicity must be 1-D, got shape {m.shape}")
+    if not np.issubdtype(m.dtype, np.integer):
+        raise RegressorError(f"row_multiplicity must be integer counts, got dtype {m.dtype}")
+    if np.any(m < 0):
+        raise RegressorError("row_multiplicity must be non-negative")
+    for array in arrays:
+        if len(array) != m.size:
+            raise RegressorError(
+                f"row_multiplicity has {m.size} entries but an array has {len(array)} rows"
+            )
+    return tuple(np.repeat(np.asarray(a), m, axis=0) for a in arrays)
+
+
+def fit_pipeline(pipe, X, y, *, row_multiplicity=None):
+    """Fit a scaler+model pipeline, optionally under integer row multiplicities.
+
+    `row_multiplicity=None` executes `pipe.fit(X, y)` -- the exact statement milestones 7-9
+    ran, so every Experiment A-D fit stays byte-identical. That is the whole reason this is a
+    dispatch rather than a rewrite of the fitting code.
+
+    Otherwise the rows are **physically duplicated**, for every family. `sample_weight` is
+    deliberately not used, which is amendment **A-M10-8** and a departure from
+    `plans/MILESTONE_10_PLAN.md` §2.4/§4.1 ("weighted families pass row multiplicity to both
+    `StandardScaler.fit(sample_weight=...)` and estimator `fit(sample_weight=...)`", with
+    expansion reserved for knn). Weighting cannot satisfy the plan's OWN acceptance criterion
+    -- §5.5's "direct-equivalence fixtures compare the multiplicity implementation with an
+    explicitly duplicated cohort" -- for two of the five families, and the reasons are
+    mechanical rather than a matter of tolerance (both are pinned by test):
+
+      * **svr** -- the frozen grid leaves `gamma` at sklearn's default `"scale"`, i.e.
+        `1 / (n_features * X.var())`. `X.var()` is computed from the rows actually passed to
+        `fit` and ignores `sample_weight`, so a weighted fit uses the UNIQUE rows' variance
+        and a duplicated fit the drawn cohort's. Different kernel width, different model.
+        With `gamma` pinned to a constant the two agree to 0.0 exactly, which is what
+        identifies the cause.
+      * **rf** -- weights enter as weighted node counts, not as rows. The fits differ under
+        `bootstrap=True` (the bootstrap draws n_samples uniformly, and n_samples differs) and
+        still differ under `bootstrap=False`. RF weighting is not row duplication in any
+        configuration.
+
+    Ridge, gbm and the logistic thresholds ARE weight-equivalent, so expansion changes
+    nothing for them; it simply makes one rule serve all families instead of a per-family
+    argument about which is which. The cost is nil: a bootstrap replicate draws N subjects
+    with replacement, so the expanded cohort has about the same number of rows as the
+    original -- expansion is size-neutral here, not a blow-up.
+
+    Expanding before the pipeline also means the scaler sees the drawn population (a scaler
+    fit on the unique rows would standardize against a cohort that was never drawn), and Exp
+    C's estimators compute their train-only inverse-frequency class weights on the expanded
+    labels, which is exactly the effective-count formula §2.4 specifies.
+    """
+    if row_multiplicity is None:
+        return pipe.fit(X, y)                      # the unchanged milestone-7 statement
+    X_expanded, y_expanded = expand_by_multiplicity(row_multiplicity, X, y)
+    return pipe.fit(X_expanded, y_expanded)
 
 
 def enumerate_grid(family: str, grid: ModelGridConfig) -> list[dict]:

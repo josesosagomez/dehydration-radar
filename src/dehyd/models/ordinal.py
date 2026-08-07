@@ -89,6 +89,22 @@ def inverse_frequency_class_weights(class_labels) -> np.ndarray:
     return per_class[inverse]
 
 
+# Milestone 10 note. The robustness bootstrap needs Exp C's class weights to be the ones a
+# DUPLICATED cohort would produce -- plan §2.4's `w_row = m_s * n_eff / (K_present * n_c_eff)`.
+# No separate implementation of that formula exists here, and none is needed:
+# `regressors.fit_pipeline` duplicates the rows before the pipeline (amendment A-M10-8), so
+# this function is handed the expanded labels and its existing `n / (K_present * n_c)` IS the
+# effective-count rule. One weighting rule, one code path, and Exp C's frozen behaviour at
+# m_s == 1 is not merely equivalent but literally the same statement.
+#
+# The same resolution settles a second plan/code conflict: §2.4 says arm (b) should recompute
+# *binary* inverse-frequency weights per Frank-Hall threshold, whereas the frozen M9
+# implementation weights all four threshold fits by the single multiclass O-M9-7 vector.
+# Adopting the plan's wording would change Exp C's output at m_s == 1 and break the
+# byte-neutrality the same plan requires of this step. The multiclass rule therefore stands,
+# unchanged, and the discrepancy is raised for review rather than silently resolved.
+
+
 def _split_target(y2) -> tuple[np.ndarray, np.ndarray]:
     """Unpack the 2-column Exp C target into (continuous L, integer class labels)."""
     y2 = np.asarray(y2, dtype=float)
@@ -156,7 +172,10 @@ class ThresholdedOrdinalRegressor(BaseEstimator):
 
         # The frozen cutpoint source: quantiles of this regressor's OWN in-sample
         # predictions on the very rows it was just fit on — never of the targets, and never
-        # of anything predicted on held-out rows.
+        # of anything predicted on held-out rows. Under a milestone-10 bootstrap the rows
+        # reaching this fit are already the duplicated ones, so these quantiles are taken
+        # over the drawn sample without any multiplicity handling here — which is what plan
+        # §2.4's "in-sample predictions repeated contiguously by m_s" asks for.
         in_sample = model.predict(X)
         self.cutpoints_ = _strictly_increasing(
             np.quantile(in_sample, np.asarray(self.quantiles, dtype=float)),
