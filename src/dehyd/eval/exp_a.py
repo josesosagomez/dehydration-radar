@@ -117,9 +117,13 @@ class StoreBackedFeatures:
     session vectors from the stored RAW tensors, streaming one candidate's raw at a time.
     """
 
-    def __init__(self, band, sessions, store_dir, config):
+    def __init__(self, band, sessions, store_dir, config, *, subject_multiplicity=None):
         self.band = band
         self.config = config
+        # Milestone 10: fixed for the life of the provider (one bootstrap replicate uses one
+        # draw), so it does not enter the tuned-ε cache key — that key already identifies the
+        # (feature_key, train set) pair, and a second replicate builds a second provider.
+        self.subject_multiplicity = subject_multiplicity
         self.subjects = np.array([s["subject"] for s in sessions])
         self.y = np.array([s["delta_m_pct"] for s in sessions], dtype=float)
         self._sessions = sessions
@@ -216,7 +220,8 @@ class StoreBackedFeatures:
         cache_key = (fk, frozenset(train_subjects))
         if cache_key not in self._tuned_cache:
             eps = tuned_epsilons(self._prelog_by_subject(fk), train_subjects, k=self._eps_k,
-                                 fallback=self._log_eps_cfg())
+                                 fallback=self._log_eps_cfg(),
+                                 subject_multiplicity=self.subject_multiplicity)
             self._tuned_cache[cache_key] = (self._tuned_matrix(fk, eps), eps)
         X, eps = self._tuned_cache[cache_key]
         extra = (("tuned_epsilon", {"epsilon": np.array([eps[1], eps[2]], dtype=float)}),)

@@ -136,10 +136,13 @@ class OrdinalFeatures:
     and `harness._score` fails fast if a 2-column y ever reaches the 1-D Exp A metric.
     """
 
-    def __init__(self, band, sessions, store_dir, config):
+    def __init__(self, band, sessions, store_dir, config, *, subject_multiplicity=None):
         self.band = band
         self.config = config
-        self.base = exp_a.StoreBackedFeatures(band, sessions, store_dir, config)
+        self.subject_multiplicity = subject_multiplicity
+        self.base = exp_a.StoreBackedFeatures(
+            band, sessions, store_dir, config, subject_multiplicity=subject_multiplicity
+        )
         self.subjects = self.base.subjects
         self.session_idx = np.array([int(s["session_idx"]) for s in sessions])
         self.classes = np.array([int(s["class_idx"]) for s in sessions])

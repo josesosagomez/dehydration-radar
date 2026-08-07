@@ -158,6 +158,49 @@ milestone-7 keys); and Exp B's `session_means`, where multiplicity weights subje
 minimum-viability rule deliberately still counts **distinct** subjects, since drawing one subject
 three times gives a session no more independent information than drawing it once.
 
+### Follow-up 5 — step 2 completed through the harness and provider layers.
+
+**Harness.** `row_multiplicity` threaded through `_fit_once`, `_score`, `_fit_score_inner`,
+`_score_candidates_on_fold`, `_final_refit` and `_viability_reason`, all keyword-only with `None`
+defaults that execute the milestone-7 statements. Three things needed real thought rather than
+plumbing:
+
+- **Scoring splits by metric SHAPE.** The built-in `subject_balanced_mae` is weighted at the
+  *across-subject* average, because the metric is subject-balanced: repeating a subject's rows
+  leaves its own mean, and therefore the average over distinct subjects, completely unchanged. A
+  weight has to enter where the subjects are combined. A supplied `score_fn` (Exp B's equal-session
+  residual MAE, Exp C's ordinal metrics) is pooled or ordinal, so §2.4's general rule applies and
+  its evaluation rows are repeated instead. Both directions pinned by test, including the negative:
+  repeating rows leaves the subject-balanced value at 3.0 while weighting moves it to 4.0.
+- **knn viability counts effective rows.** `k = 15` is non-viable on 10 unique training rows but
+  viable on 17 duplicated ones, and it is the duplicated cohort that gets fit — judging on the
+  unique count would reject candidates a replicate can legitimately evaluate.
+- **The held-out subject is never resampled.** `_final_refit` duplicates only the training side;
+  the test rows are scored as themselves. One subject, one role, one estimate.
+
+Fit records gain the distinct fitted subject set, the multiplicity map, the effective weighted row
+count and the weighting mode — **only** under a bootstrap, so an ordinary record keeps exactly the
+M7-M9 keys. A test asserts the held-out subject never appears in a fitted multiplicity map,
+extending the invariant `fit_audit` already polices.
+
+`run_nested_candidates` takes `subject_multiplicity`, which makes the whole thing testable end to
+end against a dataset whose ROWS are physically repeated while the subject ids stay put — so both
+runs build identical folds from the same distinct subjects (§2.4's "every copy of one original
+subject always has one role"), and the selected candidate, inner-score matrix and held-out
+predictions all agree. *That test caught an error in its own first version:* it compared 4
+predictions against 12, because the reference dataset duplicates the held-out subject's rows too.
+
+**Providers.** `subject_multiplicity` threaded through `StoreBackedFeatures` (and therefore Exp B's
+`SessionResidualFeatures` and Exp C's `OrdinalFeatures`, which wrap it). The interesting one is
+`tuned_epsilons`: ε is a **median** over training subjects, an order statistic, so a weight cannot
+substitute for a copy the way it can for a mean — each training subject's per-subject scale is
+repeated `m_s` times *before* the median is taken, which is exactly §2.4's rule and exactly the
+median a duplicated cohort gives. It is also the one genuinely fitted WST quantity, so getting it
+wrong would have silently biased every tuned-branch replicate. Multiplicity is fixed for a
+provider's lifetime (one replicate, one draw), so it deliberately does not enter the tuned-ε cache
+key — that key already identifies the (feature_key, train set) pair, and a second replicate builds
+a second provider.
+
 ### Follow-up 3 — the authoritative snapshot is taken. Step 1 is CLOSED; A-M10-7 provably cost nothing.
 
 Job ran on IBEX at `a5ef299` against the `3f465abc` stores. `grade: authoritative`, both bands:

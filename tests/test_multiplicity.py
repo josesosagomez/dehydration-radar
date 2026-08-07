@@ -383,6 +383,40 @@ def test_session_means_weight_by_subject_copies_but_keep_the_distinct_subject_ru
     assert np.isclose(plain[1], np.mean([-0.5, -0.9]))
 
 
+# ------------------------------------------------------------- the tuned-epsilon provider
+
+
+def test_tuned_epsilon_repeats_subject_scales_before_taking_the_median():
+    """The one fitted WST quantity, and the one place a weight genuinely cannot substitute
+    for a copy: eps is a MEDIAN over training subjects, an order statistic, so the copies have
+    to be present in the list being sorted. Checked against the median of the explicitly
+    duplicated list."""
+    from dehyd.eval.harness import tuned_epsilons
+
+    # per-subject pre-log tuples (order 0, 1, 2); one session each keeps the means trivial
+    prelog = {1: [(0.0, 1.0, 10.0)], 2: [(0.0, 2.0, 20.0)],
+              3: [(0.0, 3.0, 30.0)], 4: [(0.0, 100.0, 1000.0)]}
+    train = {1, 2, 3, 4}
+
+    plain = tuned_epsilons(prelog, train, k=0.1, fallback=1e-6)
+    assert plain[1] == pytest.approx(0.1 * np.median([1.0, 2.0, 3.0, 100.0]))
+
+    m = {1: 3, 2: 1, 3: 1, 4: 1}
+    weighted = tuned_epsilons(prelog, train, k=0.1, fallback=1e-6, subject_multiplicity=m)
+    assert weighted[1] == pytest.approx(0.1 * np.median([1.0, 1.0, 1.0, 2.0, 3.0, 100.0]))
+    assert weighted[2] == pytest.approx(0.1 * np.median([10.0, 10.0, 10.0, 20.0, 30.0, 1000.0]))
+    assert weighted[1] != plain[1]      # the draw really did move the median
+
+
+def test_tuned_epsilon_is_byte_neutral_without_multiplicity():
+    from dehyd.eval.harness import tuned_epsilons
+
+    prelog = {1: [(0.0, 1.5, 12.0), (0.0, 2.5, 18.0)], 2: [(0.0, 4.0, 40.0)]}
+    plain = tuned_epsilons(prelog, {1, 2}, k=0.1, fallback=1e-6)
+    ones = tuned_epsilons(prelog, {1, 2}, k=0.1, fallback=1e-6, subject_multiplicity={1: 1, 2: 1})
+    assert plain == ones
+
+
 # ------------------------------------------------------------------------- the harness
 
 

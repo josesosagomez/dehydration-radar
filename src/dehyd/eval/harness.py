@@ -196,7 +196,8 @@ def require_complete_active(active: dict | None) -> None:
         )
 
 
-def tuned_epsilons(prelog_by_subject, train_subjects, *, k: float = 0.1, fallback: float = 1e-6) -> dict:
+def tuned_epsilons(prelog_by_subject, train_subjects, *, k: float = 0.1, fallback: float = 1e-6,
+                   subject_multiplicity=None) -> dict:
     """The fold-local tuned-ε per order (the one genuinely fitted WST quantity, train-only).
 
     For orders o in {1, 2}: ε_o = k · scale_o, where scale_o = median over TRAINING subjects
@@ -207,6 +208,12 @@ def tuned_epsilons(prelog_by_subject, train_subjects, *, k: float = 0.1, fallbac
 
     `prelog_by_subject`: {subject_id: [(v0, v1, v2), ...]} — one pre-log tuple per that
     subject's eligible session, already selected for the active tiling (and fusion, 77 GHz).
+
+    `subject_multiplicity` (milestone 10) repeats each training subject's per-subject mean
+    exactly m_s times BEFORE the median, which is plan §2.4's rule and is precisely the median
+    an explicitly duplicated bootstrap cohort would produce. A median cannot be weighted after
+    the fact the way a mean can — it is an order statistic, so the copies have to be present
+    in the list being sorted. `None` leaves the milestone-7 statements untouched.
     """
     train = sorted(train_subjects)
     eps: dict = {}
@@ -215,7 +222,9 @@ def tuned_epsilons(prelog_by_subject, train_subjects, *, k: float = 0.1, fallbac
         for s in train:
             vals = [tpl[o] for tpl in prelog_by_subject.get(s, []) if np.isfinite(tpl[o])]
             if vals:
-                per_subject_means.append(float(np.mean(vals)))
+                mean = float(np.mean(vals))
+                copies = 1 if subject_multiplicity is None else int(subject_multiplicity.get(int(s), 1))
+                per_subject_means.extend([mean] * copies)
         scale = float(np.median(per_subject_means)) if per_subject_means else float("nan")
         candidate_eps = k * scale
         eps[o] = candidate_eps if (np.isfinite(candidate_eps) and candidate_eps > 0.0) else fallback

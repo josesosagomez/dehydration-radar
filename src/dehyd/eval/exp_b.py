@@ -101,7 +101,7 @@ class SessionResidualFeatures:
     fitted quantity (at both CV levels, for free, via harness.py's existing `_bundle_fits`).
     """
 
-    def __init__(self, band, sessions, store_dir, config):
+    def __init__(self, band, sessions, store_dir, config, *, subject_multiplicity=None):
         if any(int(s["session_idx"]) == 0 for s in sessions):
             raise ExpBError(
                 "SessionResidualFeatures got an S0 row -- S0 must be excluded upstream, at "
@@ -111,7 +111,10 @@ class SessionResidualFeatures:
             )
         self.band = band
         self.config = config
-        self.base = exp_a.StoreBackedFeatures(band, sessions, store_dir, config)
+        self.subject_multiplicity = subject_multiplicity
+        self.base = exp_a.StoreBackedFeatures(
+            band, sessions, store_dir, config, subject_multiplicity=subject_multiplicity
+        )
         self.subjects = self.base.subjects
         self.session_idx = np.array([s["session_idx"] for s in sessions])
         self.y_raw = self.base.y
@@ -124,7 +127,8 @@ class SessionResidualFeatures:
         key = frozenset(train_subjects)
         if key not in self._drop_cache:
             self._drop_cache[key] = baselines.session_means(
-                self.subjects, self.session_idx, self.y_raw, train_subjects, min_train_subjects=2
+                self.subjects, self.session_idx, self.y_raw, train_subjects, min_train_subjects=2,
+                subject_multiplicity=self.subject_multiplicity,
             )
         return self._drop_cache[key]
 
