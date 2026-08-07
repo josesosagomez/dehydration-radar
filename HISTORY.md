@@ -158,6 +158,45 @@ milestone-7 keys); and Exp B's `session_means`, where multiplicity weights subje
 minimum-viability rule deliberately still counts **distinct** subjects, since drawing one subject
 three times gives a session no more independent information than drawing it once.
 
+### Follow-up 6 — owner directs the plan be synchronized now; A-M10-7..9 written into the authoritative design, and step 3 gated behind one focused re-review.
+
+Branch pushed (`origin/v1_milestone_10` at `085f137`). Owner's direction on the amendments, with a
+classification sharper than the one proposed: **A-M10-7 is a provenance/inventory correction**
+(explicitly "no estimand changes"), **A-M10-8 is the substantive implementation amendment**, and the
+arm-(b) weighting decision gets **its own A-M10-9** rather than riding inside A-M10-8 — because
+retaining the frozen multiclass O-M9-7 weights is a *scientific* judgement (switching would alter
+ordinary Exp-C behaviour at multiplicity one and violate byte-neutrality), not a consequence of how
+multiplicity is applied. `CumulativeOrdinalClassifier` → `FrankHallOrdinal` is a **factual
+correction, not an amendment**. And the instruction that mattered most: revise the affected
+**§2.4, §4.1, §5.5 and §6** as well as the amendment table, "so contradictory instructions
+disappear" — a plan whose §0.2 says one thing while its body still instructs another is worse than
+either version alone.
+
+Plan updated accordingly (+157/−42): §0.2 gains the three rows with their mechanisms and measured
+evidence; §1.3 now names the `3f465abc` pair and states the byte-identical-selection result
+explicitly; §2.4's multiplicity bullets are rewritten around row duplication; §4.1's signatures,
+file responsibilities and ordinal paragraph are corrected (including the harness mapping-vs-ndarray
+fix and its Exp-B row-dropping reason); §5.5's direct-equivalence bullet now covers every family and
+names the two mechanism pins; §6's snapshot command is replaced with the IBEX one and marked done;
+new §8.2 records the methodological basis for A-M10-7..9; §9 gains the re-review scope. Verified by
+grep that no contradictory instruction survives: zero `row_multiplicity: ndarray`, zero
+per-threshold-binary instructions, zero `f0a46aa6` as the Exp-A reference, and every surviving
+`sample_weight` mention is explicitly the rejected route.
+
+Two scoping decisions made while editing, both flagged rather than buried: **A-M10-7 is scoped to
+the Exp-A reference only** — Exp C and Exp D's `f0a46aa6` directories stay valid because assembly
+reads them as artifacts and never needs their feature evidence recomputed against a live store — and
+**the harness signature correction was folded into A-M10-8's section edits rather than given its own
+amendment ID**, since the owner's classification named three amendments; it is documented in full at
+§4.1 with its own mechanism and can be promoted to A-M10-10 if the re-review prefers.
+
+**Step 3 is gated.** Per the owner: pause downstream implementation, synchronize, run one focused
+plan re-review. Existing code stands as provisional-but-retained — tested and byte-neutral, so no
+rollback unless the re-review rejects an amendment, in which case the affected commit is revised
+rather than the milestone restarted. Steps 1 and 2 are isolated green commits precisely so that is
+possible. Step 3 implements §2.4, the section the amendments changed most, which is exactly why it
+waits.
+
 ### Follow-up 5 — step 2 completed through the harness and provider layers.
 
 **Harness.** `row_multiplicity` threaded through `_fit_once`, `_score`, `_fit_score_inner`,

@@ -55,6 +55,21 @@ is the authorization gate; implementation must not begin if any amendment is rej
 | **A-M10-5** | The `R=200` full-procedure resamples produce a **selection-variance robustness distribution** summarized by its empirical 2.5th and 97.5th percentiles, not a BCa CI. | BCa requires the observed statistic and an original-subject delete-one jackknife. Applying BCa to an arbitrary vector of already-bootstrapped estimates is invalid. Existing `B=10000` subject-cluster BCa intervals remain the formal conditional intervals. |
 | **A-M10-6** | Exp E reporting is outcome-neutral. The fixed model's weak predictive context is stated before interpreting attribution, but the path table is not pre-labelled as “null” or “physical.” | Attribution describes model reliance/predictive contribution; it cannot prove or disprove a dielectric mechanism. A desired narrative must not be encoded as a software acceptance criterion. |
 
+The three amendments below were added **during implementation** (2026-08-07), after the plan was
+accepted. Each was found by testing this plan against its own stated requirements, not by re-reading
+it. They are recorded with the same disclosure discipline as A-M10-1..6, and the sections they
+supersede have been revised in place so no contradictory instruction survives anywhere in this file.
+
+| ID | Decision | Reason |
+|---|---|---|
+| **A-M10-7** | *(provenance / inventory correction — no estimand changes.)* The reference Exp-A runs are `results/runs/20260804T150841445054Z_3f465abc` (10 GHz) and `results/runs/20260804T171005433711Z_3f465abc` (77 GHz), **not** the `*_f0a46aa6` pair §1.3 originally named. | Verified on IBEX: both feature stores are built at `3f465abcd38d2f9f451c2292779b9fcfe1bb5b52`. The stores that backed the `f0a46aa6` runs no longer exist — the commit move to `3f465ab` rebuilt them (HISTORY 2026-08-04) — so that pair's branch-aware **feature** evidence is not recomputable on any machine, while the `3f465abc` pair is backed by the live stores. §1.3's own wording is "validates the **current** M9 stores/runs"; this is what current now means. **The substitution was measured, not assumed:** the demoted `f0a46aa6` runs compare `equivalent` in both bands, with **byte-identical selection tables** and max\|Δy_pred\| of 2.330e-13 (10 GHz) and 0.000e+00 (77 GHz). Every fold selects the same feature key, so **no estimand, metric or acceptance criterion changes** — only which two directories the word "reference" points at. |
+| **A-M10-8** | *(substantive implementation amendment.)* Bootstrap multiplicity is applied by **deterministic contiguous row duplication for every model family**, replacing the `sample_weight` route of §2.4/§4.1. Expansion is no longer knn-only. | `sample_weight` cannot satisfy this plan's own acceptance criterion (§5.5, "direct-equivalence fixtures compare the multiplicity implementation with an explicitly duplicated cohort") for two of the five families, and the failures are mechanical rather than a matter of tolerance. **svr:** the frozen grid leaves `gamma` at sklearn's default `"scale"` = `1/(n_features·X.var())`; `X.var()` is computed from the rows passed to `fit` and ignores `sample_weight`, so a weighted fit uses the unique rows' variance and a duplicated fit the drawn cohort's (max\|Δŷ\| = 5.8e-02; pinning `gamma` makes them agree at exactly 0.0, which identifies the cause). **rf:** a forest bootstraps `n_samples` rows uniformly and `n_samples` differs between the unique and duplicated cohorts, so the resampling differs before any weight is consulted (max\|Δŷ\| = 4.9e-01 at the default `bootstrap=True`). Ridge, gbm and the logistic thresholds *are* weight-equivalent, so expansion changes nothing for them; it replaces a per-family argument about which families are duplication-equivalent with one rule that **is** duplication. Cost is nil — a replicate draws N subjects with replacement, so the expanded cohort has about the original row count. Both mechanisms are pinned by test so the amendment would fail loudly if a future library version invalidated it. |
+| **A-M10-9** | *(weighting decision, recorded separately from A-M10-8.)* Experiment C arm (b) keeps the **frozen multiclass O-M9-7 inverse-frequency weight vector** for all four Frank-Hall threshold fits. §2.4's per-threshold *binary* inverse-frequency rule is **not** adopted. | The two are different weightings (`n/(2·n_{>k})` vs `n/(K_present·n_c)`), and the frozen M9 implementation uses the multiclass vector. Adopting the binary rule would change ordinary Experiment C behaviour at multiplicity one — i.e. on the already-reported results — and so would violate the byte-neutrality this plan makes a hard requirement of the multiplicity step (§4.1: "every `None` default executes the current statements and produces byte-identical A–D outputs"). Byte-neutrality is the stronger constraint and the one the milestone's acceptance criteria rest on. Under A-M10-8 no separate effective-count formula is implemented at all: the estimator receives the expanded labels, and its existing `n/(K_present·n_c)` **is** §2.4's `m_s·n_eff/(K_present·n_c_eff)`. |
+
+**Factual correction (not an amendment).** §4.1 named the arm-(b) estimator
+`CumulativeOrdinalClassifier`. The class is `FrankHallOrdinal` (`src/dehyd/models/ordinal.py`), which
+is what A-M6-5 froze. Corrected wherever it appeared.
+
 ## 1. Verified repository contracts and dependencies
 
 The implementation must use the repository that exists, not an imagined uniform experiment API.
@@ -109,8 +124,17 @@ The implementation must use the repository that exists, not an imagined uniform 
   session-weighted bootstrap, mean-difference CI, Holm adjustment, Wilcoxon signed rank, regression
   metrics, and ordinal metrics. H reuses these results and functions; it does not rebuild them.
 - M9's validated Exp-A reruns are reference controls for fold-specific feature selection:
-  `results/runs/20260803T143704568296Z_f0a46aa6` (10 GHz) and
-  `results/runs/20260803T151715023672Z_f0a46aa6` (77 GHz). Because M10 changes the harness and
+  `results/runs/20260804T150841445054Z_3f465abc` (10 GHz) and
+  `results/runs/20260804T171005433711Z_3f465abc` (77 GHz) — **A-M10-7**. These are the runs the
+  live feature stores back; both stores are built at
+  `3f465abcd38d2f9f451c2292779b9fcfe1bb5b52`, verified on IBEX. The `*_f0a46aa6` pair this
+  section originally named is **superseded**: the commit move to `3f465ab` rebuilt the stores that
+  backed it, so its branch-aware feature evidence cannot be recomputed anywhere. The substitution
+  changes no result — the superseded runs' **selection tables are byte-identical** to the reference
+  pair's in both bands, with max|Δy_pred| = 2.330e-13 (10 GHz) and 0.000e+00 (77 GHz), so every fold
+  selects the same feature key and Exp F consumes exactly what it would have. The snapshot records
+  the `f0a46aa6` pair artifact-only, with that comparison, as the evidence for why the reference
+  moved. Because M10 changes the harness and
   rebuilds both stores, F's authoritative source is instead a full Exp-A rerun at the final M10
   commit on each rebuilt store. Before any store rebuild, `validate_exp_a_reference.py --snapshot`
   validates the current M9 stores/runs and writes
@@ -137,7 +161,10 @@ The implementation must use the repository that exists, not an imagined uniform 
   `results/runs/20260806T110156650286Z_3f465abc` (77 GHz). The additional C 10 GHz directory
   `20260803T172827484892Z_f0a46aa6` is a cross-vendor determinism control, not a headline source.
   The early inventory hashes and validates these paths; a failure requires retrieval/rerun, never
-  fallback glob selection.
+  fallback glob selection. **A-M10-7 does not touch these**: it is scoped to the Exp-A reference,
+  which is the only source whose *feature* evidence must be recomputable against a live store.
+  Assembly reads Exp C and Exp D as artifacts only, so their `f0a46aa6` directories remain valid
+  (HISTORY 2026-08-04 additionally records Exp C reproducing byte-for-byte at `3f465ab`).
 
 ## 2. Frozen scientific designs
 
@@ -354,17 +381,28 @@ Multiplicity must reach the complete procedure:
 - the provider supplies the original unique session rows plus `m_s`;
 - tuned-WST epsilon repeats each training subject's per-subject scale exactly `m_s` times before
   taking the median; this equals an explicitly duplicated bootstrap cohort;
-- weighted families pass row multiplicity to both
-  `StandardScaler.fit(sample_weight=...)` and estimator `fit(sample_weight=...)`;
-- KNN deterministically repeats training rows by `m_s` after role assignment; row order is original
-  canonical order with each row repeated contiguously; its scaler and model see the same expansion;
+- **every family** deterministically repeats its training rows by `m_s` after role assignment
+  (**A-M10-8**, superseding this plan's original `sample_weight` route). Row order is the original
+  canonical order with each row repeated contiguously, and the expansion happens **before** the
+  pipeline, so the scaler and the model see the identical expanded cohort. `sample_weight` is not
+  used anywhere: it is not duplication-equivalent for `svr` (data-dependent `gamma="scale"` ignores
+  weights) or for `rf` (the forest bootstraps `n_samples` rows, and `n_samples` differs), so the
+  weighted route could not satisfy §5.5's own direct-equivalence criterion. Expansion is
+  size-neutral here — a replicate draws N subjects with replacement, so the expanded cohort has
+  about the original row count;
 - Exp A's session-index baseline fits multiplicity-weighted per-session and global training means
   and audits both effective denominators;
-- Exp C recomputes class weights from effective bootstrap counts: with
-  `n_eff=sum_rows(m_s)` and `n_c_eff=sum_rows_in_class_c(m_s)`, each unique training row receives
-  estimator weight `m_s * n_eff / (K_present * n_c_eff)`; its scaler uses `m_s` only;
-- Exp C arm-a cutpoints use `np.quantile` on in-sample predictions repeated contiguously by `m_s`
-  with `method="linear"`, then apply the frozen strictly-increasing correction;
+- Exp C's class weights are those of the effective bootstrap counts — `n_eff=sum_rows(m_s)`,
+  `n_c_eff=sum_rows_in_class_c(m_s)`, giving each unique training row effective weight
+  `m_s * n_eff / (K_present * n_c_eff)`. Under A-M10-8 no separate formula is implemented: the
+  estimator is handed the expanded labels and its existing `n / (K_present * n_c)` **is** that
+  rule, and the scaler sees `m_s` alone because the expansion carries no class weighting.
+  **Both arms use this multiclass O-M9-7 rule, arm (b) included (A-M10-9)** — the per-threshold
+  binary variant this plan first specified would change Exp C at multiplicity one and break
+  byte-neutrality;
+- Exp C arm-a cutpoints are `np.quantile` (`method="linear"`, the default) on in-sample predictions
+  repeated contiguously by `m_s`, then the frozen strictly-increasing correction. Under A-M10-8 the
+  repetition is already present in the rows the fit saw, so no separate handling is needed;
 - Exp B's train-only session means use `m_s` as subject-copy weights and preserve the existing
   distinct-subject minimum-viability rule;
 - inner-validation objectives and outer replicate summaries weight each subject by `m_s`; for
@@ -449,10 +487,13 @@ generic experiment framework, inheritance hierarchy, database, or caching layer.
   their candidate enumeration or selection logic.
 - `src/dehyd/models/baselines.py` — optional multiplicity for the session-index baseline and Exp-B
   session means.
-- `src/dehyd/models/ordinal.py` — optional raw row multiplicity for effective arm-a/arm-b class
-  weights and arm-a cutpoint quantiles.
-- `src/dehyd/models/regressors.py` — estimator sample-weight capability table and explicit weighted
-  pipeline fit dispatch.
+- `src/dehyd/models/ordinal.py` — **unchanged** under A-M10-8/A-M10-9. The expanded rows reach both
+  estimators, so `inverse_frequency_class_weights` on the expanded labels already is the
+  effective-count rule, and arm-a's cutpoint quantiles are already over repeated predictions. No
+  `row_multiplicity` parameter is added; it would be dead API.
+- `src/dehyd/models/regressors.py` — `expand_by_multiplicity` (contiguous, original order) and
+  `fit_pipeline`, the single dispatch every fit goes through. The estimator sample-weight capability
+  table is retained as a documented record of the rejected route (A-M10-8), not as dispatch logic.
 - `src/dehyd/eval/selection.py` — small `select_alpha` grid argmin with closest-to-one tie-break.
 - Five thin entrypoints: `run_interpretability.py`, `run_confound.py`, `run_fusion.py`,
   `run_robustness.py`, `run_stats_assembly.py`; plus `validate_exp_a_reference.py`.
@@ -469,31 +510,46 @@ The backward-compatible multiplicity signatures are explicit:
 
 - provider/baseline/session-mean functions add keyword-only `subject_multiplicity: Mapping[int,int]
   | None = None`;
-- harness fit/scoring calls add keyword-only `row_multiplicity: ndarray | None = None`;
-- `ThresholdedOrdinalRegressor.fit` and `CumulativeOrdinalClassifier.fit` add keyword-only
-  `row_multiplicity=None`, passed as `model__row_multiplicity` by weighted pipeline dispatch;
-- an arm-a KNN path is expanded before the pipeline and receives `row_multiplicity=None` thereafter,
-  preventing double weighting;
+- harness fit/scoring calls add keyword-only **`subject_multiplicity: Mapping[int,int] | None =
+  None`** — the MAPPING, not a row-aligned `ndarray`. The harness expands it against each
+  **bundle's own** `subjects` at the point of use. A row array built once outside would be correct
+  only if every bundle carried the provider's full spine, which is false for Exp B:
+  `SessionResidualFeatures.data_for` drops degenerate sessions' rows, and *which* rows depends on
+  the fold's training subjects, so the array would attach multiplicities to the wrong rows —
+  silently, with no exception. The mapping is the only representation that cannot go out of step
+  with a fold-dependent row count;
+- the ordinal estimators are **unchanged** (A-M10-8): expansion happens before the pipeline, so
+  `ThresholdedOrdinalRegressor.fit` and `FrankHallOrdinal.fit` need no multiplicity parameter and
+  no `model__row_multiplicity` routing;
+- every family — knn included — is expanded once, before the pipeline, and nothing downstream
+  receives a weight, so a drawn subject can never be counted twice;
 - every `None` default executes the current statements and produces byte-identical A–D outputs.
 
-Arm a derives its multiclass effective weights from `row_multiplicity`; arm b recomputes each
-threshold's binary inverse-frequency weights from the two effective counts before multiplying by
-row multiplicity. Arm-a in-sample predictions are repeated only for cutpoint estimation. These
-rules live in `models/ordinal.py`, not in a robustness-only estimator clone.
+Both arms take their class weights from the expanded labels via the frozen multiclass O-M9-7 rule
+(A-M10-9); arm-a's in-sample predictions are already repeated, so its cutpoint quantiles need no
+separate handling. These rules live in `models/ordinal.py` and `models/regressors.py`, not in a
+robustness-only estimator clone.
 
 ### 4.2 Ordered implementation milestones
 
-1. **Protocol, inventory, and schema pin.** Apply A-M10-1..6 to the authoritative implementation
-   plan/configs, add artifact-schema constants/tests, pin current A–D byte behavior, and write a
-   source-artifact inventory before structural edits. The inventory must record that the two M9 A
-   runs are reference controls and that B has no currently available authoritative run, so final
-   M10 A and B reruns are scheduled rather than discovered ad hoc. While the M9 stores are still
-   present, create and validate the immutable branch-aware `reference_exp_a_manifest.json`; absence
-   or mismatch of that snapshot blocks every later store edit/rebuild.
-2. **Multiplicity foundation.** Add optional multiplicity to the provider/harness/scoring path and
-   estimator dispatch. Test scaler/model weights, KNN expansion, Exp-B weighted residual means,
-   Exp-C combined weights, fit audit, and byte-neutral default behavior. Land this as an isolated
-   green commit if desired; do not build stores yet.
+1. **Protocol, inventory, and schema pin.** *(DONE 2026-08-07.)* Apply A-M10-1..6 to the
+   authoritative implementation plan/configs, add artifact-schema constants/tests, pin current A–D
+   byte behavior, and write a source-artifact inventory before structural edits. The inventory must
+   record that the two M9 A runs are reference controls and that B has no currently available
+   authoritative run, so final M10 A and B reruns are scheduled rather than discovered ad hoc.
+   While the M9 stores are still present, create and validate the immutable branch-aware
+   `reference_exp_a_manifest.json`; absence or mismatch of that snapshot blocks every later store
+   edit/rebuild. **Delivered as** `eval/reference_gate.py`, `experiments/validate_exp_a_reference.py`
+   and `scripts/ibex/validate_exp_a_reference.sbatch`; the snapshot is authoritative for both bands
+   and version-controlled. The inventory step is what produced A-M10-7.
+2. **Multiplicity foundation.** *(DONE 2026-08-07.)* Add optional multiplicity to the
+   provider/harness/scoring path and estimator dispatch. Test contiguous row expansion for every
+   family (A-M10-8), Exp-B weighted residual means, Exp-C effective class weights, the tuned-ε
+   median, fit audit, and byte-neutral default behavior. Land this as an isolated green commit if
+   desired; do not build stores yet. **Delivered across** `models/regressors.py`,
+   `models/baselines.py`, `eval/harness.py` and the A/B/C providers and orchestration, with
+   byte-neutrality verified against the M8/M9 pins, the frozen leakage suite and the full suite.
+   This step produced A-M10-8, A-M10-9 and the §4.1 harness-signature correction.
 3. **H robustness driver.** Reuse A/B/C candidate enumeration and orchestration with the exact
    multiplicity contract. A smoke with `R=8` must intentionally report inconclusive under the real
    `min_successful=100`; the threshold is never scaled.
@@ -608,7 +664,10 @@ that consume one another's artifacts may not.
   no fake jackknife or second bootstrap is called.
 - `R=8` smoke is inconclusive with `min_successful=100`.
 - Direct-equivalence fixtures compare the multiplicity implementation with an explicitly duplicated
-  cohort for tuned epsilon, weighted/KNN scaler and model fits, the session-index baseline, Exp-B
+  cohort for tuned epsilon, **every family's** scaler and model fits (A-M10-8 — this criterion is
+  what rejected the `sample_weight` route, and two fixtures additionally pin *why* it fails, for
+  `svr`'s data-dependent `gamma` and `rf`'s bootstrap `n_samples`, so the amendment would fail
+  loudly if a library change ever invalidated it), the session-index baseline, Exp-B
   session means, Exp-C effective class weights, and arm-a cutpoint quantiles.
 - Fixtures that pass the coarse distinct-subject/class check but fail one nested fold or Exp-B's
   four-session aggregate skip the whole requested result replicate; no partial-fold estimate exists.
@@ -652,12 +711,31 @@ uv run python experiments/run_robustness.py --config configs/exp_a_regression.ya
 and asserts shared run seeds, target definition, split constants, and weight workbook. It never tries
 to merge two top-level configs through the config loader.
 
-Before structural edits or a store rebuild, run the exact reference snapshot gate once from the
-validated M9 tree/store state:
+Before structural edits or a store rebuild, run the reference snapshot gate once **on IBEX**, where
+the authoritative stores live. This is not the local command this plan first specified: the owner's
+machine holds 1 of 72 sessions of the 77 GHz store and a 10 GHz store built at a different commit,
+so a local snapshot would not be evidence about the reference runs at all. The wrapper defaults to
+the A-M10-7 reference pair and passes the superseded `f0a46aa6` pair as artifact-only evidence:
 
 ```text
-uv run python experiments/validate_exp_a_reference.py --snapshot --reference-10 results/runs/20260803T143704568296Z_f0a46aa6 --reference-77 results/runs/20260803T151715023672Z_f0a46aa6 --output results/milestone10/reference_exp_a_manifest.json
+scripts/ibex/submit_ibex.sh scripts/ibex/validate_exp_a_reference.sbatch
 ```
+
+which executes (REF10/REF77/SUP10/SUP77 are overridable defaults):
+
+```text
+uv run python experiments/validate_exp_a_reference.py --snapshot --config configs/ibex.yaml \
+  --reference-10 results/runs/20260804T150841445054Z_3f465abc \
+  --reference-77 results/runs/20260804T171005433711Z_3f465abc \
+  --superseded-10 results/runs/20260803T143704568296Z_f0a46aa6 \
+  --superseded-77 results/runs/20260803T151715023672Z_f0a46aa6 \
+  --output results/milestone10/reference_exp_a_manifest.json
+```
+
+The manifest must come back at `reference_grade: authoritative`; any other grade means the store it
+was taken from did not back the reference runs, and `--compare` refuses such a manifest by schema
+check. **Status: done** — taken 2026-08-07 at commit `a5ef299`, authoritative for both bands, and
+committed at `results/milestone10/reference_exp_a_manifest.json`.
 
 The full-cohort launch matrix below is exact. Run it from the final stamped tree; heavy work is
 always submitted to Slurm, never executed on a login shell. Each job must exit zero and produce the
@@ -774,6 +852,26 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
   [official filter-bank source](https://github.com/kymatio/kymatio/blob/v0.3.0/kymatio/scattering1d/filter_bank.py#L13-L16)
   rather than treating `j` as a physical frequency.
 
+### 8.2 Methodological basis for A-M10-7..9
+
+- **A-M10-8, `svr`.** With the RBF kernel, `gamma="scale"` is `1 / (n_features · X.var())` computed
+  from the array passed to `fit`; `sample_weight` rescales the per-sample penalty `C_i` and does not
+  enter that variance. Duplicating rows changes `X.var()`, weighting does not, so the two produce
+  different kernel widths. Demonstrated by construction rather than argued: with `gamma` pinned the
+  two fits agree at exactly 0.0.
+- **A-M10-8, `rf`.** `RandomForestRegressor(bootstrap=True)` draws `n_samples` rows uniformly per
+  tree; `sample_weight` enters as weighted node statistics, not as rows, so the resampling itself
+  differs once `n_samples` changes. The behaviour with `bootstrap=False` is data-dependent (the
+  per-split feature permutation consumes a different number of RNG draws at different `n`), which is
+  why only the frozen `bootstrap=True` configuration is asserted.
+- **A-M10-9.** Retaining the frozen multiclass weights is the choice that preserves the milestone's
+  own byte-neutrality requirement; the alternative would silently alter an already-reported result
+  (Exp C, M9) for no scientific gain, since under A-M10-8 the expanded-label weighting already
+  equals the effective-count rule §2.4 asks for.
+- **A-M10-7.** The claim that the substitution is inert is an empirical result, not an assumption:
+  byte-identical selection tables plus a max |Δy_pred| four orders of magnitude inside the frozen
+  O-M9-5 tolerance, and consistent with HISTORY's independent M7-comparison table.
+
 ## 9. Workflow gate after plan acceptance
 
 The future workflow is:
@@ -783,5 +881,22 @@ The future workflow is:
 The implementation writer should keep calculations visible in plain functions and inspectable
 tables. The independent test pass should target leakage, key alignment, multiplicity, and statistical
 edge cases. HISTORY checkpoints occur continuously as specified in §4.2; SECOND_CHAPTER and final
-user-facing documentation wait for verified full-cohort artifacts. Both must disclose A-M10-1..6
-and the observed results without outcome-based reframing.
+user-facing documentation wait for verified full-cohort artifacts. Both must disclose
+**A-M10-1..9** and the observed results without outcome-based reframing.
+
+### 9.1 Mid-implementation plan re-review (owner-directed, 2026-08-07)
+
+Steps 1 and 2 produced two amendments to an accepted design (A-M10-8 substantive, A-M10-9 a
+weighting decision) plus a provenance correction (A-M10-7) and a harness-signature correction. The
+owner's direction is therefore: **pause downstream implementation, synchronize this plan, and run
+one focused plan re-review before step 3.**
+
+Scope of that re-review — the amendments and every section revised for them, not the whole plan:
+§0.2's three new rows, §1.3's reference runs, §2.4's multiplicity rules, §4.1's signatures and file
+responsibilities, §5.5's direct-equivalence fixtures, §6's snapshot command, and §8.2.
+
+Standing of the existing code: **provisional but retained.** It is tested and byte-neutral for
+Experiments A–D, so no rollback is warranted unless the re-review rejects an amendment. If one is
+rejected, the affected commit is revised rather than the milestone restarted — steps 1 and 2 are
+isolated green commits precisely so that is possible. Step 3 does not begin until the re-review
+closes, because it implements §2.4, which is the section the amendments changed most.
