@@ -26,20 +26,19 @@ and §6. Steps 1–4 are complete, tested and committed; do not re-litigate them
   `tests/test_exp_d_ibex_scripts.py`. **A 6th failure is yours.**
 - **Step 5 is the next job and is unblocked.**
 
-## ⚠ OPEN DECISION FOR THE OWNER — A-M10-11 (raised in step 4, NOT yet accepted)
+## NO OPEN DECISIONS — A-M10-11 was accepted on 2026-08-08
 
-Amendments **A-M10-7, -8, -9, -10 are accepted and in force**. **A-M10-11 is raised and awaiting the
-owner's acceptance**, exactly as those four were:
+**All eleven amendments are accepted and in force** (A-M10-1..6 at plan acceptance, A-M10-7..11
+during implementation). A-M10-11, the last one outstanding, was accepted by the owner as implemented:
 
 > Exp G's `fit_audit_g.csv` records the fit chain **behind every reported prediction** (per level
 > and band: the staged selection, then that level's tuned-ε / scaler / model refit, plus one
 > `fusion_alpha` row per outer fold) and **not** the inner-CV fits inside a staged selection. Scoped
 > to that table only — `fusion_base_selection.csv` keeps its full per-candidate enumeration.
 
-Full text in plan §0.2, basis in §8.2, §3's G row revised to match. It changes **no estimand, metric
-or acceptance criterion**, and the code already matches it. **Ask the owner to accept or reject it
-before step 9's review.** If rejected, the fix is local to `exp_g._level_fit_audit_rows` plus the
-`StageOutcome.inner_results` those levels already have in hand — no redesign.
+Full text in plan §0.2, basis in §8.2, §3's G row already matches, and so does the committed code —
+acceptance changed no file under `src/`. **Do not reopen it**, and do not carry it into step 9's
+review as a pending item: the step-9 reviewer inherits an empty open-decisions list.
 
 ## Step 5 = Exp E. What it must REUSE, never reimplement
 
@@ -137,7 +136,7 @@ before step 9's review.** If rejected, the fix is local to `exp_g._level_fit_aud
 | **A-M10-8** | Multiplicity is **contiguous row duplication for every family**, not `sample_weight` (not duplication-equivalent for `svr`'s `gamma="scale"` or `rf`'s bootstrap `n_samples`). | accepted |
 | **A-M10-9** | Exp C arm (b) keeps the frozen **multiclass** O-M9-7 weights; the per-threshold binary rule would break byte-neutrality at multiplicity one. | accepted |
 | **A-M10-10** | H's `robustness_selection.csv` records the **selected** candidate per stage, and `fit_audit_robustness.csv` the **outer-level** fits. Scoped to H. | accepted |
-| **A-M10-11** | G's `fit_audit_g.csv` records the fit chain behind every **reported prediction**, not the inner-CV fits. Scoped to G's fit audit; its per-candidate selection table is unchanged. | **awaiting owner** |
+| **A-M10-11** | G's `fit_audit_g.csv` records the fit chain behind every **reported prediction**, not the inner-CV fits. Scoped to G's fit audit; its per-candidate selection table is unchanged. | accepted (2026-08-08) |
 
 A-M10-1..6 were accepted at plan acceptance. §1.3, §2.4, §3, §4.1, §5.5, §6, §8.2 and §9.1 were
 revised for all of them, so **the plan is internally consistent — trust its current text over any

@@ -4,6 +4,33 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — Owner decision: **A-M10-11 accepted** as implemented. The milestone-10 disclosure register now has no open item; steps 5–10 proceed with nothing pending for the step-9 review.
+
+Not an experiment — a decision entry, logged here because the amendment register is part of the
+implementation record and because the step-4 entry below still reads "awaiting the owner's
+acceptance."
+
+**Accepted, in the form recorded in plan §0.2** (basis in §8.2, §3's G fit-audit row already revised
+to match): Exp G's `fit_audit_g.csv` records the fit chain **behind every reported prediction** —
+per (level, band) the staged selection over that level's training pool, then that level's tuned-ε /
+scaler / model refit records, plus one `fusion_alpha` row per outer fold — and **not** the inner-CV
+fits that occur inside a staged selection. Scoped to that table only: `fusion_base_selection.csv`
+keeps its full per-candidate enumeration, which is the artifact §5.4's "outer outcomes are never
+read" fixture actually consumes.
+
+**Nothing changes in the code, and that was the point of raising it before step 5 rather than after.**
+`exp_g._level_fit_audit_rows` already emits exactly this granularity, so acceptance makes the built
+and tested implementation the authorized one; no estimand, metric or acceptance criterion moves. Had
+it been rejected, the fix was local — re-emit from the `StageOutcome.inner_results` each level
+already holds — but at a cost A-M10-10 had already measured for H and declined: ≈113 candidates ×
+≈5 inner folds × 6 levels × 2 bands × 16 folds ≈ 10⁵–10⁶ rows through the spawn-pool pickle, backing
+no reported prediction.
+
+**Consequence for the sequence.** All eleven amendments (A-M10-1..6 at plan acceptance, A-M10-7..11
+during implementation) are now accepted and in force. The step-9 independent review inherits an
+empty open-decisions list, and `SECOND_CHAPTER.md` §9's disclosure of A-M10-1..11 — which already
+states that none of 7–11 changes an estimand — needs no revision for this.
+
 ## 2026-08-08 — M10 step 4 DONE: Experiment G (matched-session decision fusion) is built and tested (71 new tests green). `selection_folds` extracted with `nested_loso_splits` provably byte-identical; `select_alpha` added; **A-M10-11 raised** (G's fit-audit granularity); the (fold, band) parallel unit and the sbatch sizing worked out BEFORE the header was written.
 
 Step 4 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_g.py`,
@@ -137,6 +164,8 @@ for no reason other than who happened to write it. Recorded in plan §0.2 with i
 §3's G fit-audit row revised to match, and flagged in HANDOFF.md as **awaiting the owner's
 acceptance** exactly as A-M10-7..10 were. Nothing in the code changed: the amendment describes what
 was built and tested, and it alters no estimand, metric or acceptance criterion.
+**Resolved the same day — the owner ACCEPTED A-M10-11; see the decision entry at the top of this
+file. The "awaiting" state above is the record of how it stood when step 4 closed.**
 
 **Deferred, per A-M10-4:** the feature-level fusion variant. Not implemented, not a completion
 criterion, and `metrics_exp_g.json` says so in a field rather than in a comment.
