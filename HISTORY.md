@@ -4,6 +4,80 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-09 — M10 step 11, local half: **this commit is the final analysis commit.** Pre-stamp verification done; `REVISION` stamped locally; the IBEX half (store rebuild + validate) is owner-run.
+
+**What step 11 is for.** `store._check_match` compares the store's recorded git commit against
+the analysis commit by strict equality, so moving the commit invalidates both feature stores.
+Steps 1–10 batched every source edit ahead of this point precisely so the milestone pays for one
+rebuild, not one per edit. From here to step 14 the analysis commit is frozen: any further source
+edit re-invalidates both stores and costs a full re-extraction.
+
+**The analysis commit is this commit** (the one carrying this entry), on `v1_milestone_10`. Its
+parent `1fd2cda` added only `.codex/agents/*.toml` + `.codex/config.toml` — the owner's tooling,
+no importable code — so the tree is unchanged from the step-10 green tree `11f327e` in every file
+any test or job reads.
+
+**Delta against what IBEX currently holds (`v1_milestone_9a` @ `3f465ab`).** 86 files, +46,820/−275,
+but the parts that decide whether a rebuild changes numbers do not move:
+
+- `git diff 3f465ab..HEAD -- pyproject.toml uv.lock configs/` is **empty**. No dependency and no
+  config changed, so the IBEX `.venv` needs no re-sync (running `uv sync --frozen` is a no-op) and
+  every `spec_hash`/`qc_config_hash` is unchanged by construction.
+- The only feature-path source change is in `store.py::compute_fingerprint`: the added `packages`
+  field (M9's `_package_versions()` diagnostic) plus its docstring. That field is deliberately
+  **not** one of the seven `_check_match` compares, so it changes provenance content and nothing
+  else.
+
+So the rebuild is **provenance-only**: the new stores should be numerically identical to the M9
+stores, and the reason they must be rebuilt is C16 attribution, not a changed feature definition.
+That is a prediction worth checking against step 12's `--compare` gate — if final Exp A does not
+reproduce the reference manifest, "the store changed" is *not* an available explanation.
+
+**Correction to HANDOFF.md's step-11 line: `REVISION` cannot be committed.** `.gitignore:15` is a
+literal `/REVISION`, and `git ls-files REVISION` is empty — it has never been tracked. "Stamp
+`REVISION` once" is therefore an action on each *tree*, not a commit, and the tree that matters is
+the IBEX one. Verified why it is still needed there even though IBEX is a git clone:
+
+- `provenance._git_info` resolves each field independently as live `git` → `DEHYD_GIT_*` →
+  (commit only) the `REVISION` file. On an IBEX **login** node live git answers, so `--validate`
+  reports the true HEAD. On a **compute** node the in-process `git` returns `None`
+  (`safe.directory` does not take there).
+- §6's launch matrix submits the arrays as bare `sbatch --wait scripts/ibex/extract10.sbatch`, not
+  through `submit_ibex.sh`, so `DEHYD_GIT_COMMIT` is unset in the job. The compute node's only
+  remaining source is `REVISION`. Unstamped or stale, the shards get stamped with the wrong commit
+  and the login-node `--validate` (which sees the true HEAD) rejects the store it just built.
+- `assert_clean_tree` still passes on the compute node: `dirty` is `None` there (git silent,
+  `DEHYD_GIT_DIRTY` unset) and `None` is falsy, and `commit` comes from `REVISION`. Also confirmed
+  `REVISION` being gitignored means it never makes the IBEX tree dirty for `git status --porcelain`.
+
+Deliberately **not** exporting `DEHYD_GIT_*` on IBEX alongside the stamp: two provenance sources
+that must agree is a failure mode with no upside, and the env vars win over the file.
+
+**`_check_match` compares the commit only** (`store.py:231`), not branch or dirty, so a detached
+checkout of the analysis SHA would be equally valid. Branch checkout is still what the runbook
+asks for, because the login-node runs then record a real branch name — and it comes with the hard
+rule that IBEX must **not** `git pull` again until step 14 finishes. A later local HISTORY commit
+pulled onto IBEX mid-milestone moves the login-node HEAD off the stores' commit and fails every
+subsequent job on lineage. Local commits after this one are safe *only* because IBEX will not take
+them.
+
+**Local gate at this tree.** `tests/test_no_leakage.py` — 25 passed, 1 deselected (22.9 s), and it
+is byte-unchanged since M7 (`git log -1` on it still returns `da7bdce`, the milestone-7 commit).
+`REVISION` restamped locally to the analysis commit as well; it is inert locally (live git wins the
+precedence) but keeping the two trees identical removes a class of confusion.
+
+**Local environment quirk found while running that gate:** `uv run pytest ...` now fails with
+`error: uv trampoline failed to canonicalize script path` (uv 0.11.21) — the `pytest.exe` console
+trampoline in `.venv/Scripts`, not the environment. `uv run --no-sync python -m pytest ...` and
+`.venv\Scripts\python.exe -m pytest ...` both work and are what the remaining local gates should
+use. Windows-only; it cannot affect IBEX, whose jobs call `.venv/bin/python` directly.
+
+**Status: the IBEX half of step 11 is owner-run** — this session has no ssh
+(`scripts/ibex/README.md:3`). The literal sequence handed over: fetch + checkout the analysis SHA,
+`git rev-parse HEAD > REVISION`, `sbatch --wait extract10.sbatch` → `--validate` 10 GHz,
+`sbatch --wait extract77.sbatch` → `--validate` 77 GHz, in that order. A step-11 completion entry
+with the job IDs and both validate outcomes follows when those come back.
+
 ## 2026-08-08 — Owner decision: **no independent code review (A-M10-12)**. Steps 8–10 adapted, plan and chapter reconciled, and the step-9 AUTHOR SELF-REVIEW run. Four findings, recorded here before any fix was written.
 
 *Owner decision, taken before step 8: there will be no independent code review. Recorded as
