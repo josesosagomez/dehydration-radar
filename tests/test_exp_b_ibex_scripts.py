@@ -65,18 +65,46 @@ def test_submit_script_normalizes_both_init_and_array_job_ids():
     assert '--dependency=afterany:"$array_job_id"' in text
 
 
+def run_bash(script: str, **kwargs) -> subprocess.CompletedProcess:
+    """Run a snippet through bash with the script on STDIN, never as an argument.
+
+    Why not `bash -c <script>`: on a Windows checkout `shutil.which("bash")` resolves to the
+    WindowsApps **WSL app-execution-alias stub**, not Git Bash, and invoking bare `"bash"` with
+    the script as an argument silently swallows the output — rc=0 with stdout `"\\n"` — so the
+    assertion below compared `''` against `'12345'` and the test had been red since M8. (The
+    long-standing diagnosis in HISTORY/HANDOFF, "Git Bash eats backslashes / inline `bash -c`
+    comes back empty", named the symptom rather than the cause; corrected 2026-08-08.)
+
+    Feeding the script on stdin returns correctly under the stub, under Git Bash, and on Linux,
+    so this tests bash rather than testing which bash the PATH happened to find.
+    """
+    return subprocess.run(["bash", "-s"], input=script.encode(), capture_output=True, **kwargs)
+
+
+def bash_syntax_check(path) -> subprocess.CompletedProcess:
+    """`bash -n` on a shell artifact, with its BYTES piped in rather than its path.
+
+    Same root cause: a `C:\\...` path handed to the resolved interpreter comes back as rc=127
+    with the backslashes eaten. LF is forced because this repo has `core.autocrlf=true`, so the
+    working-tree copy can carry CRLF even though `.gitattributes` checks these files out LF on
+    Linux — and a CRLF after a line-continuation backslash breaks bash's parser.
+    """
+    script = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    return subprocess.run(["bash", "-n", "-"], input=script, capture_output=True)
+
+
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available on PATH")
 def test_percent_percent_semicolon_star_strips_cluster_suffix_in_bash():
     """(C25) The exact normalization idiom, exercised for real against bash -- not just
     grepped for -- on a fixture supplying "12345;ibex" as sbatch --parsable's raw value."""
-    script = 'raw="12345;ibex"; stripped="${raw%%;*}"; echo "$stripped"'
-    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
-    assert out.stdout.strip() == "12345"
+    out = run_bash('raw="12345;ibex"; stripped="${raw%%;*}"; echo "$stripped"')
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.decode().strip() == "12345"
 
     # a bare numeric ID (single-cluster SLURM) must pass through unchanged.
-    script_bare = 'raw="12345"; stripped="${raw%%;*}"; echo "$stripped"'
-    out_bare = subprocess.run(["bash", "-c", script_bare], capture_output=True, text=True, check=True)
-    assert out_bare.stdout.strip() == "12345"
+    out_bare = run_bash('raw="12345"; stripped="${raw%%;*}"; echo "$stripped"')
+    assert out_bare.returncode == 0, out_bare.stderr
+    assert out_bare.stdout.decode().strip() == "12345"
 
 
 def test_all_three_ibex_scripts_parse_with_bash_dash_n():
@@ -86,5 +114,5 @@ def test_all_three_ibex_scripts_parse_with_bash_dash_n():
     if shutil.which("bash") is None:
         pytest.skip("bash not available on PATH")
     for path in (PRIMARY_SBATCH, VARIANT_SBATCH, SUBMIT_SH):
-        result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
-        assert result.returncode == 0, f"{path.name}: {result.stderr}"
+        result = bash_syntax_check(path)
+        assert result.returncode == 0, f"{path.name}: {result.stderr.decode('utf-8', 'replace')}"

@@ -130,11 +130,32 @@ false alarm I raised against my own work:**
    `replace(b"\r\n", b"\n")` in the newer tests matters locally and why a path-based check can
    disagree with a stdin-based one on this machine only.
 
-**Not fixed here.** The five tests belong to milestones 8–9 and fixing them edits files outside
-milestone 10's scope on the eve of the final analysis commit; that is the owner's call, and it
-is raised rather than taken. The argument for fixing: §7 requires the suite green, and a
-standing red baseline of five is precisely how a sixth failure would hide — "no sixth failure"
-has been the acceptance signal for four consecutive steps.
+**Fixed, on the owner's instruction (2026-08-09).** Both call sites in
+`tests/test_exp_b_ibex_scripts.py` now go through two small helpers — `run_bash(script)` and
+`bash_syntax_check(path)` — which pipe the script's bytes to `bash -s` / `bash -n -` instead of
+passing it as an argument; `tests/test_exp_d_ibex_scripts.py` **imports** them rather than
+copying, because the fact they encode is non-obvious and two copies would be two places to get
+it wrong. `bash_syntax_check` also forces LF, since `core.autocrlf=true` leaves CRLF in the
+working-tree `.sbatch` copies while `.gitattributes` checks them out LF on Linux.
+
+**The fix was verified to be a real gate, not a green light.** After the change,
+`tests/test_exp_b_ibex_scripts.py` + `tests/test_exp_d_ibex_scripts.py` = **21 passed** (was 16
+passed, 5 failed). Then `run_exp_b.sbatch` was deliberately corrupted with an unterminated `if`
+and the syntax gate was re-run: it **failed**, rc=2, naming the file and the line
+(`run_exp_b.sbatch: /bin/bash: line 51: syntax error: unexpected end of file`). The script was
+restored and the files re-run clean. That check matters more than the passing count — a gate
+that cannot fail is worse than no gate, because it reads as evidence.
+
+**The standing red baseline is gone**, which was the substantive reason to fix this rather than
+carry it into the final analysis commit: "no sixth failure" had been the acceptance signal for
+four consecutive steps, and a suite that is expected to be red in five places is exactly how a
+genuine sixth failure hides.
+
+**Full suite on the fixed tree: `1531 passed, 0 failed, 16 skipped` in 22:10, exit code 0.**
+1531 = the post-correction 1526 plus the five recovered tests. This is the **first fully green
+full suite of milestone 10**, and it is what step 11's final analysis commit is stamped on.
+§7's "all targeted/full/real-data tests are green" is now literally true rather than true modulo
+a footnote.
 - `tests/test_no_leakage.py`: byte-unchanged (`git diff --exit-code` clean), as it has been
   since milestone 7.
 

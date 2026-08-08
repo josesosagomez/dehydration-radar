@@ -12,10 +12,15 @@ resolution) is a code-review + real-dry-run check, as the plan itself acknowledg
 
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+
+# The two bash helpers live in the Exp-B script tests, where they were first needed. Imported
+# rather than copied: they encode a non-obvious Windows fact (bare "bash" resolves to the
+# WindowsApps WSL stub, so a script must go in on stdin, never as an argument), and two copies
+# of that would be two places to get it wrong.
+from test_exp_b_ibex_scripts import bash_syntax_check, run_bash
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IBEX = REPO_ROOT / "scripts" / "ibex"
@@ -178,17 +183,17 @@ def test_run_dir_handoff_is_the_last_stdout_line_and_survives_preflight_noise(tm
         'printf "config : a, b  band 10ghz\\nslurm  : job 7\\n/results/runs/20260731_abc\\n" '
         "> out.txt; run_dir=$(tail -n1 out.txt); echo \"$run_dir\""
     )
-    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True,
-                         cwd=str(tmp_path))
-    assert out.stdout.strip() == "/results/runs/20260731_abc"
+    out = run_bash(script, cwd=str(tmp_path))
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.decode().strip() == "/results/runs/20260731_abc"
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available on PATH")
 def test_percent_percent_semicolon_star_strips_cluster_suffix_in_bash():
     """(C25) The exact idiom, run against bash on a "12345;ibex" fixture — not just grepped."""
-    out = subprocess.run(["bash", "-c", 'raw="12345;ibex"; echo "${raw%%;*}"'],
-                         capture_output=True, text=True, check=True)
-    assert out.stdout.strip() == "12345"
+    out = run_bash('raw="12345;ibex"; echo "${raw%%;*}"')
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.decode().strip() == "12345"
 
 
 def test_every_new_ibex_script_parses_with_bash_dash_n():
@@ -197,5 +202,5 @@ def test_every_new_ibex_script_parses_with_bash_dash_n():
     if shutil.which("bash") is None:
         pytest.skip("bash not available on PATH")
     for path in (EXP_C_SBATCH, CHEAP_SBATCH, CNN_SBATCH, SUBMIT_SH):
-        result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
-        assert result.returncode == 0, f"{path.name}: {result.stderr}"
+        result = bash_syntax_check(path)
+        assert result.returncode == 0, f"{path.name}: {result.stderr.decode('utf-8', 'replace')}"
