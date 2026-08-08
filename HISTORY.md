@@ -4,6 +4,98 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — M10 step 7 DONE: drivers and assembly. One explicit run map, eight per-experiment adapters, and the run-directory pointer mechanism the plan needed but nothing had implemented. 55 new tests green in 5 s.
+
+Step 7 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/assembly.py`,
+`experiments/run_stats_assembly.py`, `scripts/ibex/run_stats_assembly.sbatch`,
+`tests/test_assembly.py` (27), `tests/test_run_stats_assembly.py` (28). Changed:
+`src/dehyd/provenance.py` (+`write_run_dir_pointer`/`read_run_dir_pointer`), all six experiment
+drivers (+`--run-dir-out`), all six experiment sbatch wrappers (+`RUN_DIR_OUT`). No store
+rebuild. `git diff --exit-code -- tests/test_no_leakage.py` clean.
+
+**A gap found by reading §6 rather than §4.2.** The launch matrix passes
+`RUN_DIR_OUT=results/milestone10/sources/exp_a_10.txt` to `run_exp_a.sbatch`, and §4.1 says
+`run_regression.py`/`run_clock_decoupling.py` "gain optional `--run-dir-out PATH`" — but
+`grep -rn "run.dir.out"` across the whole repository returned **nothing**. Steps 1–6 had never
+implemented it, and §6 additionally says "the other wrappers print and atomically save their
+successful run directory ... for manifest construction; no wrapper infers a latest directory".
+Without it, building the explicit run map at step 13 would mean a human reading a run directory
+out of an sbatch log — exactly the manual step the no-glob rule exists to remove. Implemented
+here because step 7 IS "drivers and assembly", and the map is what assembly consumes.
+
+**The pointer is one shared implementation, in `provenance.py` next to `record_run`.** Written
+via a temporary file plus `os.replace`, so a cancelled sbatch leaves either the old contents or
+the new ones and never a truncated path that still parses. Called ONLY at the end of a
+successful run: a crashed job leaves no pointer, so manifest construction fails closed instead
+of registering a half-written directory. `run_clock_decoupling.py` writes one only on the
+PRIMARY pooled path — the session-specific variant produces shards, not one authoritative
+directory, so it has nothing to hand forward.
+
+**Two rules shape `assembly.py`, and both exist because the alternative is a quiet wrong
+answer.**
+
+1. **Nothing is ever discovered.** No glob, no "latest", no fallback. `build_run_manifest` takes
+   the caller's explicit mapping and records run path, required relative artifacts, their
+   SHA-256, the source commit and the resolved config hash. `validate_manifest` re-hashes
+   everything, so a source that changed after registration stops the milestone rather than
+   silently producing different final tables. Both entrypoints are additionally pinned by a
+   structural test asserting they contain no `glob(`/`rglob(`/`iterdir(`/`latest`.
+2. **There is no uniform experiment schema and the module never pretends there is.** This was
+   the substantive design question of the step, and the artifacts settle it: A has three CI
+   dicts plus a baseline comparison; B has a primary aggregate that can legitimately be
+   *unavailable*; C has two ARMS whose secondary ordinal metrics carry no interval at all; D
+   has per-FAMILY metrics, two frozen comparisons and no prediction table; G is cross-band so
+   it has no band suffix. A "generic reader" over those would have to invent a shape none of
+   them has. Eight adapters, each reading only its own experiment's keys.
+
+**Exp E contributes NO headline row, deliberately.** Its artifact states no estimate — its
+content is a per-path importance distribution. Manufacturing a headline number for it (say, the
+mean full-model MAE across folds) would be inventing an estimand at assembly time, which is the
+same class of error as choosing a new winner from outer results. E is registered, hashed,
+validated, its exclusions are collected, and `metrics_milestone10.json` points at its own
+tables and says why. The reasoning is written into the module docstring so a reviewer does not
+read the absence as an oversight.
+
+**The robustness label is carried through verbatim, never reconstructed.** §7's "its empirical
+range is not mislabeled BCa" is a one-line failure to commit: the adapter copies `range_label`
+out of `robustness_summary.csv` into the `ci_method` column rather than filling in a default,
+and a test asserts the string never contains "bca".
+
+**Two defects found during implementation.**
+
+1. `adapt_g` read Exp G's `primary` as if it were a CI dict. It is a WRAPPER — estimand,
+   direction, sign, n_subjects — around `mean_difference_fused_minus_10`. Reading it directly
+   would have silently blanked every interval column on G's only primary row, with no error.
+   Caught by writing the fixture from `summarize_exp_g`'s actual return rather than from memory.
+2. A thin metrics file produced a bare `KeyError` from inside an adapter, which tells a reader
+   nothing about WHICH source was malformed. Added `_require`, so an incomplete metrics file
+   now fails as `d/10ghz: metrics_exp_d_10ghz.json has no 'n_eval' — it is not a complete d
+   metrics file (source: ...)`. Assembly is the last step before publication; a truncated
+   source has to be diagnosable from the message alone.
+
+**How "round-trips each ACTUAL schema" is established.** Transcribing each experiment's keys
+into a fixture would test my transcription, not the schema. So every A–D fixture is produced by
+calling that experiment's OWN `summarize_*` on small synthetic fold results (with
+`bootstrap_b=64` so the file stays fast) — if Exp B ever renames `primary_aggregate`, this file
+fails. Exp A additionally round-trips the **real committed M7 run** on disk, which is the
+strongest evidence available and reproduces its known values (subject-balanced MAE 0.4695,
+pooled r −0.1384, n=16/73). Only the two `f36c4fb2` Exp-A runs are version-controlled — the C
+and D directories exist locally but are untracked, so a test depending on them would fail on a
+clean checkout.
+
+**The two launch-matrix calls are the spine of the entrypoint tests.** `--validate-only` writes
+the map and nothing numerical; the second call names no sources at all, re-reads that map,
+re-validates every hash, and writes all five artifacts. A test tampers with a registered file
+between the two calls and asserts the second one stops.
+
+**Suite state.** `uv run python -m pytest` → **1525 passed, 5 failed, 16 skipped in 26:56**. The
+55 new tests are exactly the delta from step 6's `1470 passed, 5 failed, 16 skipped`, and the 5
+are the same pre-existing Windows-only ones. **No sixth failure.** That number carries more
+weight this step than usual: unlike steps 5 and 6, which only ADDED files, this one edited six
+existing drivers and six existing sbatch wrappers — several of which have tests asserting their
+exact argv — and nothing regressed. Every wrapper is additionally re-checked with
+`bash -n` on its bytes.
+
 ## 2026-08-08 — M10 step 6 DONE: Experiment F (the not-estimable HR record plus the available-covariate sensitivity) is built and tested (48 new tests green in 40 s). The two halves of A-M10-2 are kept structurally apart; the sizing was measured again; a test-fixture defect that had silenced a whole guard was found and fixed.
 
 Step 6 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_f.py`,

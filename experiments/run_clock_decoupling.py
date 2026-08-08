@@ -106,6 +106,12 @@ def _main_primary(args, config) -> int:
         print("\nmechanism-only smoke OK — no performance value surfaced.")
     else:
         print("\nfull-cohort Exp B complete — no owner pause spent (core design frozen before Exp A).")
+    # Only the PRIMARY pooled run writes a pointer. The session-specific variant is a separate
+    # call tree producing shards, not one authoritative directory, so it has nothing to hand to
+    # manifest construction. Written at the end of a successful run so a crashed job leaves
+    # none, and manifest construction fails closed rather than registering a partial directory.
+    if args.run_dir_out:
+        print(f"run dir   : {provenance.write_run_dir_pointer(args.run_dir_out, run_dir)}")
     return 0
 
 
@@ -206,6 +212,9 @@ def main(argv=None) -> int:
     parser.add_argument("--run-dir", metavar="PATH", help="[--session-specific] the shared run-group directory")
     parser.add_argument("--merge-sessions", action="store_true",
                         help="[--session-specific] combine whichever per-session shards exist under --run-dir")
+    parser.add_argument("--run-dir-out", metavar="PATH",
+                        help="after a SUCCESSFUL primary run, atomically write the absolute run "
+                             "directory here for milestone-10 manifest construction")
     args = parser.parse_args(argv)
     _validate_flags(args, parser)
 

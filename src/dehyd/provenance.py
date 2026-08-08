@@ -279,3 +279,39 @@ def record_run(config, manifest, folds=None, extra: dict | None = None, data_dir
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return out_path
+
+
+def write_run_dir_pointer(path, run_dir) -> Path:
+    """Atomically record ONE completed run's absolute directory, for manifest construction.
+
+    Milestone 10 assembles its final tables from an explicit experiment/band -> run directory
+    map and never discovers a run by glob or by "latest" (plan §5.5, §6). That rule only works
+    if each job can hand its own directory forward, which is what this file is: the driver
+    calls it AFTER a successful complete run, so a crashed or partial job leaves no pointer and
+    the manifest step fails closed instead of registering a half-written directory.
+
+    Written via a temporary file plus `os.replace`, so a reader either sees the previous
+    contents or the new ones and never a truncated path — an sbatch that is cancelled mid-write
+    must not leave a pointer that parses.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    resolved = str(Path(run_dir).resolve())
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(resolved + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+    return path
+
+
+def read_run_dir_pointer(path) -> Path:
+    """Read a pointer written by `write_run_dir_pointer`, failing closed on an empty file."""
+    path = Path(path)
+    if not path.is_file():
+        raise ProvenanceError(f"no run-directory pointer at {path}")
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise ProvenanceError(f"{path} is empty — the job that should have written it did not finish")
+    run_dir = Path(text)
+    if not run_dir.is_dir():
+        raise ProvenanceError(f"{path} points at {run_dir}, which is not a directory")
+    return run_dir

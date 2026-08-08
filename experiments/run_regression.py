@@ -33,6 +33,7 @@ from dehyd.data.manifest_77 import apply_qc_77, build_manifest_77  # noqa: E402
 from dehyd.eval import exp_a  # noqa: E402
 from dehyd.eval.splits import nested_loso_splits  # noqa: E402
 from dehyd.features.protocol_freeze import protocol_freeze_guard  # noqa: E402
+from dehyd import provenance  # noqa: E402
 from dehyd.provenance import _git_info, record_run  # noqa: E402
 
 
@@ -50,6 +51,9 @@ def main(argv=None) -> int:
     parser.add_argument("--band", choices=("10ghz", "77ghz"), default="10ghz")
     parser.add_argument("--subset", metavar="6subjects", help="mechanism-only smoke on the 6 lowest subjects")
     parser.add_argument("--full-cohort", action="store_true", help="OWNER GATE: the full run (spends the freeze)")
+    parser.add_argument("--run-dir-out", metavar="PATH",
+                        help="after a SUCCESSFUL run, atomically write the absolute run "
+                             "directory here for milestone-10 manifest construction")
     args = parser.parse_args(argv)
     _validate_flags(args, parser)
 
@@ -92,6 +96,12 @@ def main(argv=None) -> int:
         print("\nmechanism-only smoke OK — no performance value surfaced. STOP: owner checkpoint.")
     else:
         print("\nfull-cohort Exp A complete — the config freeze is now spent.")
+    # Written only here, at the end of a successful run: a crashed job must leave no
+    # pointer, so manifest construction fails closed rather than registering a
+    # half-written directory (plan §6).
+    if args.run_dir_out:
+        pointer = provenance.write_run_dir_pointer(args.run_dir_out, run_dir)
+        print(f"run dir   : {pointer}")
     return 0
 
 

@@ -45,6 +45,7 @@ from dehyd.data.manifest_77 import apply_qc_77, build_manifest_77  # noqa: E402
 from dehyd.eval import exp_a, exp_b, exp_e  # noqa: E402
 from dehyd.eval.splits import nested_loso_splits  # noqa: E402
 from dehyd.features.protocol_freeze import protocol_freeze_guard  # noqa: E402
+from dehyd import provenance  # noqa: E402
 from dehyd.provenance import _git_info, record_run  # noqa: E402
 
 
@@ -62,6 +63,9 @@ def main(argv=None) -> int:
     parser.add_argument("--subset", metavar="6subjects",
                         help="mechanism-only smoke on the 6 lowest evaluable subjects")
     parser.add_argument("--full-cohort", action="store_true", help="the full-cohort run")
+    parser.add_argument("--run-dir-out", metavar="PATH",
+                        help="after a SUCCESSFUL run, atomically write the absolute run "
+                             "directory here for milestone-10 manifest construction")
     args = parser.parse_args(argv)
     if bool(args.subset) == bool(args.full_cohort):
         parser.error("exactly one of --subset 6subjects or --full-cohort is required")
@@ -109,6 +113,10 @@ def main(argv=None) -> int:
     else:
         print("\nfull-cohort Exp E complete — the path table is reported as measured. "
               "Attribution is model reliance, not causality, and no sign was required.")
+    # Written only here, at the end of a successful run: a crashed job must leave no pointer,
+    # so manifest construction fails closed rather than registering a half-written directory.
+    if args.run_dir_out:
+        print(f"run dir   : {provenance.write_run_dir_pointer(args.run_dir_out, run_dir)}")
     return 0
 
 

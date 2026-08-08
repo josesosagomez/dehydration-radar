@@ -59,6 +59,10 @@
 # disagrees on run seeds, split constants, the fusion rule, the statistics or the weight
 # workbook.
 
+# RUN_DIR_OUT (optional): after a SUCCESSFUL run the driver atomically writes its absolute run
+# directory there, which is how milestone-10 assembly builds its explicit run map without ever
+# globbing for a latest directory. Unset -> nothing is written.
+
 set -euo pipefail
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 cd "${SLURM_SUBMIT_DIR:-.}"
@@ -70,6 +74,9 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-32}
 MODE=${MODE:-smoke}
 if [ "$MODE" = "full" ]; then SEL=(--full-cohort); else SEL=(--subset 6subjects); fi
 
+RUN_DIR_OUT=${RUN_DIR_OUT:-}
+if [ -n "$RUN_DIR_OUT" ]; then OUT=(--run-dir-out "$RUN_DIR_OUT"); else OUT=(); fi
+
 if [ -x .venv/bin/python ]; then PYTHON=(.venv/bin/python); else PYTHON=(uv run --no-sync python); fi
 
 echo "Exp G fusion: mode=${MODE} commit=${DEHYD_GIT_COMMIT:-<unset>}"
@@ -79,4 +86,4 @@ echo "Exp G fusion: mode=${MODE} commit=${DEHYD_GIT_COMMIT:-<unset>}"
   --shared-config configs/exp_g_fusion.yaml \
   --shared-config configs/stats.yaml \
   --shared-config configs/ibex.yaml \
-  "${SEL[@]}"
+  "${SEL[@]}" "${OUT[@]}"
