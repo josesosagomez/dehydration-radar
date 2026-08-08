@@ -1331,12 +1331,16 @@ an earlier analysis of the same data appeared to.
 
 ## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
-Not yet written — milestone 10 is unstarted as of 2026-08-07. Recorded here so the section's scope
-and its known framing problems are fixed *before* any result exists, in the same spirit as the
-milestone-6 config freeze. **`plans/MILESTONE_10_PLAN.md` (independently reviewed and accepted
-2026-08-07) is the authoritative design for all four experiments; this section is a chapter-facing
-summary of it, not a second source of design decisions.** Where anything below and the plan appear to
-disagree, the plan governs and this section is stale and needs updating.
+Not yet written. **No milestone-10 result exists as of 2026-08-08** — implementation is in progress
+(steps 1–4 of the plan's §4.2 are built and tested: the Exp-A reference gate, the multiplicity
+foundation, the H robustness driver, and Experiment G) but **no full-cohort E/F/G/H job has been
+run**, so this section still contains no number by design. It is written in full only after verified
+full-cohort artifacts exist. Recorded here so the section's scope and its known framing problems are
+fixed *before* any result exists, in the same spirit as the milestone-6 config freeze.
+**`plans/MILESTONE_10_PLAN.md` (independently reviewed and accepted 2026-08-07, amended during
+implementation) is the authoritative design for all four experiments; this section is a
+chapter-facing summary of it, not a second source of design decisions.** Where anything below and
+the plan appear to disagree, the plan governs and this section is stale and needs updating.
 
 **What the section will contain.** Experiment G (matched-session decision-level fusion: independent
 per-band Exp-A staged selection refit on the matched cohort, a constrained convex combiner with α on
@@ -1351,9 +1355,19 @@ algebraic-coupling sensitivity variants); Experiment H (per-subject performance 
 pre-specified comparisons with subject-cluster CIs and Holm correction, and a selection-variance
 **empirical percentile range** — not a BCa interval — from full-procedure subject resampling). All
 four designs were frozen at milestone 6 and are transcribed in `configs/exp_e.yaml`, `exp_f.yaml`,
-`exp_g_fusion.yaml` and `stats.yaml`; six explicit post-freeze protocol amendments (A-M10-1..6,
-`plans/MILESTONE_10_PLAN.md` §0.2), made after A-D's results were visible, are disclosed here by
-reference and will be restated with their full reasoning when this section is written in full.
+`exp_g_fusion.yaml` and `stats.yaml`; **eleven** explicit post-freeze protocol amendments
+(**A-M10-1..11**, `plans/MILESTONE_10_PLAN.md` §0.2) are disclosed here by reference and will be
+restated with their full reasoning, and with their true chronology, when this section is written in
+full. The chronology matters and must not be smoothed over: **A-M10-1..6 were made after A–D's
+results were visible** but before any milestone-10 code existed, as the condition of accepting the
+plan; **A-M10-7..11 were raised during implementation** (7–9 in steps 1–2, 10 in step 3, 11 in
+step 4), each found by testing the plan against its own stated requirements. Of the later five, one
+is a provenance correction that changes no estimand (A-M10-7), two are the bootstrap-multiplicity
+mechanism and the Exp-C weighting that preserves byte-neutrality (A-M10-8, A-M10-9), and two are
+artifact-granularity decisions about which provenance rows are written (A-M10-10 for Experiment H,
+A-M10-11 for Experiment G's fit audit) — **none of them changes an estimand, a metric, or an
+acceptance criterion**, and the chapter must say so explicitly rather than leaving a reader to
+count amendments and infer drift.
 
 **Things this section must not paper over.**
 

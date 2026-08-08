@@ -4,7 +4,7 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
-## 2026-08-08 — M10 step 4 DONE: Experiment G (matched-session decision fusion) is built and tested (56 new tests green). `selection_folds` extracted with `nested_loso_splits` provably byte-identical; `select_alpha` added; the (fold, band) parallel unit and the sbatch sizing worked out BEFORE the header was written.
+## 2026-08-08 — M10 step 4 DONE: Experiment G (matched-session decision fusion) is built and tested (71 new tests green). `selection_folds` extracted with `nested_loso_splits` provably byte-identical; `select_alpha` added; **A-M10-11 raised** (G's fit-audit granularity); the (fold, band) parallel unit and the sbatch sizing worked out BEFORE the header was written.
 
 Step 4 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_g.py`,
 `experiments/run_fusion.py`, `scripts/ibex/run_exp_g.sbatch`, `tests/test_exp_g.py` (45 tests),
@@ -64,7 +64,8 @@ selected using the subject that prediction is for** (A-M10-3; Varma & Simon 2006
   `_fuse_fold` additionally re-checks that the meta OOF rows cover **all** of `T_s` before fitting
   alpha: the whole-fold rule should already guarantee it, and this is the check that it held, so
   alpha can never be fit over "whichever meta groups happened to succeed".
-- **`fit_audit_g.csv` records the fit chain behind every REPORTED prediction** — per level and band:
+- **`fit_audit_g.csv` records the fit chain behind every REPORTED prediction — raised as A-M10-11**
+  (see the correction note at the end of this entry) — per level and band:
   the staged selection over that level's pool, then the refit's tuned-ε / scaler / model records,
   plus one `fusion_alpha` row per outer fold (band `"fused"`, fitted on `T_s`, predicted `[s]`). It
   does NOT record the inner-CV fits inside a staged selection. That is exactly the enumeration §5.1
@@ -125,6 +126,17 @@ same pre-existing Windows-only ones in `tests/test_exp_b_ibex_scripts.py` /
 strings come back empty). No sixth failure. `tests/test_run_fusion.py` uses the fix those two files
 still lack — pipe the script's BYTES to `bash -n -` with LF forced, never a path — so
 `run_exp_g.sbatch`'s syntax gate passes here.
+
+**Correction made the same day, before the docs were synced: the fit-audit decision above was first
+recorded as "a granularity reading of §3, not an amendment". That was inconsistent and it is now
+A-M10-11.** A-M10-10 had already set the precedent that an artifact-granularity decision about
+which provenance rows get written is an amendment with an ID, disclosed for the owner's acceptance
+— and the two decisions are the same kind of thing asked of two different tables. Calling one an
+amendment and the other a reading would have left the milestone's disclosure register incomplete
+for no reason other than who happened to write it. Recorded in plan §0.2 with its basis in §8.2,
+§3's G fit-audit row revised to match, and flagged in HANDOFF.md as **awaiting the owner's
+acceptance** exactly as A-M10-7..10 were. Nothing in the code changed: the amendment describes what
+was built and tested, and it alters no estimand, metric or acceptance criterion.
 
 **Deferred, per A-M10-4:** the feature-level fusion variant. Not implemented, not a completion
 criterion, and `metrics_exp_g.json` says so in a field rather than in a comment.

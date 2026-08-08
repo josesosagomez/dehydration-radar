@@ -40,17 +40,17 @@ Nothing here constructs a fold (all levels come from `splits.py`), enumerates a 
 `_final_refit`). Under A-M10-4 only this decision-level combiner is implemented; the feature-level
 variant is deferred and is not a Milestone-10 completion criterion.
 
-**Fit-audit granularity.** `fit_audit_g.csv` records the fit chain BEHIND EVERY REPORTED
+**Fit-audit granularity — A-M10-11.** `fit_audit_g.csv` records the fit chain BEHIND EVERY REPORTED
 PREDICTION — the staged selection over each level's pool, that level's tuned-ε / scaler / model
 refit, and the fusion alpha — which is exactly the enumeration plan §5.1 asks the audit to cover
 ("selection, scaler, model, and alpha subject sets") and what §5.4 needs for "every OOF and
 outer-final prediction resolves to one complete base-selection record and fit-audit chain". The
-inner-CV fits *inside* a staged selection are not rows: at ~113 candidates x 5 further folds x 6
-levels x 2 bands x 16 folds they are order 10^5-10^6 records shipped through the spawn-pool pickle
-for provenance nothing consumes, and they back no reported prediction. This is a granularity
-reading of §3, not an amendment: G's per-candidate SELECTION table
-(`fusion_base_selection.csv`) is kept in full, because §5.4/§8.2 need the losing candidates'
-scores to prove outer outcomes are never read.
+inner-CV fits *inside* a staged selection are not rows: they back no reported prediction (they
+produced a candidate's *score*, which is already a recorded column in `fusion_base_selection.csv`),
+and at ~113 candidates x 5 further folds x 6 levels x 2 bands x 16 folds they are order 10^5-10^6
+records shipped through the spawn-pool pickle for provenance nothing reads. The amendment is scoped
+to this table alone: G's per-candidate SELECTION table is kept in full, because §5.4/§8.2 need the
+losing candidates' scores to prove outer outcomes are never read.
 """
 
 from __future__ import annotations

@@ -1,121 +1,147 @@
-# HANDOFF — resume point for a new chat (STEPS 1–3 DONE; next job: **step 4, Experiment G**)
+# HANDOFF — resume point for a new chat (STEPS 1–4 DONE; next job: **step 5, Experiment E**)
 
-_Written 2026-08-08. The next chat's job: **implement `plans/MILESTONE_10_PLAN.md` §4.2 step 4 —
-Experiment G, the matched-session decision fusion**, in `src/dehyd/eval/exp_g.py`. Read this file,
-then the plan's §2.3 (G's frozen design, in full), §1.3's G-relevant contracts, §3's nine G artifact
-rows, §4.2 step 4, §5.1/§5.4, and §6. Steps 1–3 are complete, tested and committed; do not
-re-litigate them._
+_Written 2026-08-08. The next chat's job: **implement `plans/MILESTONE_10_PLAN.md` §4.2 step 5 —
+Experiment E, the LOSO path-group ablation**, in `src/dehyd/eval/exp_e.py`. Read this file, then the
+plan's §2.1 (E's frozen design, in full), §1.2 (feature layout + WST metadata — E is the only
+experiment that reconstructs the filter bank), §3's five E artifact rows, §4.2 step 5, §5.1/§5.2,
+and §6. Steps 1–4 are complete, tested and committed; do not re-litigate them._
 
 ## TL;DR
 
-- **Branch `v1_milestone_10`**, HEAD `51ade69`, pushed to `origin`. 12 commits since `fee9172`.
-  Working tree clean except untracked `.codex/` (owner's tooling — leave it).
-- **Step 1 done.** Exp-A reference gate built; `results/milestone10/reference_exp_a_manifest.json`
-  is `reference_grade: authoritative` for both bands and version-controlled. **The fail-closed
+- **Branch `v1_milestone_10`**, 15 commits since `fee9172` (step 4 is `9d49a7a`; this doc-sync
+  commit is HEAD). Working tree clean except untracked `.codex/` (owner's tooling — leave it).
+  **Push if `git status` says ahead.**
+- **Step 1 done.** Exp-A reference gate; `results/milestone10/reference_exp_a_manifest.json` is
+  `reference_grade: authoritative` for both bands and version-controlled. **The fail-closed
   precondition on every later structural edit and store rebuild is satisfied** — do not repeat it.
 - **Step 2 done.** Multiplicity reaches models, harness, providers and A/B/C orchestration,
   byte-neutral by default for Experiments A–D.
-- **Step 3 done** (`51ade69`). The H robustness driver: `eval/robustness.py`,
-  `experiments/run_robustness.py`, three IBEX shell artifacts, 77 tests.
-- **Four amendments are in force and accepted: A-M10-7, -8, -9, -10** (plan §0.2). They are ordinary
-  parts of the design now. §1.3, §2.4, §3, §4.1, §5.5, §6, §8.2 and §9.1 were revised to match, so
-  **the plan is internally consistent — trust its current text over any memory of it**.
-- **Step 4 is the next job and is unblocked.**
+- **Step 3 done.** The H robustness driver: `eval/robustness.py`, `experiments/run_robustness.py`,
+  three IBEX shell artifacts.
+- **Step 4 done** (`9d49a7a`). Experiment G: `eval/splits.py::selection_folds`,
+  `eval/selection.py::select_alpha`, `eval/exp_g.py`, `experiments/run_fusion.py`,
+  `scripts/ibex/run_exp_g.sbatch`, 71 new tests.
+- **Suite baseline is now `1376 passed, 5 failed, 16 skipped`** (~20 min). The 5 are the
+  pre-existing Windows-only failures in `tests/test_exp_b_ibex_scripts.py` /
+  `tests/test_exp_d_ibex_scripts.py`. **A 6th failure is yours.**
+- **Step 5 is the next job and is unblocked.**
 
-## Step 4 = Exp G. What it must REUSE, never reimplement
+## ⚠ OPEN DECISION FOR THE OWNER — A-M10-11 (raised in step 4, NOT yet accepted)
+
+Amendments **A-M10-7, -8, -9, -10 are accepted and in force**. **A-M10-11 is raised and awaiting the
+owner's acceptance**, exactly as those four were:
+
+> Exp G's `fit_audit_g.csv` records the fit chain **behind every reported prediction** (per level
+> and band: the staged selection, then that level's tuned-ε / scaler / model refit, plus one
+> `fusion_alpha` row per outer fold) and **not** the inner-CV fits inside a staged selection. Scoped
+> to that table only — `fusion_base_selection.csv` keeps its full per-candidate enumeration.
+
+Full text in plan §0.2, basis in §8.2, §3's G row revised to match. It changes **no estimand, metric
+or acceptance criterion**, and the code already matches it. **Ask the owner to accept or reject it
+before step 9's review.** If rejected, the fix is local to `exp_g._level_fit_audit_rows` plus the
+`StageOutcome.inner_results` those levels already have in hand — no redesign.
+
+## Step 5 = Exp E. What it must REUSE, never reimplement
 
 | Need | Use |
 |---|---|
-| Every fold index, at every level | `eval/splits.py`. **Step 4's FIRST task**: expose public `selection_folds(subject_ids, n_inner_max=5)` — validates unique sorted subjects, requires ≥ 2, returns the same deterministic `InnerFold`s private `_inner_folds` makes — and make `nested_loso_splits` call it. `exp_g.py` constructs **no** indices. |
-| Exp-A staged selection at every level | `exp_a.stage1_candidates` / `stage2_candidates` / `StoreBackedFeatures`, driven through `harness._score_candidates_on_fold` + `select_stage_winner` + `_final_refit` |
-| The alpha grid argmin | New small `select_alpha` in `eval/selection.py` (§4.1) — closest-to-1.0 tie-break. Never inline a tie-break; that module is the single source. |
-| The 21-point grid + tie-break rule | `config.exp_g` (`ExpGConfig`, M6-frozen): `alpha_grid` = 0.00…1.00 step 0.05, `alpha_tie_break="closest_to_one"`, `seed_pairing=True`, `objective="subject_balanced_oof_mae"` |
-| CIs / mean-difference | `eval/metrics.py::mean_difference_ci` — already complete |
+| Every outer fold | `eval/splits.py::nested_loso_splits` (E has **no** inner CV — the model is fixed, nothing is selected) |
+| Residual targets + train-only session means | `exp_b.SessionResidualFeatures` (wraps `StoreBackedFeatures`; emits μ_s via `extra_fits` so it audits like any other fitted quantity). E **reuses Exp B's code, and consumes no Exp B artifact** |
+| The S0-excluded spine | `exp_b.build_sessions_b` / `exp_b.evaluable_subjects_b` |
+| Residual scoring | `metrics.equal_session_residual_mae` (equal weight per session) |
+| Column → path metadata | `features.pooling.session_feature_layout(meta, n_time, n_channels, family="pooled")` → `(frame_aggregate, channel, path_id, segment, statistic)` |
+| The filter bank's `xi`/`sigma`/`j` | Rebuild the pinned Kymatio bank from the resolved config and call `features.wst.scattering_shape` — the stores persist `order` **only** |
 | Fold-parallel execution | `eval/fold_parallel.py::run_folds_parallel(..., unit=)` |
+| CIs (if any are reported) | `eval/metrics.py` — E is descriptive; do **not** invent a p-value |
 
-## Step 4's own requirements (read them in the plan, in full)
+## Step 5's own requirements (read them in the plan, in full)
 
-- **Matched population** (§2.3): build both band spines independently, inner-join on unique
-  `(subject, session_idx)`. Fail on duplicates, unequal `delta_m_pct`, inconsistent session names,
-  non-finite targets. Every model — 10-only, 77-only, equal-weight, learned — trains and scores on
-  this exact cell set. No frame-to-frame alignment is attempted.
-- **Selection-honest meta-training** (**A-M10-3**): for outer fold `s`, each attached
-  `inner_folds[i].val_subjects` is one meta-validation group `V`. For each `V` and band, call
-  `selection_folds(sorted(T_s - V))` and run the **complete** Exp-A staged selection over those
-  further folds, refit on `T_s \ V`, predict `V` per seed. **Never** reuse
-  `InnerResult.val_predictions` — it keeps only the first seed and its rows carry no session keys.
-- **Five-seed labels, not five observations**: a deterministic winning family is evaluated once and
-  copied to the five configured seed labels with `deterministic_source_seed` recorded.
-- **Fail-closed, whole-fold**: `selection_folds` refuses < 2 selection-training subjects; if no
-  candidate survives any required further fold, the **entire** outer fold is non-evaluable for
-  learned fusion. No partial meta-validation coverage is ever used.
-- **Alpha**: subject-balanced OOF MAE across `T_s` per alpha per seed; select from the mean over the
-  five paired seed labels; ties → closest to 1.0. Record the whole grid.
-- **Primary estimand**: `d_s = mean_over_seed(MAE_s(fused) − MAE_s(10_only))`, headline
-  `mean_over_subject(d_s)` with `mean_difference_ci`. Negative favours fusion. 77-only and
-  equal-weight are descriptive secondary, **no** extra p-value family.
-- **A-M10-4**: the constrained decision-level combiner ONLY. The feature-level variant is deferred
-  and is not a completion criterion. Do not invent one.
-- **Artifacts** (§3, nine of them): `matched_population.csv`, `unmatched_population.csv`,
-  `fusion_meta_oof.csv`, `fusion_base_selection.csv`, `fit_audit_g.csv`, `fusion_alpha_grid.csv`,
-  `predictions_g.csv`, `per_subject_g.csv`, `metrics_exp_g.json` + `fusion_comparison.png` +
-  `exclusions_g.csv`. Column lists are in §3. **Note G's `fusion_base_selection.csv` genuinely IS
-  per-candidate** — unlike H's (A-M10-10) — because §5.4 needs the losing candidates' scores to
-  prove outer outcomes are never read. Plan §8.2 explains the distinction; keep it.
-- Also in scope: `experiments/run_fusion.py` and `scripts/ibex/run_exp_g.sbatch`. `run_fusion.py`
-  loads the two band configs **separately** (`--config-10` / `--config-77`), applies
-  `--shared-config` overlays to both, and asserts shared run seeds, target definition, split
-  constants and weight workbook. It never merges two top-level configs through the loader.
+- **A-M10-1 is in force:** the frozen standalone 4-fold permutation CV is **replaced** by
+  leave-one-path-group-out refit under ordinary outer LOSO. Consequence to notice early:
+  `ExpEConfig.n_folds = 4` and `fold_assignment` are now **dead config**. Do not read them, do not
+  delete them (M6 sections are frozen records), and say so in a comment.
+- **Per selectable outer fold** (§2.1): build `SessionResidualFeatures` on outer-training subjects
+  only → fit the full fixed ridge on all retained outer-training rows (its `StandardScaler` fit on
+  those rows only) → score the held-out subject with equal-session residual MAE → then, **for each
+  canonical `path_id`**, delete that path group's complete column block **BEFORE scaling**, refit a
+  fresh scaler + ridge on the **identical** rows, and score the **identical** held-out rows.
+- `importance_delta_mae_pct_points = ablated_mae − full_mae`. Positive = the group helped. One value
+  is one path × one held-out subject, in residual Δm% points.
+- **Fixed model form, both bands, run separately.** 10 GHz: `gate=(1,2) m`, reduction A, magnitude,
+  T1, log off. 77 GHz: T1_77, I/Q, mean-Rx fusion, log off. Ridge `alpha=1.0`. This is **not** the
+  "best model" from A/B outer results and must never be swapped for one.
+- **A path group** = every column sharing one Kymatio canonical `path_id`: both `frame_mean` and
+  `frame_median` aggregates, every channel, and all global/half × mean/std columns.
+- **Fail-closed metadata gate (§1.2).** Reconstructed `order` must equal the stored `order__{tiling}`
+  array for **every consumed session**, and its path count must match the model layout. Any mismatch
+  **stops the run** — it is not a warning.
+- **Band-aware physics labels (§2.1), and the limits are part of the artifact.** Order 0: no
+  frequency/range/level claim (per-signal standardization removed absolute level). 10 GHz order 1:
+  `xi_1 * 520834` Hz is a fast-time **beat** frequency → coarse scene range `c·f_b/(2·slope)` with
+  `slope = bandwidth_hz / chirp_duration_s`; that is **scene distance, not penetration depth**.
+  10 GHz order 2: `xi_2` is an envelope-modulation centre, not a second range. 77 GHz order 1:
+  `xi_1 * PRF` is a slow-time Doppler/modulation magnitude — **not range**, and **no signed
+  velocity** is reported. 77 GHz order 2: envelope modulation, not range or a second velocity.
+  Kymatio 0.3.0 `xi` is cycles/sample so `xi_hz = xi * fs_hz`; `j` is a dyadic subsampling index and
+  is **never** converted to Hz.
+- **A-M10-6: reporting is outcome-neutral.** State the fixed model's weak predictive context
+  (§6–§8) *before* the path table, then report the table as measured. Do **not** pre-label paths
+  "null" or "physical", and do not make a desired sign an acceptance criterion.
+- **Artifacts** (§3, five rows): `importance_folds_{band}.csv`, `path_metadata_{band}.csv`
+  (non-applicable numeric fields **blank, not invented**), `importance_summary_{band}.csv`
+  (deterministic sort `scattering_order, path_id`), `ridge_coefficients_{band}.csv`
+  (**full fixed model only, never ablation refits**), `metrics_exp_e_{band}.json` +
+  `interpretability_map_{band}.png` + `exclusions_e_{band}.csv`. Column lists are in §3.
+- Also in scope: `experiments/run_interpretability.py` and `scripts/ibex/run_exp_e.sbatch`. Unlike
+  G, E takes **one** `--config` list per band (§6 shows the exact smoke argv) plus `--band`.
 
-## Things to check EARLY in step 4 (learned the hard way in step 3)
+## Things to check EARLY in step 5
 
-1. **Sizing.** G runs a complete Exp-A staged selection at *three* levels: per (outer fold × meta
-   fold × band), plus per (outer fold × band) for the outer-final winner. At 16 subjects that is
-   roughly `16×5×2 + 16×2 = 192` staged selections against Exp A's 16 — order 10× a full Exp A run.
-   Estimate it against the measured anchor (HISTORY 2026-07-28: Exp B 01:04:20 on 16 cores, 16 folds
-   in one wave ⇒ ~1 core-hour/fold) **before** writing the sbatch header, and size `--time`/
-   `--cpus-per-task` from that. Step 3's header was under-sized by 2–3× and it cost a redesign.
-2. **The M6 search space cannot be shrunk in tests.** `protocol_freeze_guard._check_m6_sections`
-   rejects any deviation, so every G test that drives the real search pays for 113 candidates per
-   selection. Keep end-to-end tests to ONE small synthetic-store case and put everything else on
-   hand-built fold results — the split `tests/test_robustness.py` uses.
-3. **G needs BOTH bands, and the local 77 GHz store is 1 of 72 sessions.** There is no meaningful
-   local real-data G smoke. Tests must build a synthetic two-band store; the real smoke is step 13,
-   on IBEX, after the step-11 rebuild.
-4. **Touching `splits.py` touches the frozen leakage suite's dependency.** `selection_folds` must be
-   a pure extraction: `nested_loso_splits` output stays byte-identical.
-   `git diff --exit-code -- tests/test_no_leakage.py` is an acceptance step and it must stay green.
-
-## The four amendments in force (full text + evidence in plan §0.2 and §8.2)
-
-| ID | One line |
-|---|---|
-| **A-M10-7** | Reference Exp-A runs are the `*_3f465abc` pair, not `*_f0a46aa6`. Provenance only; selection tables byte-identical, **no estimand changed**. Exp C/D `f0a46aa6` assembly sources remain valid. |
-| **A-M10-8** | Multiplicity is **contiguous row duplication for every family**, not `sample_weight` (not duplication-equivalent for `svr`'s data-dependent `gamma="scale"` or `rf`'s bootstrap `n_samples`). Both mechanisms pinned by test. |
-| **A-M10-9** | Exp C arm (b) keeps the frozen **multiclass** O-M9-7 weights; the per-threshold binary rule would break byte-neutrality at multiplicity one. |
-| **A-M10-10** | H's `robustness_selection.csv` records the **selected** candidate per stage, and `fit_audit_robustness.csv` the **outer-level** fits, because A/B/C fold workers discard their `StageOutcome`/`InnerResult`. **Scoped to H — Exp G's per-candidate table is unaffected and stays.** |
+1. **Sizing — E is the CHEAP one, and that is worth confirming rather than assuming.** There is no
+   inner CV and no search: per outer fold it is `1 + n_paths` ridge fits on ~50–60 rows. Get
+   `n_paths` for T1 / T1_77 from `scattering_shape` first, then size the sbatch from
+   `16 folds × (1 + n_paths) × 2 bands`. Expect minutes, not hours — do **not** clone
+   `run_exp_g.sbatch`'s 32-core/24 h header out of habit.
+2. **E is the only experiment that rebuilds the Kymatio filter bank.** The stores never persisted
+   `xi`/`sigma`/`j`. Get the reconstruction + the `order` equality gate working on a synthetic store
+   before writing a single physics label.
+3. **The 77 GHz half cannot be smoked locally** — the local 77 GHz store is 1 of 72 sessions. Test it
+   on a synthetic store; the real smoke is step 13, on IBEX, after the step-11 rebuild.
+4. **Test cost.** E has no search, so its tests do **not** pay the 113-candidate tax that made
+   `test_exp_g.py` a 176 s file. There is no excuse for a slow E suite; keep it fast.
 
 ## Process traps that are still live
 
-- **Do not rebuild the stores.** Steps 4–10 land as green commits with **no** store rebuild; step 11
+- **Do not rebuild the stores.** Steps 5–10 land as green commits with **no** store rebuild; step 11
   stamps `REVISION` once and rebuilds both bands once. A commit move invalidates both stores
   (`store._check_match`, strict commit equality) — that is why the work is batched this way.
-- **The local 77 GHz store is 1 of 72 sessions.** Any real-data 77 GHz work runs on IBEX. The local
-  10 GHz store is complete but built at `dab8f708`, which is *not* the analysis commit, so
-  `validate_store` refuses it — a local real-data smoke fails on provenance, not mechanism.
+- **The local 10 GHz store is complete but built at `dab8f708`**, which is *not* the analysis commit,
+  so `validate_store` refuses it: a local real-data smoke fails on provenance, not mechanism.
 - **IBEX** sits on `v1_milestone_9a` at `3f465ab` unless someone moved it; it needs
   `git fetch origin && git checkout v1_milestone_10`. Both former dirty-tree offenders (`dcgm/`,
   `results/exploratory_frame_split/`) are gitignored, so `submit_ibex.sh` will not refuse.
 - **Heavy work is always `sbatch`**, never a login-shell run.
-- **`tests/test_no_leakage.py` is frozen** — untouched through steps 1–3; keep it that way.
-- **5 pre-existing test failures on this Windows machine**, all in
-  `tests/test_exp_b_ibex_scripts.py` / `tests/test_exp_d_ibex_scripts.py`: Git Bash eats the
-  backslashes in a Windows path and inline `bash -c` strings return empty. **Current baseline is
-  `1305 passed, 5 failed, 16 skipped`** (of which 77 are step 3's). A 6th failure is yours.
-  `tests/test_run_robustness.py::test_every_shell_artifact_parses_with_bash_dash_n` shows the fix
-  for those two files: pipe the script's **bytes** to `bash -n -` with LF forced, never a path.
+- **`tests/test_no_leakage.py` is frozen** — untouched through steps 1–4; keep it that way, and keep
+  `git diff --exit-code -- tests/test_no_leakage.py` as an acceptance step.
 - **`core.autocrlf=true` here** — a byte-exact reference artifact needs a `-text` entry in
   `.gitattributes`. `scripts/ibex/*` is already `text eol=lf`, so new sbatch files are safe.
+- **The two stale IBEX-script test files**: `tests/test_run_robustness.py` and
+  `tests/test_run_fusion.py` show the fix those two still lack — pipe the script's **bytes** to
+  `bash -n -` with LF forced, never a path. Use that pattern for `run_exp_e.sbatch`'s syntax gate.
+
+## The five amendments raised during implementation
+
+| ID | One line | Status |
+|---|---|---|
+| **A-M10-7** | Reference Exp-A runs are the `*_3f465abc` pair, not `*_f0a46aa6`. Provenance only; selection tables byte-identical, **no estimand changed**. | accepted |
+| **A-M10-8** | Multiplicity is **contiguous row duplication for every family**, not `sample_weight` (not duplication-equivalent for `svr`'s `gamma="scale"` or `rf`'s bootstrap `n_samples`). | accepted |
+| **A-M10-9** | Exp C arm (b) keeps the frozen **multiclass** O-M9-7 weights; the per-threshold binary rule would break byte-neutrality at multiplicity one. | accepted |
+| **A-M10-10** | H's `robustness_selection.csv` records the **selected** candidate per stage, and `fit_audit_robustness.csv` the **outer-level** fits. Scoped to H. | accepted |
+| **A-M10-11** | G's `fit_audit_g.csv` records the fit chain behind every **reported prediction**, not the inner-CV fits. Scoped to G's fit audit; its per-candidate selection table is unchanged. | **awaiting owner** |
+
+A-M10-1..6 were accepted at plan acceptance. §1.3, §2.4, §3, §4.1, §5.5, §6, §8.2 and §9.1 were
+revised for all of them, so **the plan is internally consistent — trust its current text over any
+memory of it.**
 
 ## Hard invariants (unchanged, never violate)
 
@@ -124,22 +150,26 @@ tuning; primary target continuous Δm%; folds only from `eval/splits.py`; tie-br
 `eval/selection.py`; `protocol_freeze_guard` before every fit/write; E/F/G/H are entirely CPU.
 Do not report frame-level accuracy as a headline, do not claim causal isolation of hydration from
 time of day, do not overclaim clinical readiness, and **do not tune E/F/G/H toward a more favourable
-result because A–D came out negative**. Fusion is not required to beat 10 GHz.
+result because A–D came out negative**. Attribution is not causality; fusion is not required to beat
+10 GHz.
 
-## Remaining sequence after step 4 (plan §4.2)
+## Remaining sequence after step 5 (plan §4.2)
 
-5. Exp E · 6. Exp F · 7. drivers + assembly · 8. independent tests · 9. independent code review ·
+6. Exp F · 7. drivers + assembly · 8. independent tests · 9. independent code review ·
 10. corrections + mandatory retest · 11. final commit + **one** store rebuild · 12. Exp A/B reruns at
 the final commit, then `validate_exp_a_reference.py --compare` against the committed manifest ·
 13. local smokes then the full E/F/G + `R=200` IBEX jobs · 14. assembly, and **only then**
 `SECOND_CHAPTER.md` §9.
 
-**Step 13 note:** robustness sizing is decided — A and B submit `run_robustness.sbatch` with
-`--cpus-per-task=64`; Exp C uses `submit_robustness_sharded.sh` (array + merge), with `ARRAY_TIME`
-sized from one measured shard. Both paths are in §6's launch matrix.
+**Step 13 sizing already decided:** Exp G = `run_exp_g.sbatch` at 32 cores / 24 h / 128 G (~192
+core-hours, ~6 h wall). Robustness: A and B submit `run_robustness.sbatch` with
+`--cpus-per-task=64`; Exp C uses `submit_robustness_sharded.sh` (array + merge) with `ARRAY_TIME`
+sized from one measured shard. Both are in §6's launch matrix.
 
 ## Chapter state
 
-`SECOND_CHAPTER.md` §0–§8 complete. §9 is still the pre-registration stub reconciled to the accepted
-plan; it is written in full **only after** verified full-cohort M10 artifacts exist, never before.
-It must disclose **A-M10-1..10**.
+`SECOND_CHAPTER.md` §0–§8 complete. §9 is still the pre-registration stub, now reconciled to the
+plan as amended: it records that **no milestone-10 result exists**, and discloses **A-M10-1..11**
+with their true chronology (1–6 at plan acceptance, 7–11 during implementation) and the fact that
+none of 7–11 changes an estimand. It is written in full **only after** verified full-cohort M10
+artifacts exist, never before.
