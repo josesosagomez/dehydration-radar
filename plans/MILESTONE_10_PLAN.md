@@ -55,16 +55,18 @@ is the authorization gate; implementation must not begin if any amendment is rej
 | **A-M10-5** | The `R=200` full-procedure resamples produce a **selection-variance robustness distribution** summarized by its empirical 2.5th and 97.5th percentiles, not a BCa CI. | BCa requires the observed statistic and an original-subject delete-one jackknife. Applying BCa to an arbitrary vector of already-bootstrapped estimates is invalid. Existing `B=10000` subject-cluster BCa intervals remain the formal conditional intervals. |
 | **A-M10-6** | Exp E reporting is outcome-neutral. The fixed model's weak predictive context is stated before interpreting attribution, but the path table is not pre-labelled as “null” or “physical.” | Attribution describes model reliance/predictive contribution; it cannot prove or disprove a dielectric mechanism. A desired narrative must not be encoded as a software acceptance criterion. |
 
-The three amendments below were added **during implementation** (2026-08-07), after the plan was
-accepted. Each was found by testing this plan against its own stated requirements, not by re-reading
-it. They are recorded with the same disclosure discipline as A-M10-1..6, and the sections they
-supersede have been revised in place so no contradictory instruction survives anywhere in this file.
+The four amendments below were added **during implementation** (A-M10-7..9 on 2026-08-07 in steps
+1–2; A-M10-10 on 2026-08-08 in step 3), after the plan was accepted. Each was found by testing this
+plan against its own stated requirements, not by re-reading it. They are recorded with the same
+disclosure discipline as A-M10-1..6, and the sections they supersede have been revised in place so
+no contradictory instruction survives anywhere in this file.
 
 | ID | Decision | Reason |
 |---|---|---|
 | **A-M10-7** | *(provenance / inventory correction — no estimand changes.)* The reference Exp-A runs are `results/runs/20260804T150841445054Z_3f465abc` (10 GHz) and `results/runs/20260804T171005433711Z_3f465abc` (77 GHz), **not** the `*_f0a46aa6` pair §1.3 originally named. | Verified on IBEX: both feature stores are built at `3f465abcd38d2f9f451c2292779b9fcfe1bb5b52`. The stores that backed the `f0a46aa6` runs no longer exist — the commit move to `3f465ab` rebuilt them (HISTORY 2026-08-04) — so that pair's branch-aware **feature** evidence is not recomputable on any machine, while the `3f465abc` pair is backed by the live stores. §1.3's own wording is "validates the **current** M9 stores/runs"; this is what current now means. **The substitution was measured, not assumed:** the demoted `f0a46aa6` runs compare `equivalent` in both bands, with **byte-identical selection tables** and max\|Δy_pred\| of 2.330e-13 (10 GHz) and 0.000e+00 (77 GHz). Every fold selects the same feature key, so **no estimand, metric or acceptance criterion changes** — only which two directories the word "reference" points at. |
 | **A-M10-8** | *(substantive implementation amendment.)* Bootstrap multiplicity is applied by **deterministic contiguous row duplication for every model family**, replacing the `sample_weight` route of §2.4/§4.1. Expansion is no longer knn-only. | `sample_weight` cannot satisfy this plan's own acceptance criterion (§5.5, "direct-equivalence fixtures compare the multiplicity implementation with an explicitly duplicated cohort") for two of the five families, and the failures are mechanical rather than a matter of tolerance. **svr:** the frozen grid leaves `gamma` at sklearn's default `"scale"` = `1/(n_features·X.var())`; `X.var()` is computed from the rows passed to `fit` and ignores `sample_weight`, so a weighted fit uses the unique rows' variance and a duplicated fit the drawn cohort's (max\|Δŷ\| = 5.8e-02; pinning `gamma` makes them agree at exactly 0.0, which identifies the cause). **rf:** a forest bootstraps `n_samples` rows uniformly and `n_samples` differs between the unique and duplicated cohorts, so the resampling differs before any weight is consulted (max\|Δŷ\| = 4.9e-01 at the default `bootstrap=True`). Ridge, gbm and the logistic thresholds *are* weight-equivalent, so expansion changes nothing for them; it replaces a per-family argument about which families are duplication-equivalent with one rule that **is** duplication. Cost is nil — a replicate draws N subjects with replacement, so the expanded cohort has about the original row count. Both mechanisms are pinned by test so the amendment would fail loudly if a future library version invalidated it. |
 | **A-M10-9** | *(weighting decision, recorded separately from A-M10-8.)* Experiment C arm (b) keeps the **frozen multiclass O-M9-7 inverse-frequency weight vector** for all four Frank-Hall threshold fits. §2.4's per-threshold *binary* inverse-frequency rule is **not** adopted. | The two are different weightings (`n/(2·n_{>k})` vs `n/(K_present·n_c)`), and the frozen M9 implementation uses the multiclass vector. Adopting the binary rule would change ordinary Experiment C behaviour at multiplicity one — i.e. on the already-reported results — and so would violate the byte-neutrality this plan makes a hard requirement of the multiplicity step (§4.1: "every `None` default executes the current statements and produces byte-identical A–D outputs"). Byte-neutrality is the stronger constraint and the one the milestone's acceptance criteria rest on. Under A-M10-8 no separate effective-count formula is implemented at all: the estimator receives the expanded labels, and its existing `n/(K_present·n_c)` **is** §2.4's `m_s·n_eff/(K_present·n_c_eff)`. |
+| **A-M10-10** | *(artifact-granularity amendment, raised 2026-08-08 during step 3.)* `robustness_selection.csv` records **one row per SELECTED candidate per stage** rather than one row per enumerated candidate, and `fit_audit_robustness.csv` records the **outer-level** fits the reused A/B/C orchestration returns rather than also its inner-CV fits. §3's key lists are otherwise unchanged; the consequence visible in the data is that `inner_score`/`inner_score_variance` are blank and `n_inner_folds` is populated for Exp C only. | §4.2 step 3 requires the robustness driver to reuse A/B/C orchestration unchanged ("robustness never copies their candidate enumeration or selection logic"), and `run_exp_a`/`run_exp_b`/`run_exp_c` return **only** the selected candidate and the outer-train `final_fits`: each fold worker discards its per-candidate `StageOutcome` and its `InnerResult` list before returning (`exp_a._run_single_fold`, `exp_b._run_single_fold_b`, `exp_c._run_single_fold_c`, which explicitly drops the trace `_run_single_fold_c_trace` builds). Emitting the full enumeration would therefore require changing all three frozen fold-result shapes **and** shipping ≈113 candidate records × ≈10 folds × 200 replicates through the spawn-pool pickle and onto disk — order 10⁶ rows and hundreds of MB across the six launch-matrix jobs — for no additional audit power: §5.5's own acceptance criterion asks that "every successful real robustness estimate resolves to complete winner/feature and fit-audit rows", which the winner-level table satisfies exactly. The winner rows are emitted once per **estimand**, so each estimand's provenance is complete on its own rows and joins to `robustness_replicates.csv` on the full `(experiment, band, arm_or_contrast, replicate)` key. |
 
 **Factual correction (not an amendment).** §4.1 named the arm-(b) estimator
 `CumulativeOrdinalClassifier`. The class is `FrankHallOrdinal` (`src/dehyd/models/ordinal.py`), which
@@ -453,9 +455,9 @@ models or hidden statistics.
 | G | `predictions_g.csv` | `outer_test_subject, subject, session_idx, seed, y_true, pred_10, pred_77, pred_equal_weight, pred_fused, alpha` |
 | G | `per_subject_g.csv` | `subject, n_sessions, mae_10, mae_77, mae_equal_weight, mae_fused, difference_fused_minus_10` after frozen seed collapse |
 | G | `metrics_exp_g.json`, `fusion_comparison.png`, `exclusions_g.csv` | `n_subjects_g`, matched cells, alpha by fold, primary CI/sign, secondary summaries, cohort-only limitation, and SHA-256 of the base-selection/fit-audit tables; plot from saved tables |
-| H robustness | `robustness_replicates.csv` | `experiment, band, arm_or_contrast, replicate, robustness_seed_tuple_json, generated_seed_state, multiplicity_json, n_distinct_subjects, status, skip_reason, estimate` |
-| H robustness | `robustness_selection.csv` | one row per `experiment, band, arm_or_contrast, replicate, outer_test_subject, stage, candidate`; selected feature key, active axes, family/params, score/variance/fold count, model seeds, selected flag, multiplicity SHA-256 |
-| H robustness | `fit_audit_robustness.csv` | one row per real fit: `experiment, band, arm_or_contrast, replicate, outer_test_subject, stage, quantity, role, fitted_subjects_sha256, multiplicity_sha256, weighting_mode, effective_weighted_row_count`; companion JSON stores canonical subject/multiplicity maps keyed by hash |
+| H robustness | `robustness_replicates.csv` | `experiment, band, arm_or_contrast, replicate, robustness_seed_tuple_json, generated_seed_state, multiplicity_json, n_distinct_subjects, status, skip_reason, estimate`; skipped replicates are ROWS (blank estimate), never omissions |
+| H robustness | `robustness_selection.csv` | one row per `experiment, band, arm_or_contrast, replicate, outer_test_subject, stage, candidate`; selected feature key, active axes, family/params, score/variance/fold count, model seeds, selected flag, multiplicity SHA-256. **A-M10-10:** the `candidate` axis carries the stage's SELECTED candidate, not the full enumeration; `inner_score`/`inner_score_variance` are consequently blank and `n_inner_folds` is populated for Exp C only. Rows repeat per estimand so the join key is complete |
+| H robustness | `fit_audit_robustness.csv` | one row per real fit: `experiment, band, arm_or_contrast, replicate, outer_test_subject, stage, quantity, role, fitted_subjects_sha256, multiplicity_sha256, weighting_mode, effective_weighted_row_count`; companion JSON stores canonical subject/multiplicity maps keyed by hash. **A-M10-10:** "real fit" is the outer-level fit set the reused orchestration returns (`final_fits`: tuned-ε / session means, scaler, model per realized seed, session-index baseline), not the inner-CV fits the fold workers discard. `weighting_mode` is `row_duplication` for a fit that went through the expansion dispatch, `multiplicity_weighted` for one that consumes `m_s` without duplicating rows (the tuned-ε median, the session means), `none` when unresampled — the last two leave `effective_weighted_row_count` blank rather than inventing one |
 | H robustness | `robustness_summary.csv`, `metrics_robustness.json` | original point, R, successes, skip counts, mean/median/SD, empirical percentile endpoints, label `selection_variance_empirical_95pct_range` |
 | H assembly | `run_manifest.json` | explicit mapping from each A–G experiment/band to one authoritative run directory, required relative artifacts, SHA-256, source commit, resolved-config hash; no glob discovery |
 | H assembly | `headline_metrics.csv` | `experiment, band, model_or_contrast, metric, estimate, ci_low, ci_high, ci_method, n_subjects, n_sessions, status, primary_or_secondary, source_run, source_artifact` |
@@ -477,6 +479,15 @@ generic experiment framework, inheritance hierarchy, database, or caching layer.
 - `src/dehyd/eval/exp_f.py` — HR inventory report, four nested ridge models, contrasts.
 - `src/dehyd/eval/exp_g.py` — matched population, nested meta-cross-fitting, alpha selection, G summary.
 - `src/dehyd/eval/robustness.py` — multiplicity-aware A/B/C resampling and empirical range.
+  *(Built 2026-08-08.)* The **root seed is `config.run.seed`** (20260721): `StatsConfig` carries the
+  four `robustness_*` thresholds but gains no `robustness_seed` field, because the M6 sections are
+  frozen records and the value already exists at run level. Owner decision; named
+  `robustness.robustness_seed(config)` and pinned by test. Replicates — not folds — are the parallel
+  unit (200 independent replicates is the coarser axis; each runs its own folds serially inside),
+  which is why `fold_parallel.run_folds_parallel` gained a log-only `unit` argument.
+- `src/dehyd/eval/fold_parallel.py` — unchanged behaviour; one **log-string-only** addition, an
+  optional `unit` ("folds" by default, "replicates" for H) and a result tag that names whichever of
+  `.test_subject` / `.replicate` a result carries. A/B/C/D log lines stay byte-identical.
 - `src/dehyd/eval/assembly.py` — explicit experiment-specific adapters and final tables.
 - `src/dehyd/eval/splits.py` — public deterministic `selection_folds` used by ordinary nested LOSO
   and G's further selection folds; remains the only index-construction module.
@@ -503,6 +514,18 @@ generic experiment framework, inheritance hierarchy, database, or caching layer.
 - `scripts/ibex/run_exp_e.sbatch`, `run_exp_f.sbatch`, `run_exp_g.sbatch`,
   `run_robustness.sbatch`, and `run_stats_assembly.sbatch`, following the existing git-free
   `REVISION` pattern and executing the payloads frozen in §6.
+- `scripts/ibex/run_robustness_sharded.sbatch` + `submit_robustness_sharded.sh` — *(added
+  2026-08-08, owner-directed.)* The same `R=200` job split across a SLURM array and merged, for
+  the cells that do not fit one allocation. Structurally a clone of the Exp B variant's
+  `STAGE`-dispatch + submit-script pattern (no resource directives in the shared header; every
+  resource flag from the submit script; `--dependency=afterany` so a dead task surfaces as a
+  refused shard set rather than an unsubmitted merge). It is **science-neutral by construction**:
+  each replicate's cohort is a pure function of its own seed tuple, so a contiguous replicate
+  range is a complete unit of work, and `robustness.read_shards` refuses a set with a gap, an
+  overlap, a replicate outside its own shard's declared range, or a differing
+  commit/config/seed/cohort. Shards write no summary and no percentile range — a range over a
+  sub-range of replicates is not the estimand — and deliberately skip `record_run`; the merge
+  writes the authoritative run directory and computes the full-cohort point once.
 - Existing `scripts/ibex/run_exp_a.sbatch` and `run_exp_b.sbatch` pass optional `RUN_DIR_OUT` through
   to their entrypoints; absent values preserve their current commands byte-for-byte.
 
@@ -550,9 +573,13 @@ robustness-only estimator clone.
    `models/baselines.py`, `eval/harness.py` and the A/B/C providers and orchestration, with
    byte-neutrality verified against the M8/M9 pins, the frozen leakage suite and the full suite.
    This step produced A-M10-8, A-M10-9 and the §4.1 harness-signature correction.
-3. **H robustness driver.** Reuse A/B/C candidate enumeration and orchestration with the exact
-   multiplicity contract. A smoke with `R=8` must intentionally report inconclusive under the real
-   `min_successful=100`; the threshold is never scaled.
+3. **H robustness driver.** *(DONE 2026-08-08.)* Reuse A/B/C candidate enumeration and orchestration
+   with the exact multiplicity contract. A smoke with `R=8` must intentionally report inconclusive
+   under the real `min_successful=100`; the threshold is never scaled. **Delivered as**
+   `eval/robustness.py`, `experiments/run_robustness.py`, `scripts/ibex/run_robustness.sbatch`,
+   `scripts/ibex/run_robustness_sharded.sbatch`, `scripts/ibex/submit_robustness_sharded.sh`,
+   `tests/test_robustness.py` and `tests/test_run_robustness.py`, with the root seed decided
+   (`config.run.seed`) and pinned. This step produced **A-M10-10** and the §6 sizing decision.
 4. **Exp G.** First expose/test `selection_folds` in `splits.py`; then implement matched keys,
    selection-honest nested cross-fitting, five-seed OOF and base-selection/audit tables, alpha
    selection, outer refits, additive per-subject contrast, and artifacts.
@@ -673,9 +700,14 @@ that consume one another's artifacts may not.
   four-session aggregate skip the whole requested result replicate; no partial-fold estimate exists.
 - Fixed seed tuples reproduce multiplicity draws; all arms in one experiment-band replicate share
   the draw; percentile endpoints match NumPy's linear method exactly.
-- Every successful real robustness estimate resolves to complete winner/feature and fit-audit rows;
-  fitted-subject and multiplicity hashes agree with the replicate table, and effective row counts
-  match explicit duplication.
+- Every successful real robustness estimate resolves to complete winner/feature and fit-audit rows
+  (**A-M10-10**: winner rows and outer-level fits — the granularity the reused orchestration
+  returns); fitted-subject and multiplicity hashes agree with the replicate table and resolve in the
+  companion JSON, and effective row counts match explicit duplication.
+- A held-out subject appearing inside any fitted subject set is a hard error at audit-build time,
+  not a recorded row.
+- The root seed is `config.run.seed` and is pinned by test, so it can never become an accident of
+  whichever attribute an implementation reached for first.
 - Assembly round-trips each actual A–D schema plus synthetic E–G schemas; missing/mismatched source
   artifacts fail closed. Run directories are supplied explicitly, never discovered by glob.
 
@@ -688,7 +720,7 @@ uv run pytest tests/test_metrics.py tests/test_regressors.py tests/test_harness.
 uv run pytest tests/test_exp_e.py tests/test_run_interpretability.py
 uv run pytest tests/test_exp_f.py tests/test_run_confound.py
 uv run pytest tests/test_exp_g.py tests/test_run_fusion.py
-uv run pytest tests/test_robustness.py tests/test_run_robustness.py
+uv run pytest tests/test_robustness.py tests/test_run_robustness.py     # 72 tests, ~90 s
 uv run pytest tests/test_assembly.py tests/test_run_stats_assembly.py
 uv run pytest tests/test_no_leakage.py -m "not realdata"
 uv run pytest
@@ -706,6 +738,10 @@ uv run python experiments/run_confound.py --config configs/exp_a_regression_77gh
 uv run python experiments/run_fusion.py --config-10 configs/exp_a_regression.yaml --config-77 configs/exp_a_regression_77ghz.yaml --shared-config configs/exp_g_fusion.yaml --shared-config configs/stats.yaml --subset 6subjects
 uv run python experiments/run_robustness.py --config configs/exp_a_regression.yaml --config configs/stats.yaml --experiment a --band 10ghz --replicates 8 --subset 6subjects
 ```
+
+The robustness smoke must come back **inconclusive** — `min_successful` stays at the frozen 100 and
+is never scaled to the requested `R`. That verdict is the smoke's whole purpose; treat a
+"conclusive" `R=8` smoke as a failure of the rule, not a success of the run.
 
 `run_fusion.py` loads the two band configs separately, applies shared Exp-G/stats overlays to both,
 and asserts shared run seeds, target definition, split constants, and weight workbook. It never tries
@@ -760,16 +796,25 @@ sbatch --wait --export=ALL,BAND=10ghz,MODE=full,EXP_A_SOURCES=results/milestone1
 sbatch --wait --export=ALL,BAND=77ghz,MODE=full,EXP_A_SOURCES=results/milestone10/exp_a_sources.json scripts/ibex/run_exp_f.sbatch
 sbatch --wait --export=ALL,MODE=full scripts/ibex/run_exp_g.sbatch
 
-sbatch --wait --export=ALL,EXPERIMENT=a,BAND=10ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
-sbatch --wait --export=ALL,EXPERIMENT=a,BAND=77ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
-sbatch --wait --export=ALL,EXPERIMENT=b,BAND=10ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
-sbatch --wait --export=ALL,EXPERIMENT=b,BAND=77ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
-sbatch --wait --export=ALL,EXPERIMENT=c,BAND=10ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
-sbatch --wait --export=ALL,EXPERIMENT=c,BAND=77ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
+sbatch --wait --cpus-per-task=64 --export=ALL,EXPERIMENT=a,BAND=10ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
+sbatch --wait --cpus-per-task=64 --export=ALL,EXPERIMENT=a,BAND=77ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
+sbatch --wait --cpus-per-task=64 --export=ALL,EXPERIMENT=b,BAND=10ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
+sbatch --wait --cpus-per-task=64 --export=ALL,EXPERIMENT=b,BAND=77ghz,MODE=full,REPLICATES=200 scripts/ibex/run_robustness.sbatch
+EXPERIMENT=c BAND=10ghz ARRAY_TIME=08:00:00 bash scripts/ibex/submit_robustness_sharded.sh
+EXPERIMENT=c BAND=77ghz ARRAY_TIME=08:00:00 bash scripts/ibex/submit_robustness_sharded.sh
 
 sbatch --wait --export=ALL,RUN_MANIFEST=results/milestone10/run_manifest.json,VALIDATE_ONLY=1 scripts/ibex/run_stats_assembly.sbatch
 sbatch --wait --export=ALL,RUN_MANIFEST=results/milestone10/run_manifest.json,VALIDATE_ONLY=0 scripts/ibex/run_stats_assembly.sbatch
 ```
+
+**Robustness sizing (owner decision, 2026-08-08).** `R=200` is ~1,200 core-hours per Exp A/B
+(experiment, band) and ~2,000+ for Exp C, measured against HISTORY 2026-07-28's Exp B anchor
+(01:04:20 on 16 cores, 16 folds in one wave ⇒ ~1 core-hour/fold; a replicate is ~10 folds on ~9
+training subjects ⇒ ~6 core-hours). `R` is never lowered to fit a wall. A and B therefore raise the
+allocation at submit time (`--cpus-per-task=64`, subject to what the partition offers — check
+`sinfo`); C uses the sharded array-plus-merge path instead, sized by a measured single-shard run
+(`ARRAY_TIME`, the C8 rule). Either path may be used for any cell; the sharded one is
+science-neutral, so the choice is purely about allocation.
 
 The wrappers map only the displayed environment variables to the direct Python payloads already
 shown by the mechanism-smoke interface; wrapper tests assert the exact argv and nonzero propagation.
@@ -852,7 +897,7 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
   [official filter-bank source](https://github.com/kymatio/kymatio/blob/v0.3.0/kymatio/scattering1d/filter_bank.py#L13-L16)
   rather than treating `j` as a physical frequency.
 
-### 8.2 Methodological basis for A-M10-7..9
+### 8.2 Methodological basis for A-M10-7..10
 
 - **A-M10-8, `svr`.** With the RBF kernel, `gamma="scale"` is `1 / (n_features · X.var())` computed
   from the array passed to `fit`; `sample_weight` rescales the per-sample penalty `C_i` and does not
@@ -868,6 +913,20 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
   own byte-neutrality requirement; the alternative would silently alter an already-reported result
   (Exp C, M9) for no scientific gain, since under A-M10-8 the expanded-label weighting already
   equals the effective-count rule §2.4 asks for.
+- **A-M10-10.** The granularity question is *what the robustness tables have to prove*, and §5.5
+  answers it: "every successful real robustness estimate resolves to complete winner/feature and
+  fit-audit rows". That is a statement about the winner, not about the runners-up. The full
+  enumeration is load-bearing for **Exp G** — §5.4 requires "a fixture where test outcomes would
+  choose another alpha proves those outcomes are never read", which needs the losing candidates'
+  scores — and G's `fusion_base_selection.csv` accordingly keeps its per-candidate rows. H asks a
+  different question (how much does the *selected* estimate move across resampled cohorts), and its
+  selection-honesty is already guaranteed structurally, by reusing A/B/C's own orchestration
+  unchanged rather than by re-deriving it and then auditing the re-derivation. Two independent costs
+  argue against recording it anyway: the frozen fold-result shapes would all have to change
+  (`exp_a.ExpAFoldResult`, `exp_b.ExpBFoldResult`, `exp_c.ExpCFoldResult`), which step 3 is
+  explicitly instructed not to do; and ≈113 candidate records per fold × ≈10 folds × 200 replicates
+  × 6 launch-matrix jobs is order 10⁶ CSV rows shipped through the spawn-pool pickle for provenance
+  nothing consumes.
 - **A-M10-7.** The claim that the substitution is inert is an empirical result, not an assumption:
   byte-identical selection tables plus a max |Δy_pred| four orders of magnitude inside the frozen
   O-M9-5 tolerance, and consistent with HISTORY's independent M7-comparison table.
@@ -882,7 +941,7 @@ The implementation writer should keep calculations visible in plain functions an
 tables. The independent test pass should target leakage, key alignment, multiplicity, and statistical
 edge cases. HISTORY checkpoints occur continuously as specified in §4.2; SECOND_CHAPTER and final
 user-facing documentation wait for verified full-cohort artifacts. Both must disclose
-**A-M10-1..9** and the observed results without outcome-based reframing.
+**A-M10-1..10** and the observed results without outcome-based reframing.
 
 ### 9.1 Mid-implementation plan re-review (owner-directed, 2026-08-07)
 

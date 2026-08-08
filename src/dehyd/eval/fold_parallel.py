@@ -11,9 +11,14 @@ SLURM array task instead of this in-process pool.
 Deliberately generic and deliberately thin: this module knows about tasks and workers, NOT
 about folds, providers, scores or configs. The caller builds the tasks (fold construction stays
 in `splits.py`-fed experiment code) and the caller sorts the results into canonical order --
-results come back in COMPLETION order here. The one property assumed of a result object is a
-`.test_subject` attribute, used only for the completion log line; every fold result in this
-project has one.
+results come back in COMPLETION order here. Nothing is assumed of a result object: the
+completion log line names whichever of `.test_subject` / `.replicate` it happens to carry, and
+says nothing if it carries neither.
+
+Milestone 10 reuses this for Experiment H, whose parallel unit is a bootstrap REPLICATE rather
+than a fold (200 independent replicates is the coarser axis; each runs its folds serially
+inside). That is the whole reason for the `unit` argument -- it changes the progress wording
+only, and defaults to the exact string milestones 8-9 printed.
 """
 
 from __future__ import annotations
@@ -24,15 +29,25 @@ _POLL_INTERVAL_S = 1     # how often we check for newly-finished tasks (responsi
 _PROGRESS_INTERVAL_S = 60  # minimum spacing between heartbeat lines when nothing has finished yet
 
 
-def run_folds_parallel(worker, tasks, n_workers, label):
+def _result_tag(result) -> str:
+    """`" (test_subject=7)"` / `" (replicate=12)"` / `""` -- log decoration only."""
+    for name in ("test_subject", "replicate"):
+        value = getattr(result, name, None)
+        if value is not None:
+            return f" ({name}={value})"
+    return ""
+
+
+def run_folds_parallel(worker, tasks, n_workers, label, *, unit="folds"):
     """Run `worker(*task)` for each task -- serially, or via a spawn-context Pool -- and return
     the results in completion order.
 
     `worker` must be a top-level function and every task a picklable argument tuple, since the
     pool branch ships both to a fresh interpreter. `label` prefixes the progress lines
-    (`[<label> progress] ...`) so a merged IBEX log says which experiment is talking.
+    (`[<label> progress] ...`) so a merged IBEX log says which experiment is talking, and
+    `unit` names what a task IS in those lines ("folds" for A/B/C, "replicates" for H).
 
-    Prints a progress line to stdout whenever a fold completes, and at least every
+    Prints a progress line to stdout whenever a task completes, and at least every
     _PROGRESS_INTERVAL_S seconds even if none have, so an IBEX job's log shows the process is
     alive rather than going silent for the whole search. With n_workers roughly equal to the
     fold count, all folds are dispatched together and tend to FINISH together too -- so a
@@ -48,8 +63,8 @@ def run_folds_parallel(worker, tasks, n_workers, label):
         results = []
         for task in tasks:
             results.append(worker(*task))
-            print(f"[{label} progress] {len(results)}/{n_total} folds done "
-                  f"(test_subject={results[-1].test_subject}), elapsed={time.monotonic() - start:.0f}s",
+            print(f"[{label} progress] {len(results)}/{n_total} {unit} done"
+                  f"{_result_tag(results[-1])}, elapsed={time.monotonic() - start:.0f}s",
                   flush=True)
     else:
         import multiprocessing as mp
@@ -60,7 +75,7 @@ def run_folds_parallel(worker, tasks, n_workers, label):
         n_procs = min(n_workers, n_total)
         with ctx.Pool(processes=n_procs) as pool:
             pending = [pool.apply_async(worker, t) for t in tasks]
-            print(f"[{label} progress] {n_total} folds dispatched across {n_procs} workers", flush=True)
+            print(f"[{label} progress] {n_total} {unit} dispatched across {n_procs} workers", flush=True)
             results = []
             last_print = start
             while pending:
@@ -71,7 +86,7 @@ def run_folds_parallel(worker, tasks, n_workers, label):
                 results.extend(r.get() for r in newly_done)   # re-raises a worker's exception, if any (C12)
                 now = time.monotonic()
                 if newly_done or now - last_print >= _PROGRESS_INTERVAL_S:
-                    print(f"[{label} progress] {len(results)}/{n_total} folds done, "
+                    print(f"[{label} progress] {len(results)}/{n_total} {unit} done, "
                           f"elapsed={now - start:.0f}s", flush=True)
                     last_print = now
                 if pending:

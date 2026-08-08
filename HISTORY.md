@@ -4,6 +4,220 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — M10 step 3 DONE: the H robustness driver is built, tested (72 new tests green) and byte-neutral. Root seed = `config.run.seed`; A-M10-10 raised and accepted; the `R=200` sizing gap found, quantified and closed with a sharded array-plus-merge path.
+
+*Owner decisions taken this session, all three recorded where they belong: A-M10-10 **accepted** as
+implemented (plan §0.2); robustness sizing **= raise the allocation for A/B, shard for C** (plan §6,
+built here); the full-cohort point estimate **recomputed at multiplicity `None` with no coverage
+requirement** (see the defect note below).*
+
+Step 3 per `plans/MILESTONE_10_PLAN.md` §4.2: the selection-variance robustness bootstrap. Built
+`src/dehyd/eval/robustness.py`, `experiments/run_robustness.py`,
+`scripts/ibex/run_robustness.sbatch`, `scripts/ibex/run_robustness_sharded.sbatch`,
+`scripts/ibex/submit_robustness_sharded.sh`, `tests/test_robustness.py` (48 tests) and
+`tests/test_run_robustness.py` (24 tests). No store rebuild, no `tests/test_no_leakage.py` change
+(`git diff --exit-code` clean).
+
+**The one open decision, closed.** `robustness_seed = config.run.seed = 20260721` — the owner's
+choice, made explicitly rather than by whichever attribute the first implementation reached for.
+`StatsConfig` deliberately gains **no** `robustness_seed` field: the M6 sections are frozen records,
+so adding one would be a config change made to express a value that already exists at run level.
+Implemented as the named `robustness.robustness_seed(config)` and pinned by
+`test_robustness_seed_is_config_run_seed_and_is_not_a_new_config_field`, which also asserts the four
+existing `robustness_*` fields are the complete set.
+
+**Concrete frozen values, and why each is what it is.**
+
+- **RNG.** `np.random.SeedSequence([robustness_seed, experiment_code, band_code, replicate])` with
+  `a,b,c -> 1,2,3` and `10ghz,77ghz -> 10,77`; replicates numbered **1..R**. The 128-bit state is
+  `sequence.generate_state(4, dtype=np.uint32)`, saved as 32 hex chars beside the tuple — the tuple
+  records what was requested, the state what NumPy actually produced from it. The draw itself is
+  `rng.integers(0, n, size=n)` over the sorted subject list, which is the idiom
+  `metrics._cluster_bootstrap_over_rows` already uses, so the project has one way of drawing
+  subjects with replacement rather than two that could diverge. Experiment and band are IN the tuple
+  so the six launch-matrix jobs draw different cohorts; a shared draw would correlate their ranges
+  for no scientific reason.
+- **Percentiles.** `np.quantile(x, [0.025, 0.975], method="linear")` after sorting by replicate ID
+  (replicates come back from the worker pool in completion order, so sorting is what makes the input
+  vector a function of the run rather than of scheduling). Labelled
+  `selection_variance_empirical_95pct_range` in BOTH `range_label` and `ci_method`; a test asserts
+  `"bca" not in ci_method` (A-M10-5). The test also asserts the `lower`/`higher`/`nearest` methods do
+  NOT reproduce the endpoints — at n=200 the nine NumPy rules disagree materially, so pinning the
+  method name is load-bearing.
+- **Skip reasons, as an ORDERED tuple** (the tuple is the definition of "the first canonical
+  reason"): `insufficient_distinct_subjects`, `ordinal_missing_classes`, `no_surviving_candidate`,
+  `missing_outer_prediction`, `expb_primary_aggregate_unavailable`, `non_finite_estimate`. The last
+  is an addition of mine, fail-closed: a NaN estimate is a skip, never a reported number.
+- **Estimands** exactly as §2.4 registers them. A: `selected_radar_subject_balanced_mae` and
+  `radar_minus_session_index_mae`, both weighting each DISTINCT subject by `m_s` at the
+  across-subject average (repeating rows cannot move a subject-BALANCED mean). B:
+  `radar_minus_baseline_equal_session_aggregate`, pooled, so the evaluation rows are repeated by
+  `m_s` first and the zero-residual reference is evaluated on the SAME repeated rows. C:
+  `arm_a_class_unit_mae` / `arm_b_class_unit_mae`, pooled, same repetition. Adjacent accuracy and QWK
+  get no range, which is enforced by the registered estimand list rather than by remembering.
+- **Thresholds** all read from `StatsConfig` and never scaled: `min_distinct_subjects=4` (at 4
+  distinct, every outer fold still has 3 training subjects, which is
+  `splits.DEFAULT_MIN_TRAIN_SUBJECTS`, so the whole drawn cohort stays selectable — below it folds
+  would drop out silently), `ordinal_min_classes=5`, `min_successful_replicates=100`, `R=200`.
+
+**What is genuinely new here versus what is reused.** Nothing re-enumerates candidates or
+re-implements a tie-break: `_run_procedure` calls `exp_a.run_exp_a` / `exp_b.run_exp_b` /
+`exp_c.run_exp_c` with `subject_multiplicity=` and `n_workers=1`. The step-2 foundation carries the
+draw the rest of the way. The `{subject: m_s}` MAPPING is what is passed down, never a row array —
+step 2's own regression test explains why (Exp B drops degenerate sessions fold-dependently).
+
+**The full-cohort point estimate is recomputed here at multiplicity `None`, not all-ones.** All-ones
+would take the expansion branch and swap `np.mean` for `np.average(weights=1)`, which can differ in
+the last ulp. Pinned by `test_exp_a_estimands_at_multiplicity_one_equal_what_summarize_exp_a_reports`,
+which asserts EQUALITY (not approximate equality) against `summarize_exp_a`'s
+`subject_balanced_mae.point` and `mean_difference_radar_minus_baseline.point`.
+
+**A defect found in self-review, before the suite ran: the all-or-nothing rule was being applied to
+the wrong thing.** §2.4's "every required distinct outer subject must produce its complete OOF
+result ... never computed over the remaining easier folds" is written about a **replicate**. My first
+version applied the same coverage check to the full-cohort point estimate, which would have aborted
+the entire job (`RobustnessError`) in exactly the case where the ordinary Exp B run reports a
+perfectly good number: Exp B legitimately records a fold with `reason="no_surviving_test_rows"` in
+its exclusion ledger, and `summarize_exp_b` reports the primary aggregate over the folds that
+contributed. Fixed by making `required_subjects=None` mean "no coverage requirement", passed only by
+`original_point_estimates` — the point has to BE the number the ordinary run reports, so it has to
+obey that run's rules, not the replicate's. Exp B's four-session viability check is deliberately NOT
+part of the switch and still applies to both, because `summarize_exp_b` applies it too (otherwise
+`equal_session_residual_mae` would silently report a three-session mean labelled as the four-session
+primary). Pinned by
+`test_the_all_or_nothing_rule_is_a_replicate_rule_not_a_full_cohort_rule`, which asserts the same
+fixture skips as a replicate and reports as the point. A non-finite point is still fatal.
+
+**A-M10-10, raised and recorded** (plan §0.2, §3, §5.5, §8.2). `robustness_selection.csv` records the
+SELECTED candidate per stage rather than the full enumeration, and `fit_audit_robustness.csv` records
+the outer-level `final_fits` rather than also the inner-CV fits. Reason: §4.2 step 3 requires reusing
+A/B/C orchestration unchanged, and all three fold workers **discard** their per-candidate
+`StageOutcome` and `InnerResult` lists before returning (`exp_c._run_single_fold_c` does so
+explicitly, dropping the trace `_run_single_fold_c_trace` builds). Recording the enumeration would
+mean changing all three frozen fold-result shapes AND shipping ~113 candidate records x ~10 folds x
+200 replicates x 6 jobs — order 10^6 CSV rows through the spawn-pool pickle — for provenance nothing
+consumes: §5.5 asks only that each estimate "resolves to complete winner/feature and fit-audit rows".
+The distinction against Exp G is deliberate and is written into §8.2: G's per-candidate table IS
+load-bearing (§5.4 needs the losing candidates' scores to prove test outcomes are never read),
+whereas H's selection-honesty is structural, inherited from reusing A/B/C rather than re-deriving
+them. Consequence visible in the data: `inner_score`/`inner_score_variance` blank, `n_inner_folds`
+populated for Exp C only. Winner rows repeat per ESTIMAND so each estimand joins to
+`robustness_replicates.csv` on the full `(experiment, band, arm_or_contrast, replicate)` key.
+
+**A defect the audit caught in its own test fixture — worth recording because it is the invariant
+that matters.** `_fit_audit_rows` raises `RobustnessError` if a fold's held-out subject appears in
+any fitted subject set, checked while the subject set is still in hand rather than after it has been
+reduced to a hash. The first version of the artifact-test fixture gave every fold the same fitted set
+`{2, 3}`, and the guard rejected it on the fold whose test subject was 2. That is exactly the class
+of error multiplicity could introduce silently, and it fired on a hand-written fixture on the first
+run.
+
+**Weighting modes in the fit audit.** `row_duplication` (what the A-M10-8 dispatch reports),
+`multiplicity_weighted` for a fitted quantity that consumes `m_s` WITHOUT duplicating rows — the
+tuned-ε median repeats per-subject *scales*, `session_means` uses `m_s` as subject-copy weights — and
+`none` when unresampled. The latter two leave `effective_weighted_row_count` blank rather than
+inventing one, but still hash the draw restricted to their own training subjects so they join to the
+companion JSON like any other row.
+
+**`fold_parallel.py` gained a log-string-only change**: an optional `unit` argument (`"folds"` by
+default, `"replicates"` for H) and a `_result_tag` helper that names whichever of
+`.test_subject` / `.replicate` a result carries. A/B/C/D log lines stay byte-identical; H's parallel
+unit is the replicate, not the fold. Recorded in plan §4.1 as a disclosed addition to the file list.
+
+**Test results.** `tests/test_robustness.py` (48) + `tests/test_run_robustness.py` (29):
+**77 passed** in ~95 s, almost all of it the ONE end-to-end test, which pays for the real
+113-candidate staged search because the M6 search space cannot be shrunk
+(`protocol_freeze_guard._check_m6_sections` rejects any deviation, so a smaller grid is not
+expressible in a test at all). Targeted §6 gate `test_metrics + test_regressors + test_harness +
+test_no_leakage + test_multiplicity + test_m8_pin + test_m9_pin`: 205 passed, 1 skipped.
+`git diff --exit-code -- tests/test_no_leakage.py`: clean.
+
+**Full suite on the final tree: `1305 passed, 5 failed, 16 skipped` in 17:56.** The arithmetic
+reconciles exactly — 1228 pre-existing passed + 77 new = 1305. The 5 failures are the pre-existing
+Windows ones HANDOFF documents (`tests/test_exp_b_ibex_scripts.py` /
+`tests/test_exp_d_ibex_scripts.py`, where Git Bash eats the backslashes in a Windows path
+`C:UsersjosemsosagDesktop...` and inline `bash -c` strings return empty). **No sixth failure.**
+Two bookkeeping notes:
+
+1. My own `test_every_shell_artifact_parses_with_bash_dash_n` sidesteps that trap by piping the
+   script's BYTES to `bash -n -` with LF forced instead of passing a Windows path, which is why it
+   passes where the two older files fail. **Worth copying into those two files if anyone fixes
+   them** — the bug is in the test, not in the scripts.
+2. The pre-existing collection is 1249 (1228 passed + 5 failed + 16 skipped), three more than
+   HANDOFF's stated baseline of "1225 passed, 5 failed, 16 skipped" (= 1246). No existing test file
+   was touched this session (`git status` shows only `HISTORY.md`, `plans/MILESTONE_10_PLAN.md` and
+   `src/dehyd/eval/fold_parallel.py` modified), so **that baseline line in HANDOFF is stale by three
+   tests, not a regression** — a future session should trust 1228/5/16 over it.
+
+**The sizing problem — found, quantified, and RESOLVED the same day (owner decision).** Measured
+anchor from HISTORY 2026-07-28: a full 16-fold Exp B run took `01:04:20` on 16 cores with all folds
+in one wave, i.e. ~1 core-hour per fold, ~16 core-hours per run. A replicate draws ~10 distinct
+subjects (16 with replacement), each fold training on ~9 subjects instead of 15, so one replicate ≈
+6 core-hours and:
+
+| job | core-hours at R=200 |
+|---|---|
+| Exp A / Exp B, one band | ~1,200 |
+| Exp C, one band (two Stage-2 arms) | ~2,000+ |
+
+The single-job sbatch allocates 32 cores x 24 h = **768 core-hours** — under-sized by 2-3x. I did
+not quietly lower `--replicates` to fit (R=200 is pre-registered in §2.4, and `min_successful=100`
+is defined against it) and did not guess IBEX's partition limits. **Owner's decision: raise the
+allocation for A/B (`--cpus-per-task=64`, ~1,536 core-hours, subject to `sinfo`), and build the
+sharded array path for the cells that still will not fit — Exp C above all.** §6's launch matrix
+was updated to both.
+
+**The sharded path, built the same session** (`run_robustness_sharded.sbatch` +
+`submit_robustness_sharded.sh`, plan §4.1). Structurally a clone of the Exp B variant's pattern:
+`STAGE=array|merge` dispatched in the shell, **no** resource directives in the shared `#SBATCH`
+header (they are parsed from the script text before `STAGE` is ever evaluated, so one fixed set
+would silently apply to both stages), every resource flag from the submit script, `%%;*` job-ID
+normalization (C25), and the copied-tree `REVISION` provenance with `DEHYD_GIT_*` explicitly unset.
+
+Three design points worth recording:
+
+- *Why sharding is safe, precisely.* Each replicate's cohort is a pure function of its own seed
+  tuple, so a contiguous replicate range is a complete, self-contained unit of work — splitting
+  `1..R` across tasks cannot change a drawn cohort, a fit or an estimate, only which process
+  computed it. Verified on REAL refits, not argued: the end-to-end test runs replicate 2 alone and
+  asserts its multiplicity, generated seed state, status and estimates are identical to replicate 2
+  computed inside the range `1..2`, then round-trips both through the shard JSON and compares
+  `selection_rows`/`fit_audit_rows` too.
+- *What sharding CAN get wrong is bookkeeping, so all of it is refused by name.* `read_shards`
+  rejects a gap in `1..R` (naming the uncovered replicates), an overlap (naming both shard files),
+  a replicate outside its own shard's declared range, an empty directory, and any lineage field
+  that differs — `analysis_commit`, `config_hash` (via `exp_b.config_fingerprint`, the same named
+  helper the Exp B variant and Exp D run groups use), `robustness_seed`, `replicates_requested`,
+  `experiment`, `band`, and `subjects_sha256`. The last is there because two shards run against
+  different cohorts would still agree on commit and config while drawing from different pools.
+  Directory enumeration here is not the "glob discovery" §1.3 forbids — that rule is about picking
+  a *latest* run out of several; here the contiguity check means there is nothing to pick.
+- *Shards deliberately skip `record_run`* (it hashes every raw file — tens of GB at 77 GHz — and
+  twenty array tasks doing it would be twenty times the I/O for one run's worth of provenance), and
+  write **no summary and no percentile range**: a range over a sub-range of replicates is not the
+  estimand, and `min_successful=100` is defined against the whole `R`. The merge writes the
+  authoritative run directory, records `shard_source` in its provenance, and computes the
+  full-cohort point once — that point needed `_run_procedure` to accept `n_workers`, since the merge
+  is one ordinary run with no replicate to parallelise against and A/B/C guarantee fold parallelism
+  is bit-identical to serial.
+- *`--dependency=afterany`, not `afterok`*, deliberately: `afterok` would leave the merge
+  unsubmitted after a failed task, which reads as "nothing happened". `afterany` makes the merge run
+  and refuse the incomplete set by name. Pinned by test, with the assertion scoped to executed lines
+  so it does not match the header comment explaining why `afterok` is wrong.
+- *The shard arithmetic is EXERCISED, not grepped.* The submit script's ceiling division
+  (`n_shards = (R + SHARD_SIZE - 1) / SHARD_SIZE`) and the sbatch's per-task range
+  (`START = TASK*SHARD_SIZE + 1`, `STOP` clamped to `R`) have to agree or the array leaves a gap.
+  `test_the_shard_arithmetic_covers_1_to_r_exactly_when_run_by_bash` runs both idioms through real
+  bash at `(R, SHARD_SIZE)` = (200,10), (200,7), (205,10), (8,3) and (1,10) and asserts the emitted
+  replicate list is exactly `1..R` — which catches a gap and an overlap as the different bugs they
+  are. This follows `test_exp_b_ibex_scripts.py`'s precedent of exercising a shell idiom rather than
+  only asserting its presence.
+
+**Not done here, deliberately:** the real-data local smoke from §6. The local 10 GHz store is built
+at `dab8f708`, not the analysis commit, and `store.validate_store` uses strict commit equality — so a
+local smoke would fail on provenance, not on mechanism. Mechanism-only smokes are step 13's job,
+after the step-11 store rebuild.
+
 ## 2026-08-07 — M10 step 1a: the Exp-A reference gate is built and tested — and the plan's premise for *where* to run it is wrong. The authoritative M9 stores are on IBEX, not this machine, so the snapshot cannot be taken locally.
 
 Branch `v1_milestone_10` created off `fee9172`. First job per `plans/MILESTONE_10_PLAN.md` §4.2 step 1
