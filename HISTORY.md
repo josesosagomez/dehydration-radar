@@ -85,11 +85,56 @@ All four findings fixed.
 - Full suite: **1526 passed, 5 failed, 16 skipped** (55:34) — one more than step 7's 1525, which
   is exactly the new cross-adapter direction test. The 5 are the same pre-existing Windows-only
   IBEX-script failures.
-- Real-data suite: **1541 passed, 5 failed, 0 skipped** (54:22) — `--realdata` unskips the 16
-  real-data tests and all 16 pass, including `test_wst_on_one_real_session` against the real
-  10 GHz session. Rerun post-correction to satisfy step 10 rather than argued away, even though
-  the corrections touch only `assembly.py`, one comment and tests, none of which a real-data
-  test imports.
+- Real-data suite, **step-8 gate run** (pre-correction tree): **1541 passed, 5 failed, 0
+  skipped** (54:22) — `--realdata` unskips the 16 real-data tests and all 16 pass, including
+  `test_wst_on_one_real_session` against the real 10 GHz session.
+- Real-data suite, **step-10 rerun** (post-correction tree): **1542 passed, 5 failed, 0
+  skipped** (44:24). Exactly the post-correction full-suite count plus the 16 real-data tests
+  (1526 + 16), against the step-8 run's 1525 + 16 = 1541. It was rerun rather than argued away,
+  even though the corrections touch only `assembly.py`, one comment and tests — none of which
+  any real-data test imports — because step 10 names the real-data suite as part of the gate,
+  and the point of a gate is not to be reasoned around.
+
+**The step-10 gate is therefore complete and green** (modulo the five failures below, which are
+a test-harness defect and not a product one).
+
+### Correction: the five standing failures were MISDIAGNOSED since M8/M9
+
+This log, and HANDOFF.md, have said for several milestones that the five failures in
+`tests/test_exp_b_ibex_scripts.py` / `tests/test_exp_d_ibex_scripts.py` are "Git Bash eats
+backslashes in a Windows path; inline `bash -c` strings come back empty". **That is not the
+cause.** Measured directly this session:
+
+- `shutil.which("bash")` on this machine returns
+  `C:\Users\...\AppData\Local\Microsoft\WindowsApps\bash.EXE` — the **WSL app-execution-alias
+  stub**, not Git Bash (`C:\Program Files\Git\bin\bash.exe`).
+- Invoking bare `"bash"` from a PowerShell-launched Python: `bash -c 'raw="12345;ibex"; echo
+  "${raw%%;*}"'` returns rc=0 with stdout `'\n'` — the output is swallowed. The same script fed
+  on **stdin** (`bash -s`, or bare `bash`) returns `'12345'` correctly.
+- `bash -n <absolute Windows path>` returns rc=127 with the backslashes stripped, because the
+  resolved interpreter is a POSIX bash that cannot see `C:\...`.
+
+So all five are one defect — a script passed as an *argument* rather than on *stdin* — and the
+fix is the pattern the four milestone-10 entrypoint test files already use.
+
+**Two things checked while establishing this, both worth recording because the first was a
+false alarm I raised against my own work:**
+
+1. **The milestone-10 `bash -n -` gates are NOT vacuous.** I suspected they might be passing
+   trivially. They are not: fed a genuine grammar error (`if true; then echo oops` with no
+   `fi`), both the stub and Git bash return rc=2. My first probe used a missing `]`, which is a
+   *runtime* error for the `[` builtin and not a syntax error at all — `bash -n` is right to
+   accept it. The gates are real.
+2. **The working-tree `.sbatch` files carry CRLF locally** while `.gitattributes` forces LF on
+   checkout, so the committed blobs and any IBEX checkout are LF. That is why the byte-level
+   `replace(b"\r\n", b"\n")` in the newer tests matters locally and why a path-based check can
+   disagree with a stdin-based one on this machine only.
+
+**Not fixed here.** The five tests belong to milestones 8–9 and fixing them edits files outside
+milestone 10's scope on the eve of the final analysis commit; that is the owner's call, and it
+is raised rather than taken. The argument for fixing: §7 requires the suite green, and a
+standing red baseline of five is precisely how a sixth failure would hide — "no sixth failure"
+has been the acceptance signal for four consecutive steps.
 - `tests/test_no_leakage.py`: byte-unchanged (`git diff --exit-code` clean), as it has been
   since milestone 7.
 
