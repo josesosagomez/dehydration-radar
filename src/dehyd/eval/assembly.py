@@ -115,8 +115,14 @@ def _read_json(path: Path):
 
 
 def _config_sha256(provenance: dict) -> str:
-    """Hash the resolved config exactly as `provenance.json` recorded it — the same
-    sorted-keys JSON dump `exp_b.config_fingerprint` uses, so the two agree by construction."""
+    """Hash the resolved config exactly as `provenance.json` recorded it.
+
+    This is a hash OF THE RECORDED CONFIG, for tying a run's tables back to the configuration
+    that produced them. It is deliberately not claimed to equal `exp_b.config_fingerprint`:
+    that one hashes the in-memory `config_to_dict`, this one hashes the same dict after a JSON
+    round trip, and a round trip turns config tuples into lists. The two are compared against
+    themselves across runs, never against each other.
+    """
     return hashlib.sha256(
         json.dumps(provenance.get("config", {}), sort_keys=True).encode()
     ).hexdigest()
@@ -509,24 +515,29 @@ def adapt_f(entry) -> dict:
     paired row carrying the multiplicity family its own summary assigned — the Holm-2 primary
     pair, the individually-reported exploratory pair, and the sensitivity variants."""
     metrics, artifact = _metrics_of(entry)
-    n_subjects = metrics.get("n_subjects_f", _BLANK)
     paired = []
     for record in metrics.get("contrasts", []):
         variant = record["analysis_variant"]
         tier = ("primary" if record["multiplicity_family"].startswith("holm_")
                 else "secondary")
+        # F's contrast summaries name the estimate `mean_difference`, not `point`, so they are
+        # translated into the shared CI shape BEFORE `_paired` sees them. Patching the columns
+        # in afterwards is what left `direction` blank on every F row, including both primary
+        # milestone contrasts: `_paired` derives direction from the estimate it was given.
+        ci_record = {
+            "point": record.get("mean_difference", _BLANK),
+            "low": record.get("ci_low", _BLANK),
+            "high": record.get("ci_high", _BLANK),
+            "method": record.get("ci_method", _BLANK),
+        }
         paired.append(_paired(
-            entry, artifact, f"{record['contrast_id']}::{variant}", record,
+            entry, artifact, f"{record['contrast_id']}::{variant}", ci_record,
             p_value=record.get("p_value_unadjusted", _BLANK),
             adjusted=record.get("p_value_holm", _BLANK),
             n_pairs=record.get("n_paired_subjects", _BLANK),
             n_nonzero=record.get("n_nonzero_pairs", _BLANK),
             n_ties=record.get("n_ties", _BLANK),
             tier=tier, family=record["multiplicity_family"]))
-        paired[-1]["estimate"] = record.get("mean_difference", _BLANK)
-        paired[-1]["ci_low"] = record.get("ci_low", _BLANK)
-        paired[-1]["ci_high"] = record.get("ci_high", _BLANK)
-        paired[-1]["ci_method"] = record.get("ci_method", _BLANK)
 
     per_subject = [{
         "experiment": "f", "band": entry["band"], "subject": int(row["subject"]),

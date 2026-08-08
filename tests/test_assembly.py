@@ -399,6 +399,13 @@ def test_the_exp_f_schema_round_trips_every_multiplicity_family(tmp_path):
     assert primary["estimate"] == -0.1 and primary["ci_method"] == "bca"
     assert by_comparison["covariates_given_clock::pct_full"]["primary_or_secondary"] == "secondary"
     assert by_comparison["radar_given_clock::kg_full"]["multiplicity_family"] == "none_sensitivity"
+    # REGRESSION (step-9 self-review finding 1): every F row must state a direction. F names its
+    # estimate `mean_difference`, not `point`, and translating that AFTER `_paired` had already
+    # derived direction left it blank on all six contrasts — including both primary ones.
+    assert primary["direction"] == "negative_favours_first_term"      # mean_difference = -0.1
+    assert by_comparison["covariates_given_clock::pct_full"]["direction"] == \
+        "positive_favours_second_term"                                # mean_difference = +0.02
+    assert all(r["direction"] for r in tables["paired"])
     # the not-estimable HR record travels into the exclusion ledger
     assert {r["identifier"] for r in tables["exclusions"]} == {
         "glucose", "heart_rate", "temperature"}
@@ -507,6 +514,55 @@ def test_assemble_validates_before_reading_anything(tmp_path):
     (run_dir / "composite_10ghz.csv").write_text("col\nmoved\n", encoding="utf-8")
     with pytest.raises(AssemblyError, match="changed after registration"):
         assembly.assemble(manifest)
+
+
+def test_every_adapter_that_reports_an_estimate_also_reports_a_direction(tmp_path, config):
+    """The generalised form of step-9 self-review finding 1.
+
+    Each experiment names its effect differently (`point` for A/B/C/D/G's CI dicts,
+    `mean_difference` for F's contrast summaries), so every adapter has to translate into the
+    shared shape before the direction is derived. Asserting it once per adapter would have
+    caught F; asserting it across ALL of them stops the next adapter repeating the mistake.
+    """
+    ci = {"point": -0.2, "low": -0.4, "high": -0.05, "method": "bca"}
+    sources = [
+        SourceRun("a", "10ghz", _run_for(tmp_path, "a", "10ghz", metrics=_exp_a_metrics(config))),
+        SourceRun("b", "10ghz", _run_for(tmp_path, "b", "10ghz", metrics={
+            "n_eval_subjects_aggregate": 16, "n_rows": 60, "primary_viable": True,
+            "primary_aggregate": {"radar": ci, "baseline": ci,
+                                  "difference_radar_minus_baseline": ci},
+            "paired_subject_weighted_complete_case": {
+                "n_complete_case": 16, "wilcoxon_p": 0.1,
+                "mean_difference_radar_minus_baseline": dict(ci, point=0.3)},
+            "per_session_exploratory": {}, "dropped_sessions": {"outer_by_fold": {}}})),
+        SourceRun("d", "10ghz", _run_for(tmp_path, "d", "10ghz", metrics={
+            "n_eval": 16, "radar": {}, "per_family_metrics": {},
+            "primary_vs_session_index": {
+                "n_eval": 16, "wilcoxon_p": 0.01,
+                "mean_difference_radar_minus_baseline": ci}})),
+        SourceRun("f", "10ghz", _run_for(tmp_path, "f", "10ghz", metrics={
+            "n_subjects_f": 16, "heart_rate_question": {},
+            "contrasts": [{"contrast_id": "radar_given_clock", "analysis_variant": "pct_full",
+                           "multiplicity_family": "none_sensitivity", "mean_difference": 0.4,
+                           "ci_low": 0.1, "ci_high": 0.7, "ci_method": "bca",
+                           "p_value_unadjusted": 0.01, "n_paired_subjects": 16}]},
+            extra={"contrasts_f_10ghz.csv": _csv(
+                ("subject", "contrast_id", "analysis_variant", "target_name", "n_sessions",
+                 "mae_with", "mae_without", "difference_with_minus_without"), [])})),
+        SourceRun("g", None, _run_for(tmp_path, "g", None, metrics={
+            "n_subjects_g": 14,
+            "primary": {"n_subjects": 14, "mean_difference_fused_minus_10": ci}},
+            extra={"per_subject_g.csv": _csv(
+                ("subject", "n_sessions", "mae_10", "mae_77", "mae_equal_weight", "mae_fused",
+                 "difference_fused_minus_10"), [])})),
+    ]
+    tables = assembly.assemble(assembly.build_run_manifest(sources))
+    assert tables["paired"], "the fixture produced no paired rows to check"
+    for row in tables["paired"]:
+        if row["estimate"] == "":
+            continue
+        assert row["direction"] in (
+            "negative_favours_first_term", "positive_favours_second_term"), row
 
 
 def test_an_incomplete_metrics_file_fails_closed_naming_the_experiment_and_key(tmp_path):

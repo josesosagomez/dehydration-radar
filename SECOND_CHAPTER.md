@@ -1355,19 +1355,25 @@ algebraic-coupling sensitivity variants); Experiment H (per-subject performance 
 pre-specified comparisons with subject-cluster CIs and Holm correction, and a selection-variance
 **empirical percentile range** — not a BCa interval — from full-procedure subject resampling). All
 four designs were frozen at milestone 6 and are transcribed in `configs/exp_e.yaml`, `exp_f.yaml`,
-`exp_g_fusion.yaml` and `stats.yaml`; **eleven** explicit post-freeze protocol amendments
-(**A-M10-1..11**, `plans/MILESTONE_10_PLAN.md` §0.2) are disclosed here by reference and will be
+`exp_g_fusion.yaml` and `stats.yaml`; **twelve** explicit post-freeze protocol amendments
+(**A-M10-1..12**, `plans/MILESTONE_10_PLAN.md` §0.2) are disclosed here by reference and will be
 restated with their full reasoning, and with their true chronology, when this section is written in
 full. The chronology matters and must not be smoothed over: **A-M10-1..6 were made after A–D's
 results were visible** but before any milestone-10 code existed, as the condition of accepting the
-plan; **A-M10-7..11 were raised during implementation** (7–9 in steps 1–2, 10 in step 3, 11 in
-step 4), each found by testing the plan against its own stated requirements. Of the later five, one
-is a provenance correction that changes no estimand (A-M10-7), two are the bootstrap-multiplicity
-mechanism and the Exp-C weighting that preserves byte-neutrality (A-M10-8, A-M10-9), and two are
-artifact-granularity decisions about which provenance rows are written (A-M10-10 for Experiment H,
-A-M10-11 for Experiment G's fit audit) — **none of them changes an estimand, a metric, or an
-acceptance criterion**, and the chapter must say so explicitly rather than leaving a reader to
-count amendments and infer drift.
+plan; **A-M10-7..12 were raised during implementation** (7–9 in steps 1–2, 10 in step 3, 11 in
+step 4, 12 before step 8). A-M10-7..11 were each found by testing the plan against its own stated
+requirements: one is a provenance correction that changes no estimand (A-M10-7), two are the
+bootstrap-multiplicity mechanism and the Exp-C weighting that preserves byte-neutrality (A-M10-8,
+A-M10-9), and two are artifact-granularity decisions about which provenance rows are written
+(A-M10-10 for Experiment H, A-M10-11 for Experiment G's fit audit) — **none of those five changes
+an estimand, a metric, or an acceptance criterion**, and the chapter must say so explicitly rather
+than leaving a reader to count amendments and infer drift.
+
+**A-M10-12 is the exception and must not be grouped with them.** It is an owner decision about
+process, taken before step 8, and it *does* change an acceptance criterion: there is no
+independent code review, because no second person is available. Step 9 became an author
+self-review. The chapter must state this plainly in its own right — see limitation 6 below — and
+must never describe the milestone-10 software as peer-reviewed.
 
 **Things this section must not paper over.**
 
@@ -1403,6 +1409,21 @@ count amendments and infer drift.
    noise than with complementary information across bands, and would be reported as such unless its
    subject-cluster CI excludes zero by a margin comparable to the §6 effects. Feature-level fusion is
    explicitly deferred (A-M10-4) and is not a milestone-10 completion criterion.
+
+4. **The milestone-10 code was reviewed only by its author (A-M10-12).** The accepted plan
+   specified an independent read-only code review as a completion criterion; no second person
+   was available, so step 9 became an author self-review and the criterion was amended rather
+   than quietly treated as met. The chapter states this as a limitation of the *evidence*, not
+   as a caveat about effort: what independent review defends against is the assumption the
+   author never thought to question, which is by construction encoded identically in the code
+   and in the test written to check it, and no amount of author diligence reaches it. What does
+   still hold, because it does not depend on who read the code: `tests/test_no_leakage.py` was
+   frozen at milestone 7 and is byte-identical throughout milestone 10; the multiplicity work is
+   pinned byte-for-byte against the already-reported M8/M9 artifacts; every store, schema and
+   lineage check fails closed; and the full and real-data suites pass on the final tree. Those
+   catch drift, leakage and broken lineage. They do not catch a wrong-but-self-consistent idea.
+   The software behind these results is therefore **extensively tested and author-reviewed, and
+   is not peer-reviewed** — a reader assessing the numbers is entitled to weigh that.
 
 ## Provenance index
 

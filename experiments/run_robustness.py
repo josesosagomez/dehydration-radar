@@ -197,6 +197,9 @@ def main(argv=None) -> int:
               f"{robustness.RANGE_LABEL}, NOT a BCa interval (A-M10-5).")
     # Written only here, at the end of a successful run: a crashed job must leave no pointer,
     # so manifest construction fails closed rather than registering a half-written directory.
+    # The SHARD path returns above without writing one, deliberately: a shard holds a sub-range
+    # of replicates and no range, so it is not an authoritative run directory. The MERGE that
+    # consumes the shards reaches this line and writes the pointer for the run that is.
     if args.run_dir_out:
         print(f"run dir   : {provenance.write_run_dir_pointer(args.run_dir_out, run_dir)}")
     return 0

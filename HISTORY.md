@@ -4,6 +4,101 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — Owner decision: **no independent code review (A-M10-12)**. Steps 8–10 adapted, plan and chapter reconciled, and the step-9 AUTHOR SELF-REVIEW run. Four findings, recorded here before any fix was written.
+
+*Owner decision, taken before step 8: there will be no independent code review. Recorded as
+**A-M10-12** rather than absorbed silently, because it changes a stated acceptance criterion —
+§7 required "an independent code review has no unresolved blocker/high scientific finding".*
+
+**Why this is an amendment and not a process note.** Letting a self-review quietly satisfy a
+criterion that says "independent" would misrepresent the evidence behind every milestone-10
+number. A self-review is genuinely weaker and the difference is not effort: independent review
+defends against the assumption the author never thought to question, which is by construction
+encoded identically in the code *and* in the test written to check it. No amount of author care
+reaches that class of defect. So the mitigation is disclosure, not a claim of equivalence.
+
+**What was reconciled** (all in this session, before the review ran): plan §0.2 gains the
+A-M10-12 row; §4.2 steps 8–10 are rewritten (step 8's test gate is unchanged — which tests must
+pass does not depend on who runs them; step 9 becomes an author self-review that records
+findings *before* fixes; step 10 drops "independent tester"); §7's Milestone-10 criterion is
+replaced; §8 gains it as a stated limitation; §8.2 gains its methodological basis; §9's workflow
+line and §6/§9.1's stray "independent" references are corrected. `SECOND_CHAPTER.md` §9 now
+discloses **A-M10-1..12**, states that A-M10-12 is the one amendment that WEAKENS a criterion
+and must not be grouped with the other five, and carries a new limitation 4: the software is
+"extensively tested and author-reviewed, and is **not** peer-reviewed".
+
+**Step 8 test gate.** Full suite `1525 passed, 5 failed, 16 skipped` (the 5 pre-existing
+Windows-only IBEX-script failures); `tests/test_no_leakage.py` byte-unchanged since M7; targeted
+gates green. The real-data suite was launched against the same tree.
+
+### Step 9 — author self-review findings (recorded BEFORE fixing)
+
+1. **[HIGH — wrong artifact content] `assembly.adapt_f` emits a blank `direction` on every
+   Experiment F paired row.** `_paired` derives `direction` from `_ci(record)["estimate"]`, and
+   `_ci` reads the key `point` — but F's contrast summaries carry `mean_difference`, not
+   `point`. The estimate and CI columns were patched in *after* the `_paired` call, so they are
+   right; `direction` was not, so it stays `""`. Reproduced directly: estimate `-0.1`, ci_low
+   `-0.3`, direction `''`. This hits the **two primary milestone contrasts** (the Holm-2 radar
+   increments) plus four more per band, and §3 requires `paired_comparisons.csv` to state
+   direction. The existing F adapter test asserts estimate and `ci_method` but never
+   `direction` — a clean example of the self-review limitation this session just documented:
+   the same blind spot wrote the code and the test.
+2. **[LOW — misleading claim] `assembly._config_sha256`'s docstring overclaims.** It says the
+   hash is "guaranteed byte-identical-content-equivalent" to `exp_b.config_fingerprint`. It is
+   not: `config_fingerprint` hashes the in-memory `config_to_dict`, this hashes the same dict
+   after a JSON round-trip, and a round trip turns config tuples into lists. No functional
+   defect — the value is only ever compared against itself — but the claim would mislead anyone
+   who tried to cross-check the two.
+3. **[LOW — dead code] `adapt_f` binds `n_subjects` and never uses it** (the per-contrast
+   `n_paired_subjects` is used instead).
+4. **[LOW — undocumented behaviour] `run_robustness.py` writes no run-directory pointer on the
+   SHARD path**, which is correct — a shard is not an authoritative run directory, the merge
+   writes that — but nothing says so, and the next reader has to derive it.
+
+No leakage, fold-construction, selection-honesty or store-lineage finding. The invariants that
+do not depend on a reader all hold: folds come only from `splits.py`, every fitted transform is
+train-only, `test_no_leakage.py` is untouched, and every store/schema/lineage gate fails closed.
+
+### Step 10 — corrections and mandatory retest
+
+All four findings fixed.
+
+- **Finding 1.** `adapt_f` now translates F's contrast summary into the shared CI shape
+  (`mean_difference` → `point`) **before** `_paired` runs, instead of patching the columns in
+  afterwards. Direction is derived from the estimate, so it has to be present when direction is
+  computed. Regression coverage added in two layers: the F adapter test now asserts the actual
+  direction strings on a negative and a positive contrast, and a new cross-adapter test drives
+  A, B, D, F and G together and asserts that **every** paired row with a finite estimate carries
+  a direction. The second one is the point — asserting it for F alone would have fixed this
+  instance while leaving the next adapter free to repeat it.
+- **Finding 2.** `_config_sha256`'s docstring now says what the hash is for and states plainly
+  that it is *not* claimed equal to `exp_b.config_fingerprint`, with the reason (a JSON round
+  trip turns config tuples into lists) and the fact that the two are only ever compared against
+  themselves across runs.
+- **Finding 3.** The unused `n_subjects` binding removed.
+- **Finding 4.** `run_robustness.py` now explains why the SHARD path deliberately writes no
+  pointer: a shard holds a sub-range of replicates and no range, so it is not an authoritative
+  run directory; the MERGE that consumes the shards writes the pointer for the run that is.
+
+**Retest gate (post-correction tree, not the pre-review result).**
+
+- Full suite: **1526 passed, 5 failed, 16 skipped** (55:34) — one more than step 7's 1525, which
+  is exactly the new cross-adapter direction test. The 5 are the same pre-existing Windows-only
+  IBEX-script failures.
+- Real-data suite: **1541 passed, 5 failed, 0 skipped** (54:22) — `--realdata` unskips the 16
+  real-data tests and all 16 pass, including `test_wst_on_one_real_session` against the real
+  10 GHz session. Rerun post-correction to satisfy step 10 rather than argued away, even though
+  the corrections touch only `assembly.py`, one comment and tests, none of which a real-data
+  test imports.
+- `tests/test_no_leakage.py`: byte-unchanged (`git diff --exit-code` clean), as it has been
+  since milestone 7.
+
+**What the self-review does NOT establish.** Finding 1 is the honest illustration of A-M10-12's
+limitation, and it is worth stating rather than burying: the blank `direction` survived because
+the same understanding wrote both the adapter and the test that checked it. It was caught by
+executing the adapter and reading its output, not by reading the code — which is exactly the
+kind of luck an independent reviewer would not have needed.
+
 ## 2026-08-08 — M10 step 7 DONE: drivers and assembly. One explicit run map, eight per-experiment adapters, and the run-directory pointer mechanism the plan needed but nothing had implemented. 55 new tests green in 5 s.
 
 Step 7 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/assembly.py`,

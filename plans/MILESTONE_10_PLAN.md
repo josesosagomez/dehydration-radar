@@ -55,11 +55,14 @@ is the authorization gate; implementation must not begin if any amendment is rej
 | **A-M10-5** | The `R=200` full-procedure resamples produce a **selection-variance robustness distribution** summarized by its empirical 2.5th and 97.5th percentiles, not a BCa CI. | BCa requires the observed statistic and an original-subject delete-one jackknife. Applying BCa to an arbitrary vector of already-bootstrapped estimates is invalid. Existing `B=10000` subject-cluster BCa intervals remain the formal conditional intervals. |
 | **A-M10-6** | Exp E reporting is outcome-neutral. The fixed model's weak predictive context is stated before interpreting attribution, but the path table is not pre-labelled as “null” or “physical.” | Attribution describes model reliance/predictive contribution; it cannot prove or disprove a dielectric mechanism. A desired narrative must not be encoded as a software acceptance criterion. |
 
-The five amendments below were added **during implementation** (A-M10-7..9 on 2026-08-07 in steps
-1–2; A-M10-10 on 2026-08-08 in step 3; A-M10-11 on 2026-08-08 in step 4), after the plan was
-accepted. Each was found by testing this plan against its own stated requirements, not by re-reading
-it. They are recorded with the same disclosure discipline as A-M10-1..6, and the sections they
-supersede have been revised in place so no contradictory instruction survives anywhere in this file.
+The six amendments below were added **during implementation** (A-M10-7..9 on 2026-08-07 in steps
+1–2; A-M10-10 on 2026-08-08 in step 3; A-M10-11 on 2026-08-08 in step 4; A-M10-12 on 2026-08-08
+before step 8), after the plan was accepted. The first five were found by testing this plan
+against its own stated requirements, not by re-reading it; **A-M10-12 is different in kind — it
+is an owner decision about the process, and it weakens a stated acceptance criterion rather than
+clarifying one.** They are recorded with the same disclosure discipline as A-M10-1..6, and the
+sections they supersede have been revised in place so no contradictory instruction survives
+anywhere in this file.
 
 | ID | Decision | Reason |
 |---|---|---|
@@ -68,6 +71,8 @@ supersede have been revised in place so no contradictory instruction survives an
 | **A-M10-9** | *(weighting decision, recorded separately from A-M10-8.)* Experiment C arm (b) keeps the **frozen multiclass O-M9-7 inverse-frequency weight vector** for all four Frank-Hall threshold fits. §2.4's per-threshold *binary* inverse-frequency rule is **not** adopted. | The two are different weightings (`n/(2·n_{>k})` vs `n/(K_present·n_c)`), and the frozen M9 implementation uses the multiclass vector. Adopting the binary rule would change ordinary Experiment C behaviour at multiplicity one — i.e. on the already-reported results — and so would violate the byte-neutrality this plan makes a hard requirement of the multiplicity step (§4.1: "every `None` default executes the current statements and produces byte-identical A–D outputs"). Byte-neutrality is the stronger constraint and the one the milestone's acceptance criteria rest on. Under A-M10-8 no separate effective-count formula is implemented at all: the estimator receives the expanded labels, and its existing `n/(K_present·n_c)` **is** §2.4's `m_s·n_eff/(K_present·n_c_eff)`. |
 | **A-M10-10** | *(artifact-granularity amendment, raised 2026-08-08 during step 3.)* `robustness_selection.csv` records **one row per SELECTED candidate per stage** rather than one row per enumerated candidate, and `fit_audit_robustness.csv` records the **outer-level** fits the reused A/B/C orchestration returns rather than also its inner-CV fits. §3's key lists are otherwise unchanged; the consequence visible in the data is that `inner_score`/`inner_score_variance` are blank and `n_inner_folds` is populated for Exp C only. | §4.2 step 3 requires the robustness driver to reuse A/B/C orchestration unchanged ("robustness never copies their candidate enumeration or selection logic"), and `run_exp_a`/`run_exp_b`/`run_exp_c` return **only** the selected candidate and the outer-train `final_fits`: each fold worker discards its per-candidate `StageOutcome` and its `InnerResult` list before returning (`exp_a._run_single_fold`, `exp_b._run_single_fold_b`, `exp_c._run_single_fold_c`, which explicitly drops the trace `_run_single_fold_c_trace` builds). Emitting the full enumeration would therefore require changing all three frozen fold-result shapes **and** shipping ≈113 candidate records × ≈10 folds × 200 replicates through the spawn-pool pickle and onto disk — order 10⁶ rows and hundreds of MB across the six launch-matrix jobs — for no additional audit power: §5.5's own acceptance criterion asks that "every successful real robustness estimate resolves to complete winner/feature and fit-audit rows", which the winner-level table satisfies exactly. The winner rows are emitted once per **estimand**, so each estimand's provenance is complete on its own rows and joins to `robustness_replicates.csv` on the full `(experiment, band, arm_or_contrast, replicate)` key. |
 | **A-M10-11** | *(artifact-granularity amendment, raised 2026-08-08 during step 4.)* Exp G's `fit_audit_g.csv` records the fit chain **behind every reported prediction** — per (level, band) the staged selection over that level's training pool, then that level's tuned-ε / scaler / model refit records, plus one `fusion_alpha` row per outer fold — and **not** the inner-CV fits that occur *inside* a staged selection. §3's "every scaler/model/selection/alpha fit is represented" is read at that granularity. **Scoped to G's fit audit only: `fusion_base_selection.csv` keeps its full per-candidate enumeration, unchanged.** | This is the question A-M10-10 answered for H, asked of a different table; the plan answers it for G only for the *selection* table (§8.2). §5.1 enumerates what the audit must cover — "selection, scaler, model, and alpha subject sets" — and §5.4 states what it is for: "every OOF and outer-final prediction resolves to one complete base-selection record and fit-audit chain". The recorded chain satisfies both exactly. The inner-CV fits back **no reported prediction**: they are the scaffolding by which a candidate was scored, and the scores they produced are already recorded per candidate in `fusion_base_selection.csv` — which is the artifact §5.4's "outer outcomes are never read" fixture actually consumes. Recording them as rows would add ≈113 candidates × ≈5 further folds × 6 levels × 2 bands × 16 folds ≈ 10⁵–10⁶ records per run through the spawn-pool pickle, for provenance nothing reads: the identical cost argument, at the identical order of magnitude, that A-M10-10 accepted for H. A-M10-10's distinction between the two experiments is preserved, and is exactly why this amendment is narrow — G's selection-honesty is what is under test, so its per-candidate **selection** rows stay; its per-inner-fit **audit** rows were never what proved it. |
+
+| **A-M10-12** | *(process amendment, owner decision 2026-08-08, before step 8.)* **There will be no independent code review.** §4.2 steps 8–9 assumed a tester and a reviewer independent of the sole implementation writer; no second person is available. Steps 8 and 10's test gates are unchanged and still run in full. Step 9 becomes an **author self-review**, performed by the writer of the code, and is labelled as such everywhere it is reported. §7's Milestone-10 criterion "an independent code review has no unresolved blocker/high scientific finding" is replaced by "an author self-review has no unresolved blocker/high scientific finding, and the absence of independent review is disclosed as a limitation". | The alternative to recording this is worse than the decision itself: silently letting a self-review satisfy a criterion that says "independent" would misrepresent the evidence behind every milestone-10 number. A self-review is genuinely weaker — an author is least able to see the assumption they never questioned, and no amount of care fixes that — so the mitigation is disclosure, not a claim of equivalence. What *is* retained: the frozen leakage suite, the full and real-data suites, the byte-neutrality pins, and every fail-closed gate, none of which depend on who reads the code. §8 gains this as a stated limitation and `SECOND_CHAPTER.md` §9 must state it in the chapter, because a reader assessing these results is entitled to know that the code producing them was reviewed only by its author. |
 
 **Factual correction (not an amendment).** §4.1 named the arm-(b) estimator
 `CumulativeOrdinalClassifier`. The class is `FrankHallOrdinal` (`src/dehyd/models/ordinal.py`), which
@@ -618,16 +623,19 @@ robustness-only estimator clone.
    fold-local alpha selection, four models, exact sensitivities, and contrasts.
 7. **Drivers and assembly.** Implement experiment-specific artifact readers and explicit run map;
    no filename globbing or assumed uniform schema.
-8. **Independent tests.** A tester independent of the sole implementation writer runs targeted
-   risk tests, unchanged `tests/test_no_leakage.py`, the full suite, and the real-data suite on the
-   candidate tree. All must be green before handoff to review.
-9. **Independent read-only code review.** Review the same tested candidate for scientific,
-   leakage, lineage, and statistical defects. Any blocker/high finding returns to the original
-   writer; the reviewer does not implement corrections.
-10. **Corrections and mandatory retest.** The original writer fixes every accepted finding and adds
-    targeted regression coverage. An independent tester reruns the affected tests plus
-    `test_no_leakage.py`, the full suite, and the real-data suite. The final-analysis gate accepts
-    only this post-correction green tree, not the earlier pre-review result.
+8. **Test gate.** Targeted risk tests, unchanged `tests/test_no_leakage.py`, the full suite, and
+   the real-data suite on the candidate tree. All must be green before review. *(**A-M10-12**:
+   there is no independent tester. The gate itself is unchanged — which tests must pass does
+   not depend on who runs them.)*
+9. **Author self-review (A-M10-12, replacing the independent review).** Read-only review of the
+   same tested candidate for scientific, leakage, lineage and statistical defects, **performed
+   by the writer of the code**. This is a weaker gate than this plan originally specified and is
+   labelled as such wherever its result is cited. Findings are recorded in HISTORY *before* any
+   fix is written, so the review's output stays auditable separately from the corrections.
+10. **Corrections and mandatory retest.** Every accepted finding is fixed with targeted
+    regression coverage, then the affected tests plus `test_no_leakage.py`, the full suite and
+    the real-data suite are rerun. The final-analysis gate accepts only this post-correction
+    green tree, not the earlier pre-review result.
 11. **Final analysis commit and stores.** After every source/config/test correction lands, stamp
    `REVISION` once, rebuild both feature stores once, and validate them. Multiple green commits are
    allowed; the optimization is one final store rebuild, not one risky uncommitted code wave.
@@ -652,8 +660,8 @@ Workflow stop conditions are fail-closed: no structural edit/store rebuild witho
 immutable M9 A snapshot; no final A/B/E/F/G/H job before the post-review retest gate; no F or
 assembly after an A-reference mismatch, missing B source, invalid store, or schema/lineage failure.
 The IBEX launch matrix remains serialized in the displayed dependency order because jobs create
-lineage-bearing result state. Independent read-only review/exploration may run in parallel; jobs
-that consume one another's artifacts may not.
+lineage-bearing result state. Read-only review/exploration may run in parallel; jobs that consume
+one another's artifacts may not.
 
 ## 5. Risk-based test plan
 
@@ -905,7 +913,11 @@ summary. The second call must create all three H assembly rows listed in §3 plu
 
 all targeted/full/real-data tests are green, `tests/test_no_leakage.py` is unchanged, both rebuilt
 stores validate at the final analysis commit, every required artifact exists and passes schema/
-lineage checks, and an independent code review has no unresolved blocker/high scientific finding.
+lineage checks, and — **as amended by A-M10-12** — an **author self-review** has no unresolved
+blocker/high scientific finding **and the absence of an independent review is disclosed as a
+limitation** in §8 and in the thesis chapter. The original criterion named an independent code
+review; no second person is available, and the replacement is deliberately not claimed to be
+equivalent.
 
 ## 8. Known limitations and deferred work
 
@@ -919,6 +931,13 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
   descriptive. Formal refit-aware BCa would require full delete-one-subject procedure refits.
 - The fasting design remains confounded with time of day; Exp B/F reduce specific alternatives but do
   not causally isolate hydration.
+- **The milestone-10 code was reviewed only by its author (A-M10-12).** No independent code
+  review was performed, because no second person was available. The automated gates that do not
+  depend on a reader — the frozen leakage suite, the full and real-data suites, the
+  byte-neutrality pins against the M8/M9 artifacts, and every fail-closed schema/lineage check —
+  all still apply and all pass. What is missing is the class of defect those gates cannot catch:
+  an assumption the author never thought to question, and which therefore appears in both the
+  code and the test that checks it. This limitation belongs in the thesis chapter, not only here.
 
 ### 8.1 Methodological basis for the amendments
 
@@ -938,7 +957,7 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
   [official filter-bank source](https://github.com/kymatio/kymatio/blob/v0.3.0/kymatio/scattering1d/filter_bank.py#L13-L16)
   rather than treating `j` as a physical frequency.
 
-### 8.2 Methodological basis for A-M10-7..11
+### 8.2 Methodological basis for A-M10-7..12
 
 - **A-M10-8, `svr`.** With the RBF kernel, `gamma="scale"` is `1 / (n_features · X.var())` computed
   from the array passed to `fit`; `sample_weight` rescales the per-sample penalty `C_i` and does not
@@ -979,6 +998,17 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
   table is for. The cost is nevertheless the same order A-M10-10 weighed (≈10⁵–10⁶ records per run
   through a spawn-pool pickle), which is why the question arose at all rather than being answered
   silently in either direction.
+- **A-M10-12.** Independent review defends against a specific failure mode: the assumption the
+  author never thought to question, which is therefore encoded identically in the code and in
+  the test written to check it. No amount of author care removes it, because care is applied
+  along the axes the author already considers. Recording that honestly is the only available
+  mitigation, so the amendment's substance is the disclosure rather than the process change.
+  What survives unchanged is everything whose validity does not depend on who read the code:
+  `tests/test_no_leakage.py` (frozen since M7 and byte-identical throughout milestone 10), the
+  byte-neutrality pins against the M8/M9 artifacts, the fail-closed store/schema/lineage gates,
+  and the real-data suite. Those catch drift, leakage and lineage breakage; they do not catch a
+  wrong-but-consistent idea. The chapter must therefore present milestone-10's software
+  assurance as "extensively tested, reviewed by its author" and never as peer-reviewed.
 - **A-M10-7.** The claim that the substitution is inert is an empirical result, not an assumption:
   byte-identical selection tables plus a max |Δy_pred| four orders of magnitude inside the frozen
   O-M9-5 tolerance, and consistent with HISTORY's independent M7-comparison table.
@@ -987,13 +1017,17 @@ lineage checks, and an independent code review has no unresolved blocker/high sc
 
 The future workflow is:
 
-`accepted plan -> one implementation writer -> independent risk-based tests -> independent code review -> corrections and rerun -> documentation only after verification`.
+`accepted plan -> one implementation writer -> risk-based test gate -> author self-review
+(A-M10-12; the independent review this originally named is not available) -> corrections and
+rerun -> documentation only after verification`.
 
 The implementation writer should keep calculations visible in plain functions and inspectable
-tables. The independent test pass should target leakage, key alignment, multiplicity, and statistical
-edge cases. HISTORY checkpoints occur continuously as specified in §4.2; SECOND_CHAPTER and final
+tables. The test pass should target leakage, key alignment, multiplicity, and statistical
+edge cases (under A-M10-12 it is run by the writer, not an independent tester). HISTORY checkpoints occur continuously as specified in §4.2; SECOND_CHAPTER and final
 user-facing documentation wait for verified full-cohort artifacts. Both must disclose
-**A-M10-1..11** and the observed results without outcome-based reframing.
+**A-M10-1..12** and the observed results without outcome-based reframing. A-M10-12 in
+particular must reach the chapter: it is the one amendment that weakens a stated
+acceptance criterion rather than clarifying one.
 
 ### 9.1 Mid-implementation plan re-review (owner-directed, 2026-08-07)
 
