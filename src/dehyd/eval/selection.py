@@ -126,6 +126,62 @@ def select_candidate(scores: list[CandidateScore]) -> CandidateScore:
     )
 
 
+# ------------------------------------------------- Experiment G's fusion-weight tie-break
+
+
+def select_alpha(alpha_grid, objective_values, *, tie_break: str = "closest_to_one") -> float:
+    """Return the fusion weight minimizing the objective, under Exp G's frozen tie-break.
+
+    Experiment G combines the two bands as `alpha * pred_10 + (1 - alpha) * pred_77` and picks
+    `alpha` off a 21-point grid by the smallest subject-balanced out-of-fold MAE. That is an
+    argmin over a grid of floats, and grid argmins tie often — several alphas near the optimum
+    can give bit-identical objectives when one band's predictions barely move the combination.
+    `ExpGConfig.alpha_tie_break` freezes the resolution as `closest_to_one`, i.e. **ties keep
+    the most weight on the primary 10 GHz band**, so a tie can never quietly manufacture a
+    fusion effect out of numerical noise.
+
+    It lives here, with `select_candidate`, for the reason this module exists at all: a
+    tie-break inlined at its call site is a tie-break nobody tests. `exp_g.py` never compares
+    two alphas itself.
+
+    Args:
+        alpha_grid: the candidate weights, in the frozen `ExpGConfig.alpha_grid` order.
+        objective_values: one already-computed objective per alpha, same order and length.
+            Lower is better. Non-finite entries are not selectable.
+        tie_break: must be `"closest_to_one"` — the only frozen rule. Named rather than
+            implied so a config carrying anything else fails loudly instead of silently
+            getting this behaviour.
+
+    Raises:
+        SelectionError: empty/length-mismatched input, an unfrozen tie-break, or no finite
+            objective anywhere on the grid.
+    """
+    alphas = [float(a) for a in alpha_grid]
+    objectives = [float(v) for v in objective_values]
+    if not alphas:
+        raise SelectionError("select_alpha got an empty alpha grid")
+    if len(alphas) != len(objectives):
+        raise SelectionError(
+            f"select_alpha got {len(alphas)} alphas and {len(objectives)} objective values"
+        )
+    if tie_break != "closest_to_one":
+        raise SelectionError(
+            f"unknown alpha tie-break {tie_break!r}; the frozen rule is 'closest_to_one'"
+        )
+
+    comparable = [(a, v) for a, v in zip(alphas, objectives) if math.isfinite(v)]
+    if not comparable:
+        raise SelectionError(
+            f"no finite objective among {len(alphas)} alpha values — the fold selects no weight"
+        )
+
+    # `-alpha` is the last key only to make the result total: on [0, 1] no two distinct alphas
+    # are equidistant from 1.0, so it never actually decides anything; it is there so a future
+    # grid that did contain such a pair would still resolve toward the 10 GHz band rather than
+    # toward whichever value came first in the tuple.
+    return min(comparable, key=lambda pair: (pair[1], abs(pair[0] - 1.0), -pair[0]))[0]
+
+
 # ----------------------------------------------------- Experiment C's ordinal tie-break
 
 

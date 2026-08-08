@@ -15,6 +15,7 @@ from dehyd.eval.selection import (
     CandidateScore,
     OrdinalCandidateScore,
     SelectionError,
+    select_alpha,
     select_candidate,
     select_candidate_ordinal,
 )
@@ -197,3 +198,67 @@ def test_all_non_comparable_ordinal_raises_and_counts_the_non_evaluable_cells():
     scores = [ordinal("a", math.nan, evaluable=0), ordinal("b", 1.0, evaluable=0)]
     with pytest.raises(SelectionError, match="2 had zero evaluable inner folds"):
         select_candidate_ordinal(scores)
+
+
+# ------------------------------------------ Exp G's fusion-weight tie-break (T-M10-g-alpha)
+#
+# `select_alpha` is a grid argmin with a frozen tie rule. The rule matters more than the argmin:
+# on a 21-point grid several alphas near the optimum routinely give bit-identical objectives,
+# and `closest_to_one` is what stops a tie from manufacturing a fusion effect out of noise.
+
+GRID = tuple(round(0.05 * i, 2) for i in range(21))
+
+
+def test_alpha_grid_has_the_21_frozen_points():
+    """`ExpGConfig.alpha_grid` is 0.00..1.00 step 0.05, and the fixture here must be it."""
+    from dehyd.config import ExpGConfig
+
+    assert ExpGConfig().alpha_grid == GRID
+    assert len(GRID) == 21 and GRID[0] == 0.0 and GRID[-1] == 1.0
+
+
+def test_select_alpha_picks_the_unique_minimum():
+    objectives = [1.0] * 21
+    objectives[GRID.index(0.35)] = 0.5
+    assert select_alpha(GRID, objectives) == 0.35
+
+
+def test_ties_choose_the_alpha_closest_to_one():
+    """The frozen rule: ties keep the most weight on the primary 10 GHz band. Here 0.10, 0.50
+    and 0.80 all sit at the minimum and 0.80 must win — not 0.10, which plain `min` would take
+    because it comes first in grid order."""
+    objectives = [1.0] * 21
+    for alpha in (0.10, 0.50, 0.80):
+        objectives[GRID.index(alpha)] = 0.25
+    assert select_alpha(GRID, objectives) == 0.80
+
+
+def test_a_completely_flat_objective_selects_alpha_one():
+    """Both bands contributing nothing distinguishable is exactly the case where fusion must
+    not be credited: a flat grid resolves to alpha = 1, i.e. the 10 GHz model unchanged."""
+    assert select_alpha(GRID, [2.5] * 21) == 1.0
+
+
+def test_non_finite_objectives_are_not_selectable():
+    objectives = [math.nan] * 21
+    objectives[GRID.index(0.20)] = 3.0
+    assert select_alpha(GRID, objectives) == 0.20
+
+
+def test_all_non_finite_raises_rather_than_returning_an_arbitrary_alpha():
+    with pytest.raises(SelectionError, match="no finite objective"):
+        select_alpha(GRID, [math.inf] * 21)
+    with pytest.raises(SelectionError, match="no finite objective"):
+        select_alpha(GRID, [math.nan] * 21)
+
+
+def test_empty_and_mismatched_input_raise():
+    with pytest.raises(SelectionError, match="empty alpha grid"):
+        select_alpha([], [])
+    with pytest.raises(SelectionError, match="21 alphas and 3 objective"):
+        select_alpha(GRID, [1.0, 2.0, 3.0])
+
+
+def test_an_unfrozen_tie_break_is_refused_rather_than_silently_treated_as_the_frozen_one():
+    with pytest.raises(SelectionError, match="closest_to_one"):
+        select_alpha(GRID, [1.0] * 21, tie_break="closest_to_zero")

@@ -99,7 +99,7 @@ def nested_loso_splits(
 
         inner_folds: tuple[InnerFold, ...] = ()
         if selectable:
-            inner_folds = _inner_folds(train_subjects, n_inner_max)
+            inner_folds = selection_folds(train_subjects, n_inner_max=n_inner_max)
 
         folds.append(
             OuterFold(
@@ -110,6 +110,48 @@ def nested_loso_splits(
             )
         )
     return folds
+
+
+def selection_folds(
+    subject_ids: Sequence[int], *, n_inner_max: int = DEFAULT_N_INNER_MAX
+) -> tuple[InnerFold, ...]:
+    """Subject-grouped SELECTION folds over an already-chosen training pool.
+
+    This is the private inner-fold construction that `nested_loso_splits` has always used,
+    made public and named for what it is: given the subjects a model may be selected on, it
+    returns the deterministic GroupKFold partition of exactly those subjects. It is a pure
+    extraction — `nested_loso_splits` now calls it and its output is unchanged.
+
+    It is public because Experiment G needs the same construction at a level nested one
+    deeper than ordinary inner CV: its meta-training predictions must come from a selection
+    that never saw the meta-validation group, so the selection runs over `T_s \\ V` and needs
+    folds over *that* pool (MILESTONE_10_PLAN.md §2.3, A-M10-3). Exposing this keeps the
+    project's rule intact — `splits.py` is still the only module that constructs folds — where
+    the alternative was `exp_g.py` building GroupKFold indices of its own.
+
+    Args:
+        subject_ids: the selection-training pool. Must be UNIQUE and already SORTED: every
+            caller has a sorted set in hand, and demanding it here means the returned folds
+            cannot silently depend on the order the caller happened to iterate a set in.
+        n_inner_max: cap on the number of folds; the actual count adapts to the pool size.
+
+    Raises:
+        SplitError: fewer than two subjects (fail-closed — one subject cannot be split into
+            a train and a validation side), duplicates, unsorted input, or n_inner_max < 2.
+    """
+    ids = list(subject_ids)
+    if len(ids) != len(set(ids)):
+        duplicated = sorted({i for i in ids if ids.count(i) > 1})
+        raise SplitError(f"selection subject_ids contains duplicates: {duplicated}")
+    if ids != sorted(ids):
+        raise SplitError(f"selection subject_ids must be sorted, got {ids}")
+    if n_inner_max < 2:
+        raise SplitError(f"n_inner_max must be >= 2, got {n_inner_max}")
+    if len(ids) < 2:
+        raise SplitError(
+            f"need at least 2 selection-training subjects to build selection folds, got {len(ids)}"
+        )
+    return _inner_folds(ids, n_inner_max)
 
 
 def _inner_folds(train_subjects: list[int], n_inner_max: int) -> tuple[InnerFold, ...]:

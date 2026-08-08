@@ -12,6 +12,7 @@ from dehyd.eval.splits import (
     SplitError,
     iter_triples,
     nested_loso_splits,
+    selection_folds,
 )
 
 FULL_COHORT = list(range(1, 17))
@@ -172,6 +173,69 @@ def test_invalid_parameters_rejected():
         nested_loso_splits(FULL_COHORT, n_inner_max=1)
     with pytest.raises(SplitError, match="min_train_subjects"):
         nested_loso_splits(FULL_COHORT, min_train_subjects=1)
+
+
+# ------------------------------------- public selection_folds (milestone 10, Experiment G)
+#
+# Exposing the inner-fold construction is a PURE EXTRACTION: `nested_loso_splits` calls it and
+# its output must be unchanged. The first test below is the one that matters — if it ever fails,
+# every Experiment A/B/C/D number in the repository was produced by different folds.
+
+
+def test_selection_folds_is_exactly_what_nested_loso_splits_attaches():
+    """The extraction contract. For every outer fold, the folds `nested_loso_splits` attached
+    must be identical (order included) to `selection_folds` over that fold's training pool."""
+    for fold in nested_loso_splits(FULL_COHORT):
+        pool = sorted(fold.train_subjects)
+        assert fold.inner_folds == selection_folds(pool)
+
+    for n_inner_max in (2, 3, 4, 5):
+        for fold in nested_loso_splits(FULL_COHORT, n_inner_max=n_inner_max):
+            assert fold.inner_folds == selection_folds(
+                sorted(fold.train_subjects), n_inner_max=n_inner_max
+            )
+
+
+def test_selection_folds_partitions_its_pool_with_every_subject_validated_once():
+    """Experiment G's meta level relies on this: the further folds must cover the selection
+    pool exactly once, or a candidate's score would weigh some subjects twice."""
+    pool = [1, 2, 3, 5, 8, 13, 21]
+    folds = selection_folds(pool)
+    validated = [s for f in folds for s in sorted(f.val_subjects)]
+    assert sorted(validated) == pool
+    assert len(validated) == len(set(validated))
+    for fold in folds:
+        assert fold.train_subjects.isdisjoint(fold.val_subjects)
+        assert fold.train_subjects | fold.val_subjects == frozenset(pool)
+
+
+def test_selection_folds_fold_count_adapts_to_the_pool():
+    assert len(selection_folds([1, 2])) == 2
+    assert len(selection_folds([1, 2, 3])) == 3
+    assert len(selection_folds(list(range(1, 13)))) == 5
+    assert len(selection_folds(list(range(1, 13)), n_inner_max=3)) == 3
+
+
+def test_selection_folds_fails_closed_below_two_subjects():
+    """Fail-closed is the whole point at G's deepest level: one subject cannot be split into a
+    train and a validation side, and a silent empty tuple would make the fold look selectable."""
+    with pytest.raises(SplitError, match="at least 2 selection-training subjects"):
+        selection_folds([7])
+    with pytest.raises(SplitError, match="at least 2 selection-training subjects"):
+        selection_folds([])
+
+
+def test_selection_folds_rejects_duplicates_unsorted_input_and_bad_n_inner_max():
+    with pytest.raises(SplitError, match="duplicates"):
+        selection_folds([1, 2, 2, 3])
+    with pytest.raises(SplitError, match="must be sorted"):
+        selection_folds([3, 1, 2])
+    with pytest.raises(SplitError, match="n_inner_max"):
+        selection_folds([1, 2, 3], n_inner_max=1)
+
+
+def test_selection_folds_is_deterministic():
+    assert selection_folds([2, 4, 6, 8, 10]) == selection_folds([2, 4, 6, 8, 10])
 
 
 # ------------------------------------------------------------------------ flat view

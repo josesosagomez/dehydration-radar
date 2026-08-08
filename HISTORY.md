@@ -4,6 +4,131 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — M10 step 4 DONE: Experiment G (matched-session decision fusion) is built and tested (56 new tests green). `selection_folds` extracted with `nested_loso_splits` provably byte-identical; `select_alpha` added; the (fold, band) parallel unit and the sbatch sizing worked out BEFORE the header was written.
+
+Step 4 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_g.py`,
+`experiments/run_fusion.py`, `scripts/ibex/run_exp_g.sbatch`, `tests/test_exp_g.py` (45 tests),
+`tests/test_run_fusion.py` (12 tests). Changed: `eval/splits.py` (+`selection_folds`),
+`eval/selection.py` (+`select_alpha`), `tests/test_splits.py` (+6), `tests/test_selection.py` (+8).
+No store rebuild. `git diff --exit-code -- tests/test_no_leakage.py` clean.
+
+**`selection_folds` is a pure extraction, and that claim is tested rather than asserted.** The
+private `_inner_folds` became public `selection_folds(subject_ids, *, n_inner_max=5)`;
+`nested_loso_splits` now calls it. It validates unique **and sorted** input (every caller has a
+sorted set in hand, so demanding it means the returned folds cannot silently depend on the order a
+caller iterated a set in) and fails closed below two subjects. The load-bearing test is
+`test_selection_folds_is_exactly_what_nested_loso_splits_attaches`: for every outer fold at every
+`n_inner_max` in 2..5, `fold.inner_folds == selection_folds(sorted(fold.train_subjects))`, order
+included. If that ever fails, every A/B/C/D number in the repository was produced by different folds.
+
+**`select_alpha(alpha_grid, objective_values, tie_break="closest_to_one")`** in `eval/selection.py`,
+never inlined. Sort key `(objective, |alpha - 1.0|, -alpha)`. The third component is dead on [0, 1]
+(no two distinct alphas are equidistant from 1.0) and is there only so a future grid containing such
+a pair would still resolve toward the 10 GHz band. An unfrozen `tie_break` string raises rather than
+silently getting the frozen behaviour. **A completely flat objective grid returns `alpha = 1.0`** —
+i.e. the 10 GHz model unchanged — which is the whole point of the frozen rule: a tie must never
+manufacture a fusion effect out of numerical noise.
+
+**Three levels, and where every fold index comes from.** Level 1 = `nested_loso_splits(matched
+subjects)`. Level 2 = the outer fold's own attached `inner_folds`, each `val_subjects` set being one
+meta-validation group `V`. Level 3 = `selection_folds(sorted(T_s - V))`. `exp_g.py` constructs no
+indices; it pairs subject sets that came from `splits.py` into `OuterFold` records, which is the
+shape `harness._score_candidates_on_fold` / `_final_refit` read. The complete Exp-A staged search
+(`stage1_candidates` → `select_stage_winner` → `stage2_candidates` → `select_stage_winner` →
+`_final_refit`) runs at each level, so **no candidate that produced a meta OOF prediction was ever
+selected using the subject that prediction is for** (A-M10-3; Varma & Simon 2006, Cawley & Talbot
+2010).
+
+**Concrete decisions taken here, each with its reason.**
+
+- **The parallel unit is `(outer fold, BAND)`, not the fold.** The two bands' work is completely
+  independent given the fold — alpha is arithmetic over their saved prediction *tables* — so pairing
+  them is done afterwards by `_fuse_fold`, which fits nothing and reads no store. That doubles the
+  parallel width from 16 to 32 and roughly halves wall-clock. It also made `_fuse_fold` unit-testable
+  on hand-built band results, which is how the "outer outcomes are never read" fixture is written.
+- **`_refit_and_predict` walks a meta group one subject at a time.** `harness._final_refit` predicts
+  exactly one held-out subject, and a meta group `V` holds several. Rather than re-implement the
+  refit (build_estimator / fit_pipeline / seed list / fit records), the winner is refit once per
+  subject in `V`. The refit is a deterministic function of (winner, training rows, seed), so every
+  pass fits the identical model; the cost is ~|V| x n_seeds extra fits against a staged search of
+  thousands, and the fit records are taken from the first pass. Reusing the frozen path was worth
+  more than saving ten fits.
+- **A non-evaluable outer fold contributes to NO condition, not just to fusion.** §2.3 says such a
+  fold "is non-evaluable for learned fusion"; the choice made here is that it therefore contributes
+  its 10-only, 77-only and equal-weight numbers to nothing either. §7 requires "all conditions use
+  the same cells", and a fold present in one condition but absent from another breaks exactly that.
+  It is recorded in `exclusions_g.csv` with the reason. Reasons are an ordered tuple of three:
+  `outer_fold_not_selectable`, `insufficient_selection_training_subjects`, `no_surviving_candidate`.
+  Everything else — a key mismatch between the bands, a target disagreement, a duplicated prediction
+  key — is a hard `ExpGError`, because it means the tables are not describing what they claim to.
+  `_fuse_fold` additionally re-checks that the meta OOF rows cover **all** of `T_s` before fitting
+  alpha: the whole-fold rule should already guarantee it, and this is the check that it held, so
+  alpha can never be fit over "whichever meta groups happened to succeed".
+- **`fit_audit_g.csv` records the fit chain behind every REPORTED prediction** — per level and band:
+  the staged selection over that level's pool, then the refit's tuned-ε / scaler / model records,
+  plus one `fusion_alpha` row per outer fold (band `"fused"`, fitted on `T_s`, predicted `[s]`). It
+  does NOT record the inner-CV fits inside a staged selection. That is exactly the enumeration §5.1
+  asks the audit to cover ("selection, scaler, model, and alpha subject sets") and what §5.4 needs
+  ("every OOF and outer-final prediction resolves to one complete base-selection record and
+  fit-audit chain"); the inner fits back no reported prediction and would be ~113 candidates x 5
+  further folds x 6 levels x 2 bands x 16 folds ≈ 10^5-10^6 records through the spawn-pool pickle.
+  **This is a granularity reading of §3, deliberately NOT extended to the selection table:**
+  `fusion_base_selection.csv` keeps its full per-candidate enumeration, because §5.4/§8.2 need the
+  losing candidates' scores to prove outer outcomes are never read. That is the same distinction
+  A-M10-10 draws, applied in the opposite direction — H records winners because its
+  selection-honesty is structural, G records everything because its selection-honesty is what is
+  under test. Flagged here for review to challenge; it changes no estimand.
+- **Both band configs are loaded SEPARATELY and never merged** (`--config-10` / `--config-77`, with
+  `--shared-config` overlays applied to both). `exp_g.assert_shared_protocol` then refuses a pair
+  that disagrees on `run.seed`, `run.seed_set`, `split.*`, `paths.weight_xlsx`, `paths.results_dir`,
+  `exp_g` or `stats`, and additionally refuses split constants that differ from
+  `nested_loso_splits`' own defaults (5, 3) — G's three levels must be A's levels. The target
+  *definition* is checked with teeth in `build_matched_population`, cell by cell: both bands read the
+  same workbook, so a per-cell `delta_m_pct` difference means the join is not aligning what it thinks
+  it is, and that is fatal. A swapped band label surfaces there.
+
+**Sizing, worked out before the sbatch header was written** (step 3's was not, and it cost a
+redesign). G runs a complete staged selection at three levels: `16 x 5 x 2 + 16 x 2 = 192` staged
+selections, ~6x a full two-band Exp A. Against the measured anchor (HISTORY 2026-07-28: Exp B
+01:04:20 on 16 cores, 16 folds in one wave ⇒ ~1 core-hour per staged selection over ~15 training
+subjects at 113 candidates), one `(fold, band)` is ~6 core-hours and the whole job ~192 core-hours.
+77 GHz enumerates fewer candidates (9 + 41 = 50 vs 113) but reconstructs much larger raw tensors on
+the tuned branch, so it is budgeted at the same unit rather than discounted. Header:
+`--cpus-per-task=32 --time=24:00:00 --mem=128G` = 768 core-hours, ~4x margin on both cores and wall
+(32 units in one wave ⇒ ~6 h). The fallback if the partition is smaller is written into the header:
+halve the cores, not the wall — 16 cores runs two waves at ~12 h, still inside 24 h.
+
+**Test structure and its measured cost.** `tests/test_exp_g.py` is split like `test_robustness.py`:
+ONE end-to-end run behind a **module-scoped** fixture (4 subjects x 3 sessions, synthetic two-band
+store, `n_workers=1`), and everything else on hand-built band results. Four subjects is the floor —
+`min_train_subjects=3` makes three subjects entirely non-selectable. The M6 search space cannot be
+shrunk (`protocol_freeze_guard` rejects any deviation), so that single run pays for the full
+113/50-candidate search at every level and measures **132 s**; the whole file is **176 s**. Measured
+alternatives, recorded so nobody re-derives them: 4 subjects x 2 sessions is 145 s (session count is
+irrelevant — cost is dominated by the *number* of candidate-fold fits, not by rows), and 5 subjects
+would be ~230 s. Sharing the one run across 13 assertions is what makes it affordable and honest at
+once.
+
+**Defect found and fixed during testing (in the test, not the code).** The §5.1 leakage probe —
+shift the held-out subject's targets by +17.0 and require every train-derived quantity to be
+byte-identical — failed on 23 of 452 selection rows. The diff was `nan -> nan`: `knn` candidates
+whose `n_neighbors` exceeds the training row count are skipped by the harness's viability rule and
+legitimately score NaN, and `nan != nan`, so a plain list `==` reported a difference between two
+identical tables. Fixed with a NaN-canonicalizing comparison in the test. The implementation was
+correct: the probe passes, and the held-out subject's own `y_true` moves by exactly +17.0 while its
+`y_pred` does not move at all.
+
+**Suite state.** `uv run pytest` → **1376 passed, 5 failed, 16 skipped in 20:01**. The 71 new tests
+are exactly the delta from step 3's `1305 passed, 5 failed, 16 skipped`, and the 5 failures are the
+same pre-existing Windows-only ones in `tests/test_exp_b_ibex_scripts.py` /
+`tests/test_exp_d_ibex_scripts.py` (Git Bash eats backslashes in a Windows path; inline `bash -c`
+strings come back empty). No sixth failure. `tests/test_run_fusion.py` uses the fix those two files
+still lack — pipe the script's BYTES to `bash -n -` with LF forced, never a path — so
+`run_exp_g.sbatch`'s syntax gate passes here.
+
+**Deferred, per A-M10-4:** the feature-level fusion variant. Not implemented, not a completion
+criterion, and `metrics_exp_g.json` says so in a field rather than in a comment.
+
 ## 2026-08-08 — M10 step 3 DONE: the H robustness driver is built, tested (72 new tests green) and byte-neutral. Root seed = `config.run.seed`; A-M10-10 raised and accepted; the `R=200` sizing gap found, quantified and closed with a sharded array-plus-merge path.
 
 *Owner decisions taken this session, all three recorded where they belong: A-M10-10 **accepted** as
