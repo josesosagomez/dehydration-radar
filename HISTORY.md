@@ -4,6 +4,108 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — M10 step 6 DONE: Experiment F (the not-estimable HR record plus the available-covariate sensitivity) is built and tested (48 new tests green in 40 s). The two halves of A-M10-2 are kept structurally apart; the sizing was measured again; a test-fixture defect that had silenced a whole guard was found and fixed.
+
+Step 6 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_f.py`,
+`experiments/run_confound.py`, `scripts/ibex/run_exp_f.sbatch`, `tests/test_exp_f.py` (36),
+`tests/test_run_confound.py` (12). No store rebuild.
+`git diff --exit-code -- tests/test_no_leakage.py` clean.
+
+**A-M10-2 is the whole shape of this module, and the failure mode is conflation.** The
+registered HR question is answered `not_estimable_missing_heart_rate` with `n_hr_observations=0`;
+the four nested ridge models are a separately named clock/static-covariate sensitivity. The
+danger is not that someone fabricates HR data — it is that a reader takes "we adjusted for age,
+height, baseline mass and BMI" as an HR adjustment. So the covariate rows of
+`confound_availability.csv` each carry "a static covariate is NOT a heart-rate adjustment", the
+metrics JSON puts `heart_rate_question` ahead of `available_analysis` (pinned by a key-order
+test), and the CLI header prints the not-estimable status before it prints anything else.
+
+**The inventory is an inspection, not an assertion.** `hr_inventory` reads the workbook's own
+column labels back and searches them for a heart-rate field, then lists the configured data
+roots by file extension, and puts both in `source_checked`/`reason`. That is what makes
+`n_hr_observations=0` evidence — and it is also the tripwire A-M10-2 asks for: if an HR file
+were ever added, this row would change rather than silently continuing to report zero.
+Temperature (logs lost) and glucose (never measured) are recorded as uncontrolled, not adjusted.
+
+**Sizing, measured before the header was written.** Per outer fold the only expensive cells are
+the radar models: 8 alphas x 5 inner folds + 1 final refit = **41 fits**, at **19.7 ms** per fit
+on a 70 x ~8.9k design, over **5 radar model cells** (models 3 and 4 across three variants,
+minus the one `pct_reduced` reuses) = **~4.0 s per fold**, **~1.1 min serial** across 16 folds.
+Header: 16 cores / 1 h / 32 G, the same shape as E's and for the same reason — the hour is for
+`validate_store` re-hashing raw files, not for the fits. The clock-only and clock+covariate
+cells are 5-9 column designs and cost microseconds.
+
+**Concrete decisions, each with its reason.**
+
+- **`DesignInputs`: the fold-INDEPENDENT design blocks are built once at run level.** Clock,
+  both covariate blocks and both targets are pure per-row lookups — they do not depend on which
+  subject is held out. Only the radar block is fold-dependent (the tuned-ε branch reconstructs
+  from the fold's training subjects). The first version rebuilt everything inside the worker,
+  which read and fully re-validated the .xlsx once per worker process; now it is read once per
+  run. The second benefit is what made the test suite possible at all: the fold computation can
+  be driven with a stub covariate table and no workbook.
+- **Alpha selection reuses `CandidateScore` + `select_candidate`, never a new argmin.** Every
+  alpha gets an identical simplicity rank and the same fixed feature dimension, so the frozen
+  key collapses to (mean inner MAE, then inner-fold variance) exactly as §2.2 specifies — and a
+  FULL tie falls through to the first alpha in the frozen ordered tuple, because
+  `select_candidate` is a stable `min` over input order. That is precisely why the alphas are
+  iterated in `ExpFConfig.ridge_alphas` order and never sorted. Pinned by an all-zero-design
+  fixture where alpha cannot matter: it must return 0.001.
+- **`pct_reduced` REUSES `pct_full`'s models 1 and 3 verbatim** rather than refitting an
+  identical model. Those two contain no covariate block, so a refit could only differ by
+  floating-point accident. Pinned both ways: the reused rows are byte-identical, and — the
+  power companion — model 2 must DIFFER between the variants, or the reuse assertion would
+  pass trivially.
+- **The radar block is built once per fold and handed to both radar models**, so §2.2's
+  "models 3 and 4 share byte-identical radar columns" is structural. The converse is tested
+  with a NaN sentinel radar block: models 1 and 2 stay finite, models 3/4 do not — so "models
+  1/2 never read the store" is demonstrated rather than promised.
+- **Clock is a one-hot over the FIXED S0-S4 domain**, not over the sessions a fold happens to
+  contain, so the design width is constant across folds and variants. A session absent from a
+  fold's training rows leaves an all-zero column, which the scaler passes through and ridge
+  gives a zero coefficient.
+- **F keeps S0**, unlike Exp B. B excludes it because Δm%(S0) is identically 0 and would be a
+  free perfectly-predicted row; F's question is about the clock across the whole day, and the
+  session-index one-hot is exactly what makes S0 informative rather than free.
+- **The approved selection table is re-hashed on read** and compared with the sha256 the
+  reference gate recorded. `load_approved_sources` already refuses a `not_approved` band; this
+  adds the other half, because the approval is evidence about specific bytes and the file could
+  change after approval.
+- **RNG offsets +400..423**, explicit per-variant/per-contrast dicts off `config.run.seed`, no
+  running counter (the Exp B trap-10 doctrine), tested for distinctness against A (+0..3),
+  B (+100..134), C (+200..212) and D (+300...).
+
+**Four frozen values are READ from config rather than restated in code**, and getting this
+wrong was a real error caught in implementation: the first draft used
+`config.stats.bootstrap_iterations` and `config.stats.ci_level`, neither of which exists. The
+correct names are `bootstrap_b`, `confidence_level` and `ci_method` — and, more importantly,
+`StatsConfig` already froze `holm_family_expf_primary = 2` and
+`expf_exploratory_correction = "none_reported_individually"`. Both are now read rather than
+hardcoded, so the artifact's multiplicity vocabulary and the frozen protocol record are one
+string instead of two that can drift.
+
+**A test-fixture defect that had silenced an entire guard.** `_gt(n_subjects, **overrides)`
+swallowed `overrides={4: {"bmi": nan}}` as a column named "overrides", so the
+missing/non-finite covariate test built a perfectly healthy table and asserted a raise that
+never came. It surfaced as the one failure in the first run of the F suite. Fixed by making
+`overrides` an explicit parameter — the no-silent-complete-case-drop rule (§5.3) is now
+actually exercised, and it does fail closed naming both the subject and the column.
+
+**F cannot run yet, and that is the design.** `--exp-a-sources` is required, never defaulted and
+never discovered; `run_exp_f.sbatch` uses `${EXP_A_SOURCES:?...}` so a submit without it fails
+at submit time rather than after `validate_store` has burned the wall clock. The file itself is
+written by step 12, on the final stores. A structural test asserts the entrypoint contains no
+`glob(`/`rglob(`/`iterdir(`/`latest`, because a fallback discovery is exactly what would defeat
+the §1.3 gate.
+
+**Suite state.** `uv run python -m pytest` → **1470 passed, 5 failed, 16 skipped in 22:03**. The
+48 new tests are exactly the delta from step 5's `1422 passed, 5 failed, 16 skipped`, and the 5
+failures are the same pre-existing Windows-only ones in `tests/test_exp_b_ibex_scripts.py` /
+`tests/test_exp_d_ibex_scripts.py`. **No sixth failure.** `tests/test_run_confound.py` uses the
+bytes-to-`bash -n -` fix, which matters more here than usual: `run_exp_f.sbatch` carries a
+`${VAR:?message}` guard, and an apostrophe inside one of those is the exact quoting bug this
+repo's history already hit once.
+
 ## 2026-08-08 — M10 step 5 DONE: Experiment E (LOSO path-group ablation) is built and tested (46 new tests green in 16 s). Sizing measured BEFORE the sbatch header was written — E is minutes, not hours; the Kymatio bank reconstruction and its fail-closed `order` gate work; two defects were found by the tests and fixed in the code, not the tests.
 
 Step 5 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_e.py`,
