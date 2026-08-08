@@ -4,6 +4,119 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-08 — M10 step 5 DONE: Experiment E (LOSO path-group ablation) is built and tested (46 new tests green in 16 s). Sizing measured BEFORE the sbatch header was written — E is minutes, not hours; the Kymatio bank reconstruction and its fail-closed `order` gate work; two defects were found by the tests and fixed in the code, not the tests.
+
+Step 5 per `plans/MILESTONE_10_PLAN.md` §4.2. New: `src/dehyd/eval/exp_e.py`,
+`experiments/run_interpretability.py`, `scripts/ibex/run_exp_e.sbatch`, `tests/test_exp_e.py`
+(36 tests), `tests/test_run_interpretability.py` (10 tests). No store rebuild.
+`git diff --exit-code -- tests/test_no_leakage.py` clean.
+
+**The sizing was measured first, and it changed the header.** `scattering_shape` on the rebuilt
+banks: **10 GHz T1 = 742 paths** (1 order-0, 55 order-1, 686 order-2), `n_time=7`, one channel
+→ **8904 columns, 12 per path group**; **77 GHz T1_77 = 424 paths** (1/38/385), `n_time=8`, two
+channels → **10176 columns, 24 per path group**. One scaler+ridge refit at those shapes on 56
+rows measures **16.7 ms** (both bands — n_features barely matters when n_samples is 56), so one
+outer fold is `1 + n_paths` fits = **12.4 s (10 GHz) / 7.1 s (77 GHz)**, i.e. **3.3 / 1.9 min
+serial across 16 folds**. Header: **16 cores / 1 h / 32 G**, not Exp G's 32 cores / 24 h / 128 G
+— cloning that would have reserved ~700 core-hours for minutes of work. The hour is not for the
+fits at all: `validate_store` re-hashes every raw session file, and that is the only slow part
+of the job. `test_run_interpretability.py` asserts the small header AND asserts G's numbers are
+absent, so a future copy-paste fails.
+
+**The filter-bank reconstruction, and the gate that makes it safe.** The stores persist
+`order__t{ti}` and nothing else about the bank, so E rebuilds `Scattering1D` from the resolved
+config (tiling Q + invariance ms, `preprocessed_length` at fs for 10 GHz; `N_CHIRPS=256` at the
+PRF for 77 GHz) and reads `xi`/`sigma`/`j` off `scattering_shape`. Rebuilding is only safe
+because the bank is a pure function of config, and "safe" is not "verified":
+`assert_bank_matches_store` requires the rebuilt `order` to equal EVERY consumed session's
+stored array and the path count to match the model layout, and **stops the run** otherwise. Both
+band geometries are pinned by test, because if kymatio or a frozen tiling ever moved this, E
+would relabel every path with no other symptom.
+
+**Concrete decisions, each with its reason.**
+
+- **The bank is injectable (`bank=`) and that cannot defeat the gate.** Tests drive the whole
+  path on a 6-path synthetic store instead of a 742-path real one, which is what keeps the E
+  suite at 15 s. Injection is harmless because whatever bank is supplied is still required to
+  equal the store's `order` — the gate protects the correspondence, not the provenance of the
+  object.
+- **`path_of_column` is computed ONCE at run level and shipped to the workers**, so a fold
+  worker never builds a Kymatio bank. The grouping is a property of the run; computing it per
+  fold would be slower and would make "fold-dependent grouping" expressible at all.
+- **`protocol_freeze_guard` runs once per fold, not once per fit.** All `1 + n_paths` fits in a
+  fold run under one identical `active` record: an ablation changes which columns of an
+  already-built matrix are visible, never a protocol axis. Validating the same dict 743 times
+  would be ritual, not evidence.
+- **Ridge is not seed-sensitive, so there is no seed loop and nothing to collapse over** — one
+  deterministic fit per model. Asserted against `regressors.SEED_SENSITIVE` rather than assumed,
+  so freezing E on a stochastic family later fails loudly instead of silently reporting one
+  seed.
+- **Only `selectable` outer folds are run**, which is §2.1's literal wording. On the real
+  16-subject cohort every fold is selectable (15 training subjects against a floor of 3), so it
+  is a no-op there; it exists so E's reported fold set is identical to every other experiment's.
+- **`n_folds` / `fold_assignment` are dead under A-M10-1 and are neither read nor deleted.** A
+  regex structural test allows the two mentions that RECORD them (the module docstring and the
+  metrics-JSON `dead_config_note`) and fails on any attribute read, because the failure mode —
+  a 4-fold split quietly running again — is otherwise silent.
+
+**Two defects the tests found, both fixed in the CODE.**
+
+1. `summarize_exp_e` originally called `exp_a.expected_fingerprints` to fill the "source store
+   fingerprints" field. That re-hashes every raw session file — a second full pass that
+   `validate_store` had already done in the same run, adding minutes of I/O to a job whose
+   compute is seconds, and proving nothing new. It now reads the store's own sidecars via
+   `store_mod.read_fingerprint`.
+2. `importance_summary_rows` reduced each path's values in arrival order. Floating-point
+   summation is not associative and `fold_parallel` returns results in COMPLETION order, so the
+   last ulp of every mean/sd depended on which fold finished first. It now sorts by test
+   subject before reducing. `run_exp_e` already sorts, so this is belt and braces — but it is
+   the difference between reproducible and reproducible-if-nobody-reorders.
+
+**A physics fact worth recording, found while checking the labels.** The frozen T1 bank tiles
+the whole 0–260 kHz fast-time axis, but the 1–2 m analysis gate passes only **3.26–6.51 kHz**.
+So **only 3 of 55 order-1 paths (10 of 742 overall) have a beat centre inside the band the model
+was actually fed**; the highest order-1 path sits at 233 kHz, a coarse scene range of 71.7 m.
+This is not a defect — the WST is applied to the gated signal — but a reader seeing "coarse
+scene range 71.66 m" must not read it as a target at 72 m. Every 10 GHz row's `claim_limit` now
+states whether its `xi_1` lies inside or OUTSIDE the gate band. Carried in `claim_limit` rather
+than as a new column because §3 freezes this table's column list.
+
+**The interpretive fixture A-M10-6 needs, as a test.** `test_a_correlated_surrogate_shows_
+attribution_is_model_specific_not_causal` plants the same subject-linear signal in a SECOND path
+and shows the first path's measured importance collapses — nothing about its relationship to the
+target changed, only whether the information survives its removal. That is the concrete reason
+low importance may never be reported as "this path carries no signal", and it is why the metrics
+JSON states the weak-predictive-context and not-causal limits *before* any table.
+
+**Artifacts.** All five §3 rows plus the figure and metrics JSON write and round-trip:
+`importance_folds_{band}.csv`, `path_metadata_{band}.csv` (non-applicable numeric fields blank —
+kymatio's NaN padding becomes "", never a 0.0 that would read as a measured DC centre),
+`importance_summary_{band}.csv` (sorted `scattering_order, path_id`), `ridge_coefficients_{band}
+.csv` (full model only; at full scale ~142k rows for 10 GHz, which is what §3 specifies),
+`metrics_exp_e_{band}.json`, `exclusions_e_{band}.csv`, `interpretability_map_{band}.png` (drawn
+only from the two saved CSVs).
+
+**Suite state.** `uv run python -m pytest` → **1422 passed, 5 failed, 16 skipped in 19:22**. The
+46 new tests are exactly the delta from step 4's `1376 passed, 5 failed, 16 skipped`, and the 5
+failures are the same pre-existing Windows-only ones in `tests/test_exp_b_ibex_scripts.py` /
+`tests/test_exp_d_ibex_scripts.py` (Git Bash eats backslashes in a Windows path). **No sixth
+failure.** `tests/test_run_interpretability.py` uses the fix those two files still lack — pipe
+the script's BYTES to `bash -n -` with LF forced, never a path — so `run_exp_e.sbatch`'s syntax
+gate passes here.
+
+*Process note: the suite was run twice. The first full run (`1421 passed`) had collected its
+modules BEFORE the last two `exp_e.py` edits (the `selectable`-fold filter and the empty-spine
+guard), so its number described a tree that no longer existed. Nothing outside the three new
+files imports `exp_e`, so the blast radius was nil — but a green number taken against
+superseded code is not evidence, so it was re-run on the final tree and that is the number
+recorded above.*
+
+**Not done here, and deliberately.** The 77 GHz half has never touched real data: the local
+store is 1 of 72 sessions, so the 77 GHz path is exercised only on a synthetic two-channel
+store. The real 77 GHz smoke is step 13, on IBEX, after the step-11 rebuild — as is the 10 GHz
+one, since the local 10 GHz store is built at `dab8f708` and `validate_store` refuses it on
+provenance.
+
 ## 2026-08-08 — Owner decision: **A-M10-11 accepted** as implemented. The milestone-10 disclosure register now has no open item; steps 5–10 proceed with nothing pending for the step-9 review.
 
 Not an experiment — a decision entry, logged here because the amendment register is part of the
