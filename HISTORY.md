@@ -4,6 +4,79 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-09 — **M10 step 11 DONE.** Both feature stores rebuilt and `--validate`d at the analysis commit `04dc952`: 10 GHz 73/73 sessions, 77 GHz 72/72. The 80-task arrays were replaced by one job per band after a cluster health incident held 44 tasks.
+
+**Outcome, jobs 50258342–50258345, all `COMPLETED` `ExitCode 0:0`:**
+
+| job | id | elapsed | result |
+|---|---|---|---|
+| build10 | 50258342 | 00:00:08 | `73/73 shards at the analysis commit` |
+| validate10 | 50258343 | 00:00:11 | `10ghz store OK — 73 sessions match this config/commit` |
+| build77 | 50258344 | 00:01:39 | `72/72 shards at the analysis commit` |
+| validate77 | 50258345 | 00:17:33 | `77ghz store OK — 72 sessions match this config/commit` |
+
+`grep '"commit"'` over every fingerprint returns **exactly one line per band** — 73 and 72 shards,
+all `04dc9521346215cc20a8402f0d00f63c36cf3b42`. No `a5ef299` (the aborted first attempt) or
+`3f465ab` (M9) shard survives in either store. Zero `FAIL` and zero `retry` lines in either build
+log. `HEAD`, `REVISION` and a clean `git status --porcelain` unchanged after the rebuild.
+
+The eligible-session counts are **73 (10 GHz) and 72 (77 GHz)** of 80 (subject, session) cells.
+Both bands' stores are therefore now attributable to the analysis commit, and steps 12–14 may run.
+
+### Why the array was abandoned, and what replaced it
+
+The resubmitted array `50236887` came back **36 COMPLETED, 44 PENDING with
+`Reason=launch_failed_requeued_held`, `Restarts=1`**. Diagnosed and excluded, in order: quota
+(`/ibex/user` 7% used, `$HOME` 50 G of 180 G, inode use nowhere near the limit), output paths
+(`StdOut`/`StdErr`/`WorkDir` all correct absolute paths in `scontrol show job`), and the job script
+itself (every completed task exited `0:0` with a 0-byte `.err`). The cause was cluster-side:
+`sinfo -R` showed nodes going down with `NHC: [ICINGA] CRITICAL` at 03:10:57 and 03:20:53,
+bracketing the 03:14 launch. Slurm could not start the batch step on those nodes, requeued the
+tasks once, and held them.
+
+No `#SBATCH` flag prevents that — it is a property of the node, not the job. What *can* be reduced
+is the number of times we ask Slurm to launch anything. The 80+80+4 array chain asked for **164
+launches**, each an independent chance to land on a sick node. The replacement asks for **4**.
+
+`~/dehyd_step11/{cell.sh,build_band.sh,build_{10,77}ghz.sbatch,validate_{10,77}ghz.sbatch,submit_chain.sh}`,
+deliberately **outside the repo** (a new tracked file would move the analysis commit; an untracked
+one inside the tree would count toward `git status --porcelain`). One job per band sweeps all 80
+cells with `xargs -P`, calling the *same* `extract_features.py --band --subject --session` the array
+called. Three properties were designed in:
+
+- **Idempotent resume.** A cell is skipped when its `.npz` and `.fingerprint.json` both exist and
+  the fingerprint already records the analysis commit. This is why `build10` finished in 8 s and
+  `build77` in 99 s — the surviving cells from earlier jobs were kept, and only the remainder was
+  rebuilt. A store assembled across several jobs is not a compromise: each shard carries its own
+  fingerprint and `--validate` re-derives all 73/72 expected fingerprints from the QC'd manifest
+  independently of who wrote them, exactly as it did for the array.
+- **Per-cell retry ×3** with a 20 s pause, so a transient per-cell failure does not fail the sweep.
+  Neither band used a single retry.
+- **The threading environment was held identical to the array's.** `OMP_NUM_THREADS=4` with
+  `WORKERS=4` on `--cpus-per-task=16`, so each extraction process sees the same 4 threads it saw
+  as an array task. This was not a convenience choice: BLAS thread count changes floating-point
+  reduction order, and M9 spent two days on a 5.14e-14 divergence whose cause was the realized
+  numerical environment. Introducing a new one here — in the rebuild that backs every reported M10
+  number — would have been indefensible for a few minutes of wall clock.
+
+### Measured costs, none of which were previously recorded
+
+- **77 GHz extraction is ~44 s/cell** (`ok s8 8am (44s, attempt 1)`), against the 2 h/task budget in
+  `extract77.sbatch`'s header — a ~160× padding that had never been measured. 10 GHz matches its
+  documented ~30 s/session.
+- **`--validate` is a 17-minute job for 77 GHz**, because `_expected_fingerprint` re-runs full-cohort
+  QC *and* `sha256_file` on every raw file (~22 GB read). §6 specified it as a login-node command;
+  that was wrong independently of this session's problems, and it is recorded here so the launch
+  matrix is corrected before step 12 rather than after.
+
+### Still open, carried into step 12
+
+The compute-node `--validate` compares the store commit against `REVISION` rather than live git
+(see the next entry). The submit-time login-node assertion `HEAD == REVISION == 04dc952` closes
+it, and `validate_store` inside every downstream run re-checks lineage anyway — but a login-node
+`--validate` remains a free independent cross-check and should be taken opportunistically before
+Exp A is launched.
+
 ## 2026-08-09 — M10 step 11, IBEX half: **first attempt aborted at the WRONG commit and was cancelled**; recovered, and the rebuild resubmitted as a guarded afterok chain (jobs 50236887–50236890).
 
 ### The failure: an 80-task array submitted against a stale `REVISION`
