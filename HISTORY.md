@@ -4,6 +4,88 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-09 — M10 step 11, IBEX half: **first attempt aborted at the WRONG commit and was cancelled**; recovered, and the rebuild resubmitted as a guarded afterok chain (jobs 50236887–50236890).
+
+### The failure: an 80-task array submitted against a stale `REVISION`
+
+The step-11 IBEX sequence was handed over as a copy-pasteable block. Pasted into an interactive
+shell it ran **non-atomically**: an interactive bash has no `set -e`, so when `git pull` aborted,
+the next four lines ran anyway. Consequence, in order:
+
+1. `git pull` refused: `error: The following untracked working tree files would be overwritten by
+   merge: results/milestone10/reference_exp_a_manifest.json`. HEAD stayed at `a5ef299`.
+2. `git rev-parse HEAD > REVISION` therefore stamped **`a5ef299`** — the step-1 commit, not the
+   analysis commit.
+3. `sbatch --wait scripts/ibex/extract10.sbatch` submitted **job 50235653**, an 80-task array
+   building the 10 GHz store against that stale stamp. Cancelled with `scancel`.
+
+Any shard 50235653 managed to write carries `git.commit = a5ef299`. That is not a silent hazard:
+the full rebuild overwrites all 80 cells unconditionally (`write_session_store` has no skip path),
+and any cell whose rebuild task fails keeps its `a5ef299` fingerprint and is caught by
+`--validate`'s `_check_match` commit comparison. Fail-closed held.
+
+**Two root causes, both worth keeping.**
+
+- **HANDOFF.md was wrong about IBEX's state.** It said `v1_milestone_9a @ 3f465ab`. IBEX was
+  actually on `v1_milestone_10 @ a5ef299` — the commit at which the reference manifest was taken
+  on 2026-08-07. That is why an untracked `reference_exp_a_manifest.json` was sitting in the tree:
+  it was *generated* there, then rsynced back and committed locally at `8725292`, so the incoming
+  fast-forward wanted to write a tracked file over the untracked original.
+- **`--wait` gives ordering, not correctness.** It made each line wait for the previous *job*; it
+  said nothing about whether the previous *command* succeeded. The one gate that mattered —
+  `git rev-parse HEAD` must print the analysis commit — was printed for a human to read and
+  nothing enforced it.
+
+### The fix: a guarded, idempotent submit script outside the repo
+
+`~/dehyd_step11/run.sh` on IBEX (deliberately **outside** the repo — a new tracked file would move
+the analysis commit, and an untracked one inside the tree would count toward
+`git status --porcelain`). Under `set -euo pipefail`, it refuses to queue anything unless:
+
+- no `dehyd-(extract|validate)` job is already queued/running (blocks a stale array from racing);
+- the untracked reference manifest, if present, hashes to the committed
+  `7921fddf4d5fc32feca0b612c27973afd39e5146d7cba056017677441802ba5d` before being moved aside —
+  a difference aborts and is a scientific stop, not a nuisance to clear;
+- `git merge --ff-only <ANALYSIS_COMMIT>` fast-forwards to the **literal SHA**, not to
+  `origin/<branch>`. This is what makes later local pushes harmless: the branch tip can move
+  without dragging IBEX off the frozen commit;
+- the checked-out manifest still hashes correctly, and `git status --porcelain` is empty;
+- `REVISION` is restamped and re-read, so `HEAD == REVISION == 04dc952…` is *asserted*, not
+  merely printed.
+
+It then submits `extract10 → validate10 → extract77 → validate77` chained by
+`--dependency=afterok:<prev> --kill-on-invalid-dep=yes`.
+
+### Two deviations from §6's launch matrix, and what they cost
+
+**(a) `afterok` chaining instead of `sbatch --wait`.** Owner requirement: the rebuild must survive
+a closed session. Slurm now enforces the ordering rather than a login shell. `afterok` on an array
+means all 80 tasks succeeded, so one failed shard stops the chain instead of feeding a half-stale
+store into validation; `--kill-on-invalid-dep=yes` cancels the remainder rather than leaving it
+pending forever. Science-neutral: the serialization §4.2 requires is preserved, only its
+enforcement mechanism changed.
+
+**(b) `--validate` runs as a batch job, not on the login node.** §6 specified a login-node
+`uv run --no-sync python ... --validate`. That was a bad call independent of this session:
+`--validate` recomputes `_expected_fingerprint` for every session, which re-runs full-cohort QC
+**and** `sha256_file` on every raw file — ~22 GB read twice for 77 GHz. It is a batch workload.
+Sized at 4 cores / 32 G, 03:00:00 (10 GHz) and 06:00:00 (77 GHz); no WST is computed, so it is far
+cheaper per session than extraction, and the walls are deliberately generous because an overrun
+costs the whole chain.
+
+**The cost of (b), stated plainly.** On a compute node `_git_info` gets `None` from live git, so
+`analysis_commit` falls back to `REVISION` — the same source the shards used — and the commit
+comparison becomes tautological. It still catches every other failure mode: stale
+`a5ef299`/`3f465ab` shards from a partial array, `spec_hash`/`qc_config_hash` drift, changed frame
+membership, missing sessions. The tautology is closed by the submit-time assertion, which runs on
+the **login** node where live git does answer, that `HEAD == REVISION == 04dc952…`. A login-node
+re-validate remains available as an independent cross-check and is worth running opportunistically
+before step 12.
+
+**Submitted 2026-08-09 at `04dc9521346215cc20a8402f0d00f63c36cf3b42`:** extract10 `50236887`
+(array 0–79), validate10 `50236888`, extract77 `50236889`, validate77 `50236890`. Success marker
+`~/dehyd_step11/STEP11_OK`. Outcome entry to follow with the `sacct` table and both validate lines.
+
 ## 2026-08-09 — M10 step 11, local half: **this commit is the final analysis commit.** Pre-stamp verification done; `REVISION` stamped locally; the IBEX half (store rebuild + validate) is owner-run.
 
 **What step 11 is for.** `store._check_match` compares the store's recorded git commit against
