@@ -4,6 +4,87 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-10 — Two provenance incidents caught by guards, not by luck: a CRLF rewrite of the IBEX analysis tree, and a `dirty: true` stamp on the Exp A 77 GHz run. Owner chose the targeted rebuild; fix chain 50325220–50325225 submitted.
+
+### Incident 1 — the analysis tree was overwritten mid-milestone
+
+`~/dehyd_fix/submit.sh`'s clean-tree guard refused to submit, reporting **12 modified tracked
+files** — `src/dehyd/eval/{assembly,exp_b,exp_c,exp_d,metrics}.py` and seven
+`scripts/ibex/run_*.sbatch` — plus a whole second project (`src/rehab/`, ~30 `scripts/*.py`,
+`scripts/slurm/`) newly untracked in the same clone.
+
+**It was a line-ending flip, not a code change.** `git diff --stat` showed 5225 insertions and
+5225 deletions — every line of five files — and `git diff --ignore-cr-at-eol --stat` and
+`git diff --ignore-all-space --stat` were both **empty**. Every affected file had mtime
+`2026-08-10 15:31:5x`, a single bulk rewrite. The owner's laptop has `core.autocrlf=true`, and the
+`rehab` project appearing in the same instant points to an rsync from the laptop into the analysis
+clone. Restored with `git checkout -- src/dehyd scripts/ibex`; `grep -c $'\r'` on
+`run_exp_a.sbatch` then returned 0.
+
+**What it would have cost if the guard had not fired.** `.gitattributes` pins
+`scripts/ibex/* text eol=lf` precisely because a CRLF shebang gives `/bin/bash^M: bad interpreter`
+on Linux. Submitting would have produced six jobs failing at launch with an error naming nothing
+that had changed. The dirty-tree check converted that into a one-line diagnosis.
+
+**Timeline matters and is clean.** Both Exp A runs (2026-08-09 17:59Z and 20:01Z), the compare
+(50263238) and both diagnostic probes all predate 15:31 today — the probe jobs *passed*
+`assert_clean_tree`, which is positive evidence the tree was clean when they ran. No artifact in
+steps 11 or 12 was produced from the rewritten tree.
+
+`.git/info/exclude` now also carries `/src/rehab/`, `/scripts/*.py` and `/scripts/slurm/`. That
+silences the noise but does **not** remove the failure mode: an rsync aimed at `rehab` still lands
+on `src/dehyd`. Recommended to the owner that the second project move to its own directory;
+answer pending, and not blocking.
+
+### Incident 2 — Exp A 77 GHz recorded `dirty: true`
+
+Provenance of the two step-12 Exp A runs:
+
+| run | started | `git.dirty` |
+|---|---|---|
+| `20260809T175959778076Z_04dc9521` (10 GHz) | 17:59Z | `false` |
+| `20260809T200111863037Z_04dc9521` (77 GHz) | 20:01Z | **`true`** |
+| all 73 + 72 store shards | 2026-08-09 | `false` |
+
+This predates the rsync and is **self-inflicted by the pipeline's own design**: `_git_info`
+derives `dirty` from `git status --porcelain`, which counts *untracked* files, and by 20:01 the
+10 GHz run had already written `results/milestone10/sources/exp_a_10.txt` — a path that is not
+gitignored. So the first job of a chain dirties the tree for every later job's provenance record.
+Benign in substance (no source differs; the store shards, built earlier, all read `false`), but it
+is permanently stamped on an artifact the milestone reports.
+
+**Decision: keep the run, do not re-run it.** Its band is already `approved`, its store is
+untouched by the fix, and — given the architecture finding in the entry below — re-running risks
+landing on a different CPU generation and converting an approved band into a mismatched one. The
+flag is disclosed here and belongs in the chapter rather than being polished away. The new 10 GHz
+run will record `false`, because `.git/info/exclude` now covers that path.
+
+Two design notes for after the milestone, both blocked now because any source edit moves the
+analysis commit: `RUN_DIR_OUT` should write to a gitignored path, and `_git_info`'s `dirty` should
+distinguish modified-tracked from untracked.
+
+### Owner decision on the gate, and the fix chain
+
+Owner chose the **targeted rebuild** over amending the criterion: rebuild the three rejected cells
+on the CPU generation probe 2 proved reproduces M9, then re-validate, re-run Exp A 10 GHz, and
+re-run the gate. No criterion is relaxed — the store is made byte-identical to the reference
+rather than the requirement being lowered to meet the store. Disclosure obligations accepted with
+it: that CPU generation was matched *per cell*, and that byte-identity is established only for the
+arrays the gate inspects (12 of 101 per shard), not the whole shard.
+
+Submitted at `04dc952`, chained `afterok`: rebuild+verify `50325220` (pinned `-w cn604-14`),
+validate10 `50325221`, Exp A 10 GHz `50325222`, compare `50325223`, Exp B 10 GHz `50325224`,
+Exp B 77 GHz `50325225`.
+
+Two deliberate choices in that chain. **Exp A 77 GHz is not re-run** — its store is untouched and
+its band was approved, so `exp_a_77.txt` still points at the valid run; re-running would cost 1.3 h
+and risk the architecture lottery for no gain. **The compare job is pinned to `cn604-16`**, the
+node that ran 50263238, because the gate *reconstructs* fold feature matrices from the store and
+that arithmetic happens on the gate's own node — `cn604-16` is the one node empirically known to
+reproduce the reference's 77 GHz fold matrices 16/16. The rebuild job re-verifies **all 73 cells**
+against the M9 manifest and exits non-zero on any divergence, so nothing expensive runs on a store
+that would not pass.
+
 ## 2026-08-10 — **M10 step 12: the Exp-A reference gate FIRED (`not_approved`, 10 GHz).** Root cause found: the 10 GHz WST path is bit-reproducible on a fixed CPU generation but **not across** generations, and the M9 reference store is itself architecture-mixed. Exp A's analysis reproduced exactly; three sessions' stored bytes did not.
 
 **Milestone-stopping, and correctly so.** No downstream job has been run and no criterion has been
