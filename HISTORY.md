@@ -4,6 +4,108 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-10 — **M10 step 12: the Exp-A reference gate FIRED (`not_approved`, 10 GHz).** Root cause found: the 10 GHz WST path is bit-reproducible on a fixed CPU generation but **not across** generations, and the M9 reference store is itself architecture-mixed. Exp A's analysis reproduced exactly; three sessions' stored bytes did not.
+
+**Milestone-stopping, and correctly so.** No downstream job has been run and no criterion has been
+relaxed. Exp B (`50263239`, `50263240`) was cancelled automatically by `--kill-on-invalid-dep` and
+stays cancelled pending the owner decision at the end of this entry.
+
+### What the gate said
+
+Jobs `50263236` (Exp A 10 GHz, 01:29:04), `50263237` (Exp A 77 GHz, 01:17:46), `50263238`
+(compare, `FAILED 4:0`, 00:19:32). Run dirs `20260809T175959778076Z_04dc9521` and
+`20260809T200111863037Z_04dc9521`, both recording the analysis commit.
+
+| evidence class | 10 GHz | 77 GHz |
+|---|---|---|
+| population, folds, stage1/stage2 candidates, selected_feature_keys | ok | ok |
+| **feature_inputs** | **FAIL** | ok |
+| tuned_epsilon | ok | ok |
+| **feature_matrices** | **FAIL** | ok |
+| selection_table (byte-identity) | ok | ok |
+| predictions | ok — `max|dy_pred| = 1.876e-14` | ok — `0.000e+00` |
+| scores | ok — `max|d subject MAE| = 6.661e-15` | ok — `0.000e+00` |
+
+So every *discrete* outcome is identical: same population, same folds, same candidate
+enumerations, the same feature key selected in all 16 folds, and a **byte-identical selection
+table**. What differs is the stored feature bytes, and the end-to-end consequence is 1.9e-14 on a
+prediction — three orders of magnitude inside the O-M9-5 tolerance those two rows are judged by.
+
+### Localizing it: three cells, not a band
+
+Diffing the final snapshot against the committed reference manifest offline:
+
+- **Exactly 3 of 73 sessions differ: subject 4's `8am`, `10am` and `12pm`.** The other 70 are
+  bit-identical, and 77 GHz is bit-identical in all four feature keys and all 16 fold matrices.
+- Within those cells, `order__t*` (the kymatio path order) always matches — it is combinatorial,
+  not floating point. `raw__*` differs in all three; `vec__*` differs in all three; `prelog__*`
+  differs in two of three, and for `s4_12pm` the prelog scalars match while its raw tensors do
+  not. A perturbation that rounds away in a derived scalar is the signature of last-ulp noise.
+- `feature_matrix_summary`'s order statistics (min/max/mean_abs/sum) are **bitwise equal** between
+  reference and final for all 16 folds, while the matrix hashes differ.
+
+Excluded by direct evidence, in order: **the inputs** (every session's `raw_sha256`,
+`frame_ids_sha256`, `n_frames`, `frame_selection`, `spec_hash` and `qc_config_hash` are identical
+in both manifests, both bands); **config drift** (`config_sha256` equal per band); **the commit**
+(both runs at `04dc952`, stores 73/73 and 72/72 at it); and **store file hashes as a signal** —
+the aggregate `store.sha256` differs for *both* bands including the bit-identical 77 GHz one,
+because `np.savez` stamps zip timestamps. That last one is why the gate hashes arrays, not files.
+
+### Root cause: CPU generation, established by direct experiment
+
+Two probes, built into a scratch `results_dir` so the validated store was never touched.
+
+**Probe 1 — determinism.** Five cells built twice in the same job, on two different nodes:
+`rep1_vs_rep2_differ = 0` everywhere, both nodes. **Extraction is deterministic.** But rebuilding
+on EPYC 9655 reproduced the live store's `s4_4pm` exactly (0 of 101 arrays differ) while failing
+to reproduce `s1_10am` (92 of 101) — a cell the gate says *does* match M9. That inverted the
+"data-dependent nondeterminism" reading and pointed at hardware.
+
+**Probe 2 — the decisive one.** The same five cells built on each generation and compared directly
+against the M9 hashes in the reference manifest:
+
+| cell | on EPYC 7702 (`cn113-35-l`, Zen 2) | on EPYC 9655 (`cn604-14`, Zen 5) |
+|---|---|---|
+| `s4_8am`, `s4_10am` | 4/12 gate arrays match M9 | **12/12 match M9** |
+| `s4_12pm`, `s4_4pm` | 6/12 match M9 | **12/12 match M9** |
+| `s1_10am` | **12/12 match M9** | 4/12 match M9 |
+
+**All five cells are architecture-sensitive.** The M9 store is therefore *itself* arch-mixed:
+subject 4's cells were built on Zen 5, `s1_10am` on Zen 2. Only 3 of 73 cells failed because our
+rebuild happened to land 70 of them on the same generation M9 used — luck of the scheduler, not a
+property of the data. The earlier "only subject 4 is numerically special" reading was wrong; what
+is special about those three is only *where they were rebuilt*.
+
+**The structural consequence: no homogeneous rebuild can reproduce the reference store.** Pinning
+everything to `cn604` fixes subject 4 and breaks `s1_10am`; pinning to `cn113` does the reverse.
+Byte-reproduction of the reference requires matching the CPU generation *per cell*.
+
+### Two provenance gaps this exposed
+
+1. **The store fingerprint records `packages` but not `cpu_model`.** `_cpu_model()` was added in M9
+   for exactly this class of problem — and wired into *run* provenance only, not *store*
+   provenance. Had a shard recorded the CPU that built it, this would have been a two-minute
+   lookup instead of a four-stage investigation. Fixing it is a source change and therefore
+   **cannot happen now** — it would move the analysis commit and invalidate both stores. Recorded
+   as future work.
+2. **`--validate` passes on an arch-mixed store**, because it compares config, commit and frame
+   lineage — not cross-machine numerical reproducibility. That is not a bug; it is the limit of
+   what a fingerprint comparison can assert, and the chapter should say so rather than let
+   "validated" imply more than it means.
+
+Also corrected: compute nodes on IBEX **can** answer `git` — `assert_clean_tree` refused a probe
+build on a dirty tree, which is only reachable if live `git` answered. `provenance.py`'s comment
+and the IBEX README both claim `safe.directory` prevents this. The `REVISION` stamp was still the
+right thing to do, but it was not load-bearing in the way step 11's entry describes. The probe was
+unblocked with `.git/info/exclude` entries for `results/milestone10/sources/` and
+`exp_a_sources.json` — untracked *results*, not code, so the guard's intent is intact; the file is
+local to the IBEX clone and cannot move the analysis commit.
+
+### The decision, open for the owner
+
+Not mine to take: the gate is milestone-stopping by design and this is precisely the review it
+demands. Both paths are recorded here so the choice and its reasoning are auditable.
+
 ## 2026-08-09 — **M10 step 11 DONE.** Both feature stores rebuilt and `--validate`d at the analysis commit `04dc952`: 10 GHz 73/73 sessions, 77 GHz 72/72. The 80-task arrays were replaced by one job per band after a cluster health incident held 44 tasks.
 
 **Outcome, jobs 50258342–50258345, all `COMPLETED` `ExitCode 0:0`:**
