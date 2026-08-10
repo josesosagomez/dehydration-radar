@@ -1,0 +1,287 @@
+{
+  "bands": {
+    "10ghz": {
+      "band": "10ghz",
+      "comparisons": [
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "population",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "folds",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "stage1_candidates",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "selected_feature_keys",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "stage2_candidates",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "feature_inputs",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "tuned_epsilon",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "feature_matrices",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "selection_table",
+          "status": "match"
+        },
+        {
+          "byte_identical": true,
+          "criterion": "selection-table byte-identity (above) AND max|dy_pred| <= 1.0e-10 (O-M9-5)",
+          "detail": "max|dy_pred| = 0.000e+00",
+          "evidence_class": "predictions",
+          "max_abs_pred_delta": 0.0,
+          "status": "match"
+        },
+        {
+          "criterion": "max|d subject MAE| <= 1.0e-10",
+          "detail": "max|d subject MAE| = 0.000e+00",
+          "evidence_class": "scores",
+          "max_abs_subject_mae_delta": 0.0,
+          "status": "match"
+        }
+      ],
+      "final_config_sha256": "8b188cb3e0d6a3e13e0bbd70f994b6ff34ef7e146c7be0372ac2136f18b8981f",
+      "final_run": {
+        "artifacts": {
+          "metrics": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260810T153739562215Z_04dc9521/metrics_exp_a_10ghz.json",
+            "sha256": "4817cf45ee1d408a999064c72a068b348b5415f596833a16f8a853312bd77757"
+          },
+          "predictions": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260810T153739562215Z_04dc9521/predictions_10ghz.csv",
+            "sha256": "78d6076c5c5fcd79cf7b994c5f7ad508832228f6cf9baca70bbdc39cf1cebf9e"
+          },
+          "provenance": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260810T153739562215Z_04dc9521/provenance.json",
+            "sha256": "4f486ce8ee567d2e994c71e78cccf19855bd3ed68b0503333b4730003af6690d"
+          },
+          "selection_table": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260810T153739562215Z_04dc9521/selection_table_10ghz.csv",
+            "sha256": "683cb902bb8d4c3cf600c30c5ca2fbd2d832ef586143217f40c1e8e9cac61db1"
+          }
+        },
+        "commit": "04dc9521346215cc20a8402f0d00f63c36cf3b42",
+        "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260810T153739562215Z_04dc9521"
+      },
+      "final_selection_table": {
+        "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260810T153739562215Z_04dc9521/selection_table_10ghz.csv",
+        "sha256": "683cb902bb8d4c3cf600c30c5ca2fbd2d832ef586143217f40c1e8e9cac61db1"
+      },
+      "final_store": {
+        "band_dir": "/ibex/user/floresge/dehy_radar_new/results/features/10ghz",
+        "build_commits": [
+          "04dc9521346215cc20a8402f0d00f63c36cf3b42"
+        ],
+        "qc_config_hash": "0602c9078619a58fae85462b2afdb87b44e6d764feda9d13efc0ec8f89cfb96b",
+        "sha256": "d5e379c902def37da29786fc5b40428c6c6b3ed78c699f2541f6fea3de9a11fd",
+        "spec_hash": "34499094ee9675b25bcc1d3d930bb24890363b5159931901fa377cd48d323f8d"
+      },
+      "mismatched_evidence_classes": [],
+      "reference_config_sha256": "8b188cb3e0d6a3e13e0bbd70f994b6ff34ef7e146c7be0372ac2136f18b8981f",
+      "reference_run": {
+        "artifacts": {
+          "metrics": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T150841445054Z_3f465abc/metrics_exp_a_10ghz.json",
+            "sha256": "4817cf45ee1d408a999064c72a068b348b5415f596833a16f8a853312bd77757"
+          },
+          "predictions": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T150841445054Z_3f465abc/predictions_10ghz.csv",
+            "sha256": "78d6076c5c5fcd79cf7b994c5f7ad508832228f6cf9baca70bbdc39cf1cebf9e"
+          },
+          "provenance": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T150841445054Z_3f465abc/provenance.json",
+            "sha256": "2c9a1abfd73ec532c3228913eb550fcf15447e9f2a3f18c75837778089237014"
+          },
+          "selection_table": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T150841445054Z_3f465abc/selection_table_10ghz.csv",
+            "sha256": "683cb902bb8d4c3cf600c30c5ca2fbd2d832ef586143217f40c1e8e9cac61db1"
+          }
+        },
+        "commit": "3f465abcd38d2f9f451c2292779b9fcfe1bb5b52",
+        "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T150841445054Z_3f465abc"
+      },
+      "status": "approved"
+    },
+    "77ghz": {
+      "band": "77ghz",
+      "comparisons": [
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "population",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "folds",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "stage1_candidates",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "selected_feature_keys",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "stage2_candidates",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "feature_inputs",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "tuned_epsilon",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "feature_matrices",
+          "status": "match"
+        },
+        {
+          "criterion": "exact",
+          "detail": null,
+          "evidence_class": "selection_table",
+          "status": "match"
+        },
+        {
+          "byte_identical": true,
+          "criterion": "selection-table byte-identity (above) AND max|dy_pred| <= 1.0e-10 (O-M9-5)",
+          "detail": "max|dy_pred| = 0.000e+00",
+          "evidence_class": "predictions",
+          "max_abs_pred_delta": 0.0,
+          "status": "match"
+        },
+        {
+          "criterion": "max|d subject MAE| <= 1.0e-10",
+          "detail": "max|d subject MAE| = 0.000e+00",
+          "evidence_class": "scores",
+          "max_abs_subject_mae_delta": 0.0,
+          "status": "match"
+        }
+      ],
+      "final_config_sha256": "8b188cb3e0d6a3e13e0bbd70f994b6ff34ef7e146c7be0372ac2136f18b8981f",
+      "final_run": {
+        "artifacts": {
+          "metrics": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260809T200111863037Z_04dc9521/metrics_exp_a_77ghz.json",
+            "sha256": "13de5f41cf1496226e55502cbf98511b5a395bb096073748fc9358496d583f8d"
+          },
+          "predictions": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260809T200111863037Z_04dc9521/predictions_77ghz.csv",
+            "sha256": "c80001c57085c5ab430a63bb6549352a0a6dc407b72971463b07adf9a3287d19"
+          },
+          "provenance": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260809T200111863037Z_04dc9521/provenance.json",
+            "sha256": "54f88e0b82493b5fe28de2a085775673b8e079095f0e2efa4d557130f164ecec"
+          },
+          "selection_table": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260809T200111863037Z_04dc9521/selection_table_77ghz.csv",
+            "sha256": "289d4654db03c766530bb0b2022850593e6a0afea97a867e88c836288c9b16d9"
+          }
+        },
+        "commit": "04dc9521346215cc20a8402f0d00f63c36cf3b42",
+        "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260809T200111863037Z_04dc9521"
+      },
+      "final_selection_table": {
+        "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260809T200111863037Z_04dc9521/selection_table_77ghz.csv",
+        "sha256": "289d4654db03c766530bb0b2022850593e6a0afea97a867e88c836288c9b16d9"
+      },
+      "final_store": {
+        "band_dir": "/ibex/user/floresge/dehy_radar_new/results/features/77ghz",
+        "build_commits": [
+          "04dc9521346215cc20a8402f0d00f63c36cf3b42"
+        ],
+        "qc_config_hash": "95076a6b6ff07cb0fe9a12ca96baf8f86c00db16f48af9cb6e7360b322dea0ed",
+        "sha256": "e66deb8ddc694c38fe2379e08eb06f027b5c05f81ce5d775cfec170163c7fbe4",
+        "spec_hash": "435edfe9dcd23235625079b383f2ca6daef2ae1cd6d1d93d8f7afde4da91459c"
+      },
+      "mismatched_evidence_classes": [],
+      "reference_config_sha256": "8b188cb3e0d6a3e13e0bbd70f994b6ff34ef7e146c7be0372ac2136f18b8981f",
+      "reference_run": {
+        "artifacts": {
+          "metrics": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T171005433711Z_3f465abc/metrics_exp_a_77ghz.json",
+            "sha256": "13de5f41cf1496226e55502cbf98511b5a395bb096073748fc9358496d583f8d"
+          },
+          "predictions": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T171005433711Z_3f465abc/predictions_77ghz.csv",
+            "sha256": "c80001c57085c5ab430a63bb6549352a0a6dc407b72971463b07adf9a3287d19"
+          },
+          "provenance": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T171005433711Z_3f465abc/provenance.json",
+            "sha256": "4e1af7bc2728f741d43de94f9460c465b7032e8a12d1f27962f35c7bf9f32969"
+          },
+          "selection_table": {
+            "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T171005433711Z_3f465abc/selection_table_77ghz.csv",
+            "sha256": "289d4654db03c766530bb0b2022850593e6a0afea97a867e88c836288c9b16d9"
+          }
+        },
+        "commit": "3f465abcd38d2f9f451c2292779b9fcfe1bb5b52",
+        "path": "/ibex/user/floresge/dehy_radar_new/results/runs/20260804T171005433711Z_3f465abc"
+      },
+      "status": "approved"
+    }
+  },
+  "bands_approved": [
+    "10ghz",
+    "77ghz"
+  ],
+  "created_utc": "2026-08-10T17:11:56.769283+00:00",
+  "reference_manifest_grade": "authoritative",
+  "schema_version": "exp_a_sources_v1",
+  "status": "approved",
+  "tool_git": {
+    "branch": "v1_milestone_10",
+    "commit": "04dc9521346215cc20a8402f0d00f63c36cf3b42",
+    "dirty": false
+  }
+}

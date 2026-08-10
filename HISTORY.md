@@ -4,6 +4,69 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-10 — **M10 step 12 DONE. The reference gate is `approved` on both bands**, and after the targeted rebuild Exp A reproduces M9 **bit-for-bit** (`max|dy_pred| = 0.000e+00`), not merely inside tolerance. Exp B run on both bands.
+
+**Chain 50325220–50325225, all `COMPLETED` `ExitCode 0:0`:**
+
+| job | id | elapsed | result |
+|---|---|---|---|
+| rebuild + verify | 50325220 | 00:00:23 | `all 73 cells match M9 on every gate array` |
+| validate10 | 50325221 | 00:00:12 | store OK |
+| Exp A 10 GHz | 50325222 | 01:17:26 | `20260810T153739562215Z_04dc9521` |
+| **compare** | **50325223** | 00:17:08 | **`status: approved`**, both bands, zero mismatched classes |
+| Exp B 10 GHz | 50325224 | 01:05:11 | `20260810T171218240204Z_04dc9521` |
+| Exp B 77 GHz | 50325225 | 01:10:46 | `20260810T185010955218Z_04dc9521` |
+
+**The result that confirms the diagnosis.** Before the fix, 10 GHz passed `predictions` *within*
+the O-M9-5 tolerance at `1.876e-14` while failing `feature_inputs`/`feature_matrices`. After
+rebuilding only the three cells on the CPU generation probe 2 identified, every class matches and
+`max|dy_pred|` and `max|d subject MAE|` are **`0.000e+00` on both bands**. The perturbation did not
+have to be tolerated; it disappeared. That is the strongest available evidence that the cause was
+exactly what the probes said it was — CPU generation, not data, code, config or commit.
+
+**Verified in the committed artifact** (`results/milestone10/exp_a_sources.json`, schema
+`exp_a_sources_v1`, written 2026-08-10T17:11:56Z by a tool at `04dc952`, `dirty: false`):
+`status: approved`; `bands_approved: ['10ghz', '77ghz']`; `reference_manifest_grade:
+authoritative`; `mismatched_evidence_classes: []` for both bands; reference runs are the
+authoritative `3f465abc` pair; final runs are exactly the directories the pointers name; store
+`build_commits` is the analysis commit alone; `final_config_sha256 == reference_config_sha256` per
+band. The manifest it was compared against hashes to `7921fddf…`, byte-identical to the copy
+committed at `8725292`.
+
+**The four source pointers**, all at `04dc9521`:
+
+```
+exp_a_10 -> results/runs/20260810T153739562215Z_04dc9521   (git.dirty false)
+exp_a_77 -> results/runs/20260809T200111863037Z_04dc9521   (git.dirty TRUE - see incident 2)
+exp_b_10 -> results/runs/20260810T171218240204Z_04dc9521
+exp_b_77 -> results/runs/20260810T185010955218Z_04dc9521
+```
+
+The replacement 10 GHz run records `dirty: false`, so the run the milestone reports is clean;
+only the retained 77 GHz Exp A run carries the disclosed flag. `HEAD`, `REVISION` and a clean
+`git status` all still hold at `04dc952` after the whole chain.
+
+**Committed alongside this entry:** `exp_a_sources.json` (Exp F's only sanctioned input — 
+`load_approved_sources` refuses anything not `approved`), the four `sources/*.txt` pointers as
+lineage evidence, and a `.gitattributes` `-text` rule for those pointers, matching the existing
+rule for `results/milestone10/*.json` and for the reason the CRLF incident above made concrete.
+
+**What must reach the chapter, now that the gate is green.** A passing gate does not retire the
+finding it exposed — the disclosure obligations the owner accepted with this path stand:
+
+1. The 10 GHz WST path is bit-reproducible on a fixed CPU generation but **not across**
+   generations, and the M9 reference store is itself architecture-mixed. **No homogeneous rebuild
+   can reproduce it**; byte-reproduction required matching the CPU generation *per cell*.
+2. Byte-identity is established for the **12 gate arrays per shard**, not all 101. The gate
+   inspects what Exp A's selected feature keys read; the remaining arrays (the Exp D per-frame
+   signals) are unexamined for these three cells.
+3. Store fingerprints record `packages` but not `cpu_model` — the one field that would have made
+   this a two-minute lookup. Deferred, because fixing it moves the analysis commit.
+
+**Step 12 acceptance is met** (plan §4.2 step 12): final A and B exist for both bands on the final
+stores/commit, the §1.3 real-data comparison with M9 A passes with zero mismatched classes, and
+the new B directories are registered. Step 13 may proceed.
+
 ## 2026-08-10 — Two provenance incidents caught by guards, not by luck: a CRLF rewrite of the IBEX analysis tree, and a `dirty: true` stamp on the Exp A 77 GHz run. Owner chose the targeted rebuild; fix chain 50325220–50325225 submitted.
 
 ### Incident 1 — the analysis tree was overwritten mid-milestone

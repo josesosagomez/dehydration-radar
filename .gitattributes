@@ -16,3 +16,7 @@ results/runs/*_f36c4fb2/** -text
 # will no longer exist. `--compare` reads it as JSON, so EOL conversion would not break the
 # gate — but it is evidence, and evidence whose bytes change on checkout is worth less.
 results/milestone10/*.json -text
+# The run-directory pointers each driver writes with --run-dir-out. Same reason as the JSON
+# above: they are lineage evidence, and `core.autocrlf=true` here would otherwise rewrite them
+# on checkout and hand a CR-terminated path to whatever reads them back.
+results/milestone10/sources/*.txt -text
