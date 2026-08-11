@@ -4,6 +4,68 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-11 — M10 step 13a: **all six mechanism-only smokes pass** (job 50365334, run on IBEX not locally — the plan's local path no longer exists). The one FAIL was a bug in my check wrapper, not in the pipeline. Measured sizing for E/F/G/H.
+
+**The smokes could not run locally, and that is not fixable.** Plan §6 specifies them as local
+commands. The local stores make that impossible: the 10 GHz store is 73 shards all built at
+`dab8f708` (so `validate_store` refuses on commit mismatch), the 77 GHz store holds **1 of 72**
+sessions, and Exp F additionally needs `exp_a_sources.json`, which names IBEX run directories that
+do not exist on the laptop. Rebuilding locally would not help either — the local `HEAD` has moved
+past the analysis commit, so a local build would stamp the wrong commit, and the 77 GHz half is
+impossible regardless. Run on IBEX as one 16-core batch job with `--subset 6subjects`, which
+preserves the smoke's actual purpose (prove every driver runs end to end on real data before
+committing ~200 core-hours to Exp G). §6's text assumed a local store that has not existed since
+M9.
+
+**Deliberately no `--run-dir-out` on any smoke**, so a mechanism-only run can never overwrite the
+step-12 pointers or be mistaken for a reportable run. Six new run directories exist under
+`results/runs/` and none is registered anywhere.
+
+| smoke | scope | wall | reported |
+|---|---|---|---|
+| Exp E 10 GHz | 6 subj / 20 sessions | 4 s | `no importance value surfaced` |
+| Exp E 77 GHz | 6 subj / 24 sessions | 4 s | `no importance value surfaced` |
+| Exp F 10 GHz | 6 subj / 24 sessions | 3 s | `no contrast value surfaced` |
+| Exp F 77 GHz | 6 subj / 29 sessions | 3 s | `no contrast value surfaced` |
+| Exp G | 6 subj, 23 matched cells (7 unmatched), 12 fold-bands | 2649 s | `no performance value surfaced` |
+| Robustness A 10 GHz | 6 subj / 24 sessions, R=8 | 2382 s | `min_successful=100 (frozen; never scaled)`, no estimate |
+
+Exp F printed `exp-a src : results/milestone10/exp_a_sources.json (explicit; approved bands only)`
+and `heart rate: not_estimable_missing_heart_rate — the covariate models are NOT an HR
+adjustment`. That path had been untestable for the whole milestone: `run_exp_f.sbatch` refuses to
+launch without an approved sources file, which only came into existence with step 12's gate.
+
+**The one failure was mine.** The wrapper asserted the R=8 smoke prints the word `inconclusive` on
+stdout and exited 1 when it did not. The status lives in `run_log_robustness_a_10ghz.json`;
+stdout says `mechanism-only smoke OK — no estimate surfaced; the status above is the
+min_successful rule doing its job`. The run itself was correct — `min_successful` stayed at the
+frozen 100 against `R=8` and no estimate was surfaced, which is the whole point of the smoke.
+Recorded because a check that fails a passing run is exactly as dangerous as one that passes a
+failing run, and the next person reading job 50365334's non-zero exit needs to know which it was.
+
+### Measured sizing for step 13b, and a wall-clock risk
+
+Both long smokes show a **pronounced straggler tail**, which is what actually sets a wall:
+
+- **Exp G**: 12 fold-bands across 12 workers; first finished at 1259 s, last at 2649 s — a >2×
+  spread. ~0.74 core-hours per fold-band at 5 training subjects. Full cohort is 32 fold-bands at
+  ~15 training subjects; scaling by training-set size puts a fold-band at ~2.2–6.7 core-hours and
+  the job at ~71–213 core-hours. `run_exp_g.sbatch`'s 32 cores / 24 h / 128 G runs all 32 units in
+  one wave at ~2.2–6.7 h plus the tail. **Fits, with margin.**
+- **Robustness**: 8 replicates across 8 workers; **7 finished by 610 s and the 8th took 2382 s — a
+  ~4× straggler.** ~0.66 core-hours per replicate at 6 subjects. Against the plan's full-cohort
+  anchor of ~6 core-hours per replicate, `R=200` is ~1,200 core-hours per (experiment, band).
+  `run_robustness.sbatch` ships 32 cores / 24 h, which is ~37 h of work — **it does not fit**.
+  HANDOFF's `--cpus-per-task=64` gives ~19 h before the tail, which is uncomfortably close to the
+  24 h wall for a job that must never lower `R`.
+
+Consequence to decide before launching: whether A and B use the single-allocation path at 64 cores
+or the sharded array-plus-merge path (`submit_robustness_sharded.sh`) that the plan reserves for
+C. Plan §6 states either path may be used for any cell and the sharded one is science-neutral, so
+this is purely an allocation decision — but a 19 h job that times out wastes 19 h, whereas a shard
+that fails costs one shard. The counter-argument is that sharding returns us to job arrays, which
+is what produced the `launch_failed_requeued_held` episode on 2026-08-09. Not decided here.
+
 ## 2026-08-10 — **M10 step 12 DONE. The reference gate is `approved` on both bands**, and after the targeted rebuild Exp A reproduces M9 **bit-for-bit** (`max|dy_pred| = 0.000e+00`), not merely inside tolerance. Exp B run on both bands.
 
 **Chain 50325220–50325225, all `COMPLETED` `ExitCode 0:0`:**
