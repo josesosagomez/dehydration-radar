@@ -4,6 +4,60 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-12 — The IBEX analysis clone was corrupted by an external sync: `.git` refs overwritten with the LAPTOP's commit. Recovered without loss. Third and worst occurrence of the same cause.
+
+**Escalation, same root cause, three occurrences:**
+
+| when | what the sync did | caught by |
+|---|---|---|
+| 2026-08-10 15:31 | CRLF rewrite of 5 `.py` + 7 `.sbatch` | step-12 fix chain's clean-tree guard |
+| 2026-08-11 23:26 | same, plus `run_baselines.py`, `run_regression.py` | robustness submit guard |
+| 2026-08-11 23:46 | **`.git/refs/heads/*` overwritten** — every branch ref | `git rev-parse HEAD` → `fatal: bad object HEAD` |
+
+The third one is qualitatively different: it copied **git internals**, not working-tree files.
+`refs/heads/v1_milestone_10` was left pointing at `95bb8d6e503bd06045ca2c9fd81afa1f1f770fdf` —
+the *laptop's* HISTORY commit from that evening, never pushed, whose object does not exist on
+IBEX. Every ref file in `.git/refs/heads/` carried mtime 23:46. `git fsck` reported
+`invalid sha1 pointer` for the branch, `origin/v1_milestone_10`, the `config-freeze-v1` tag and
+HEAD itself.
+
+**Nothing was lost, and no artifact is suspect.** `REVISION` still read `04dc952`; both stores
+were intact at 73 and 72 shards; all nine step-12/13 pointers were present. The five E/F/G runs
+that day all recorded `git.dirty: false` with mtimes proving they finished (G ended ~19:35) hours
+before the 23:26 rewrite. And had a job run against the broken repo, `_git_info`'s fallback chain
+would have taken the commit from `REVISION` anyway, since `git rev-parse` fails outright rather
+than returning a wrong value.
+
+**Recovery** (objects were untouched — only refs were clobbered):
+
+```
+git cat-file -t 04dc95213462...        # -> commit, so the object survived
+git update-ref refs/heads/v1_milestone_10 04dc95213462...
+git symbolic-ref HEAD refs/heads/v1_milestone_10
+git checkout -- .                      # working tree back to the analysis commit
+```
+
+Residual `fsck` complaints about `origin/v1_milestone_10`, the tag and two reflog entries are
+cosmetic: laptop refs naming objects IBEX has never held. Nothing in the pipeline reads them.
+
+**A consequence worth stating: while that sync is live, every local commit in this repo is a
+hazard to IBEX.** The mechanism copies the laptop's refs onto IBEX, so whatever the laptop's
+branch points at becomes IBEX's dangling ref. It was `95bb8d6` this time only because that was
+the newest local commit. This is the first time in the project that writing HISTORY locally could
+break the compute environment.
+
+**Mitigation added to the robustness shards**, since they run ~19 h and the rewrites have all
+happened overnight: `rob_shard.sbatch` now runs a `guard` at **both ends** of the job —
+`HEAD == REVISION`, and `git diff --ignore-cr-at-eol --quiet -- src experiments configs scripts`.
+Content-level and EOL-tolerant, because EOL is what has actually been observed and failing a 19 h
+shard over line endings would be its own waste. A shard whose tree changed mid-run exits non-zero,
+so its cell's merge (gated `afterok`) never runs — the corruption becomes a failed shard to redo
+rather than a silent contamination discovered at assembly.
+
+That is detection, not prevention. The fix is on the owner's side: point the sync at
+`rehab_radar_1` (which already exists as a separate directory) or disable it. Raised three times;
+recorded here so the next session does not have to rediscover it.
+
 ## 2026-08-11 — M10 step 13a: **all six mechanism-only smokes pass** (job 50365334, run on IBEX not locally — the plan's local path no longer exists). The one FAIL was a bug in my check wrapper, not in the pipeline. Measured sizing for E/F/G/H.
 
 **The smokes could not run locally, and that is not fixable.** Plan §6 specifies them as local
