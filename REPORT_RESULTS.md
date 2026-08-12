@@ -7,8 +7,8 @@ this code.
 - **Cohort** — 16 subjects, 5 sessions, 80 acquisitions
 - **Bands** — 10 GHz FMCW (primary), 77 GHz (cross-band section only)
 - **Protocol** — nested leave-one-subject-out, frozen before any result existed
-- **Status at time of writing** — Experiments A–D complete; E/F/G completed hours before this
-  was written and are **not yet folded in**; H's robustness bootstrap is running
+- **Status at time of writing** — Experiments A–G complete and folded in; H's robustness
+  bootstrap (R = 200 per experiment and band) is running
 
 Companion artifact (same content, browsable):
 <https://claude.ai/code/artifact/f26208c6-a71b-4491-a7d8-45025acac9c3>
@@ -26,6 +26,7 @@ point at any of them.
 | **The model** | Not the cause | Five classical families searched per fold (ridge, SVR, RF, GBM, k-NN) plus two networks trained end to end. All land within 0.45–0.57 MAE. Best-to-worst spread is smaller than the gap to the baseline. |
 | **Wavelet scattering as the feature method** | Not the cause | Exp D ran two representations that learn their own features from the raw signal and inherit no scattering assumption. Both lose to the same baseline by the same margin. |
 | **Q values and tiling parameters** | Not the cause | 3 tilings × 3 log branches × 2 gates × 2 reductions × 2 channels searched inside every fold — 72 chances per fold to find a tiling that works. Selection frequency is scattered, not peaked. |
+| **Any individual scattering path** | Not the cause | Exp E ablated all 742 path groups one at a time. Importances centre on zero (median −0.0001), and the single most important group is worth less than the margin by which the model loses to a trivial constant. |
 | **Measurement and target** | **Where the evidence points** | A predictor that sees only the time of day beats every radar method in both bands. At 10 GHz it wins for *all sixteen* subjects. |
 
 **The single most informative number.** At 10 GHz the Wilcoxon statistic for radar versus the
@@ -210,11 +211,81 @@ procedure that consistently selects the worst family is itself evidence that inn
 information about outer performance — which is what you would expect if there is nothing to select
 on.
 
+### Experiment E — leave-one-path-group-out ablation
+
+The most direct test of "it's the features". A **fixed pre-registered anchor model** — T1,
+Q = (10,4), magnitude channel, reduction A, log off, 1–2 m gate, ridge α = 1.0 — is refit under
+outer LOSO with one scattering path group removed at a time, against the Exp B residual target.
+The anchor is deliberately *not* the best model from Exp A/B and is never swapped for one.
+Positive importance means the full model predicted that held-out subject better with the group
+present.
+
+| | 10 GHz | 77 GHz |
+|---|---|---|
+| Path groups ablated | 742 | 424 |
+| Median importance | −0.0001 | −0.0001 |
+| SD across groups | 0.0053 | 0.0006 |
+| Range | −0.047 … **+0.034** | −0.004 … **+0.005** |
+| Groups with positive mean | 265 / 742 (36%) | 184 / 424 (43%) |
+| Groups helpful across subjects (IQR above zero) | **22 / 742 (3%)** | 34 / 424 (8%) |
+
+By scattering order at 10 GHz: order 0 (1 group) −0.023; order 1 (55 groups) mean +0.0002, max
++0.028; order 2 (686 groups) mean −0.0001, max +0.034.
+
+**The decisive comparison.** The single most important path group at 10 GHz is worth **+0.034**
+residual Δm% points. The margin by which the radar model *loses* to a trivial constant in Exp B is
+**+0.0475**. No individual path group contributes enough to close the gap to doing nothing — and
+36% of groups having positive mean means most groups are, if anything, mildly harmful to remove
+nothing at all: their removal *improves* prediction.
+
+Two caveats the experiment states about itself, both of which I accept: attribution here is model
+reliance, not causality, and it cannot establish or refute a dielectric mechanism; and correlated
+paths share credit, so a group whose information survives in its neighbours can measure as
+unimportant while carrying the same signal. The aggregate picture — a distribution centred on zero
+with 3% of groups consistently helpful, which is about what chance would give — is what carries
+the weight, not any single row.
+
+### Experiment F — confound sensitivity
+
+Direction convention: **positive means adding that component makes prediction worse.** 73 sessions
+(10 GHz) / 72 (77 GHz), 16 subjects, 16 outer folds.
+
+| Contrast | 10 GHz | 77 GHz |
+|---|---|---|
+| **radar given clock** | **+0.364 [0.245, 0.485]**, Holm p = 0.0003 | **+0.257 [0.166, 0.347]**, Holm p = 0.0006 |
+| **radar given clock + covariates** | **+0.301 [0.185, 0.428]**, Holm p = 0.0003 | **+0.174 [0.014, 0.282]**, Holm p = 0.025 |
+| covariates given clock | +0.063 [0.025, 0.128] | +0.081 [0.030, 0.235] |
+| covariates given clock + radar | +0.000 [−0.017, 0.010] | −0.002 [−0.004, 0.000] |
+
+Both primary milestone contrasts are Holm-significant in both bands and in the wrong direction:
+**adding radar on top of a clock model significantly degrades prediction**, with or without age,
+height, baseline mass and BMI.
+
+Heart rate is confirmed `not_estimable_missing_heart_rate` — no HR column in the workbook, no HR
+file in the data roots, zero observations, and no proxy substituted. The artifact carries its own
+constraint: this is a limited clock/static-covariate sensitivity result, it is **not** an HR
+adjustment, and temperature and glucose remain uncontrolled.
+
+### Experiment G — matched-session cross-band fusion
+
+| | Value |
+|---|---|
+| Matched population | 65 cells (of 73 / 72), 16 subjects, 15 unmatched |
+| **Primary: fused − 10 GHz** | **+0.018 [−0.004, +0.061]** — CI crosses zero |
+| Subject-balanced MAE | 10 GHz 0.482 · 77 GHz 0.480 · equal-weight 0.476 · fused 0.501 |
+
+Fusion does not help, and the learned weight says so directly: the fold-local α (combiner
+`α·pred_10 + (1−α)·pred_77`, selected on out-of-fold MAE) is **1.0 in 9 of 16 folds** — the
+procedure collapses to "use 10 GHz alone" in most folds. Per the pre-registered stance, fusion was
+never required to beat 10 GHz and is reported as observed. The artifact carries its own limitation:
+conditional and exploratory, generalizes to no other cohort, and cannot rescue the single-band
+outcome.
+
 ---
 
 ## 6. Why the fault is unlikely to be the features or the model
 
-Four independent lines converge, each capable of failing separately:
+Six independent lines converge, each capable of failing separately:
 
 - **Model class is ruled out by breadth.** Five classical families with grids, selected per fold,
   plus two networks trained end to end. Best and worst differ by about 0.12 MAE; the gap to the
@@ -229,6 +300,14 @@ Four independent lines converge, each capable of failing separately:
 - **Selection carries no information.** The composite selecting the worst family 16/16 times means
   inner-fold score is uncorrelated with outer performance. Where a real signal exists, selection
   normally transfers at least weakly.
+- **No individual scattering path carries it either.** Exp E ablated all 742 groups one at a time;
+  importances centre on zero, only 3% are consistently helpful across subjects, and the best single
+  group is worth less than the margin by which the model loses to a constant. If the representation
+  were hiding a usable signal in some subset of paths, this is the experiment that would have
+  surfaced it.
+- **Adding radar to the clock actively hurts.** Exp F's two primary contrasts are Holm-significant
+  in both bands with the radar increment *positive* — the radar term does not merely fail to add
+  information, it degrades a clock-only model.
 
 What remains is the measurement problem itself. The study asks a cross-subject model to detect a
 permittivity change corresponding to a fraction of a percent of body mass, from sessions that
@@ -311,21 +390,19 @@ Written against the conclusion above, not in support of it.
 
 ## 10. Open items at the time of writing
 
-Experiments E (path-group ablation), F (confound sensitivity) and G (cross-band fusion) completed
-on the full cohort hours before this was written, and their numbers are **not yet folded in**.
-They bear directly on this document's argument:
+Experiments E, F and G are complete and folded in above. **Experiment H's robustness bootstrap is
+still running** — R = 200 replicates for each of Exp A, B and C in both bands, run as 16 shards
+plus 6 merges. It asks whether the selection procedure itself is stable under resampling, which
+bears directly on the "selection carries no information" observation in §6: if selection is
+unstable under resampling, that is a second, independent symptom of the same underlying absence.
 
-- **E** ablates scattering path groups. If any group carried recoverable information, this is where
-  it would show — the most direct test of the "it's the features" hypothesis argued against above.
-- **F** tests sensitivity to available covariates. Heart rate is *not estimable* in this dataset
-  and temperature and glucose stay uncontrolled, so F is a limited sensitivity result by
-  construction, not an adjustment.
-- **G** tests whether combining bands recovers anything. It is not required to beat 10 GHz, and
-  reporting it as observed is the pre-registered stance.
+Nothing in H can change the sign of A–G. It quantifies how much of the observed selection
+behaviour is reproducible, and its inconclusive verdict rule (`min_successful = 100`, never scaled
+to fit a short run) is deliberately strict.
 
-Experiment H's robustness bootstrap (R = 200 per experiment and band) is running now. It asks
-whether the selection procedure itself is stable under resampling — relevant to the "selection
-carries no information" observation in §6.
+The assembly step then builds the final numerical tables from an explicit run map — every source
+named on the command line, no globbing and no "latest" directory — and validates every registered
+artifact's SHA-256 before writing anything.
 
 **One reproducibility finding worth recording.** The 10 GHz feature pipeline is bit-reproducible on
 a fixed CPU generation but *not* across generations, for a minority of sessions. This surfaced when
