@@ -4,6 +4,48 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-28 — Authorized full-WST leaky regression comparison: baseline test invocation corrected
+
+The owner authorized adding the previously excluded full Experiment-A WST regressor to the
+explicitly exploratory random-frame comparison for both bands. Before implementation, the
+unchanged `tests/test_frame_split.py` suite was run with the root virtual environment and an
+explicit writable pytest temporary directory. The first command incorrectly added Python `-P`;
+24 tests passed, while the three CLI tests failed at import time because `-P` removes the
+repository root and therefore hides the local `experiments` namespace. No production assertion
+failed and no code had been changed. The baseline is being rerun through the project's normal
+pytest import path; this invocation mistake remains recorded rather than being erased.
+
+Implementation then succeeded as a quarantined `regression/radar_wst` unit, expanding the
+authorized matrix from 16 to 18 cells (one new cell per band). It reads the modal
+`(feature_key, family, params)` directly from the matching completed Exp A LOSO selection
+artifact, never re-searches on leaky folds, reconstructs per-frame WST vectors from raw store
+tensors, and refits the scaler/model and any tuned log epsilon on training frames only. The
+split remains five shuffled frame folds with seed `20260721 + 900 = 20261621`; the one sanctioned
+leak is still subject/session overlap. Each fold reports frame MAE/RMSE/Pearson r and median-
+aggregated session MAE, subject-balanced session MAE, session RMSE and session Pearson r. The
+session metrics are explicitly not LOSO-comparable because sister frames remain in training.
+
+The deployment additions are a paths-only `configs/ibex_sosagojm.yaml`, which reuses raw inputs
+from `/ibex/user/sosagojm/dehydration_loso_diagnostic/data` but writes stores/results only under
+`/ibex/user/sosagojm/dehydration_radar_2/results`, and a CPU-only 1-core/64-GiB/8-hour Slurm
+launcher. Existing extraction and Exp A launchers now accept an optional `IBEX_CONFIG` while
+retaining `configs/ibex.yaml` as their byte-for-behaviour default. The corrected unchanged
+baseline passed 27/27; after implementation the expanded frame-split suite passed 32/32,
+including both-band store-key routing, exact Exp-A artifact reuse, all metrics, output
+quarantine, and a held-out-frame mutation that leaves tuned epsilon and fitted state unchanged.
+
+Final verification found and corrected one real-artifact lineage incompatibility before IBEX
+deployment. Historical Exp A provenance stores the complete canonical config mapping at
+`provenance.json["config"]`, not the later `extra.config_hash` field. The first implementation
+would therefore have rejected a valid source run because the discovered hash was `None`. The
+loader now reconstructs the SHA-256 from that persisted mapping with the exact
+`sha256(json.dumps(config, sort_keys=True))` recipe used by `exp_b.config_fingerprint`; it still
+fails closed when any recorded config field differs. A real-schema regression test covers both
+the valid case and a one-field seed mutation. The focused suite then passed 33/33, and the
+leakage-critical broad suite (`test_no_leakage`, `test_frame_split`, `test_exp_a`, `test_config`,
+and `test_run_regression`) passed 197 with three expected skips. Bash syntax validation passed
+for the new launcher and all three parameterized IBEX launchers.
+
 ## 2026-08-12 — The IBEX analysis clone was corrupted by an external sync: `.git` refs overwritten with the LAPTOP's commit. Recovered without loss. Third and worst occurrence of the same cause.
 
 **Escalation, same root cause, three occurrences:**

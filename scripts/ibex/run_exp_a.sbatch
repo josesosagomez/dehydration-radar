@@ -36,6 +36,8 @@ BAND=${BAND:-10ghz}
 MODE=${MODE:-smoke}
 CFG=configs/exp_a_regression.yaml
 [ "$BAND" = "77ghz" ] && CFG=configs/exp_a_regression_77ghz.yaml
+IBEX_CONFIG=${IBEX_CONFIG:-configs/ibex.yaml}
+[[ -f "$IBEX_CONFIG" ]] || { echo "ERROR: missing $IBEX_CONFIG" >&2; exit 2; }
 if [ "$MODE" = "full" ]; then SEL=(--full-cohort); else SEL=(--subset 6subjects); fi
 
 RUN_DIR_OUT=${RUN_DIR_OUT:-}
@@ -44,5 +46,5 @@ if [ -n "$RUN_DIR_OUT" ]; then OUT=(--run-dir-out "$RUN_DIR_OUT"); else OUT=(); 
 if [ -x .venv/bin/python ]; then PYTHON=(.venv/bin/python); else PYTHON=(uv run --no-sync python); fi
 
 echo "Exp A: band=${BAND} mode=${MODE} commit=${DEHYD_GIT_COMMIT:-<unset>}"
-"${PYTHON[@]}" -u experiments/run_regression.py --config "$CFG" --config configs/ibex.yaml \
+"${PYTHON[@]}" -u experiments/run_regression.py --config "$CFG" --config "$IBEX_CONFIG" \
   --band "$BAND" "${SEL[@]}" "${OUT[@]}"

@@ -1,9 +1,8 @@
 """The owner's sanctioned EXPLORATORY frame-level random split — NEVER REPORTED.
 
-A thin wrapper over `dehyd.eval.frame_split`. One invocation = one of the 16 sanctioned
-runs (both Exp C arms x 2 bands; all six Exp D baselines x 2 bands). Exp A's radar regressor
-is NOT in the matrix and is rejected by the parser: it is not an Exp D baseline, so the
-owner's 2026-07-30 decision does not reach it.
+A thin wrapper over `dehyd.eval.frame_split`. One invocation = one sanctioned run: both
+Exp C arms, all six Exp D baselines, or the separately owner-authorized full-WST Exp A
+regressor (`regression/radar_wst`), each on either band.
 
     uv run python experiments/run_frame_split_exploratory.py \\
         --config configs/exp_a_regression.yaml --config configs/exp_c.yaml \\
@@ -55,8 +54,11 @@ def main(argv=None) -> int:
     parser.add_argument("--config", action="append", required=True, metavar="PATH")
     parser.add_argument("--band", choices=frame_split.BANDS, required=True)
     parser.add_argument("--task", choices=TASKS, required=True)
-    parser.add_argument("--unit", required=True,
-                        help="ordinal -> arm_a|arm_b; regression -> the six Exp D families")
+    parser.add_argument(
+        "--unit",
+        required=True,
+        help="ordinal -> arm_a|arm_b; regression -> six Exp D families or radar_wst",
+    )
     parser.add_argument("--source-run-dir", required=True, metavar="PATH",
                         help="the LOSO run dir whose selected configuration is refit here")
     args = parser.parse_args(argv)
@@ -65,8 +67,8 @@ def main(argv=None) -> int:
     if args.unit not in allowed:
         parser.error(
             f"--unit {args.unit!r} is not a sanctioned {args.task} unit (expected one of "
-            f"{list(allowed)}). The owner's decision covers Exp C and every Exp D baseline "
-            "and nothing else — Exp A's radar regressor in particular is not authorized."
+            f"{list(allowed)}). The matrix covers Exp C, every Exp D baseline, and the "
+            "separately authorized full-WST Exp A refit."
         )
 
     config = load_config(*args.config)

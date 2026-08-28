@@ -24,15 +24,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
-from dehyd.config import load_config
+from dehyd.config import config_to_dict, load_config
 from dehyd.data.sessions import SESSION_NAMES
-from dehyd.eval import exp_d, frame_split
+from dehyd.eval import exp_b, exp_d, frame_split
 from dehyd.eval.frame_split import (
     EXPLORATORY_TAG,
     FRAME_SPLIT_MATRIX,
     KFOLD_SEED_OFFSET,
     TUNED_EPS_AGGREGATION,
+    WST_REGRESSION_METRICS,
+    WST_REGRESSION_UNIT,
     FrameSplitError,
     _require_exploratory_path,
     exploratory_dir,
@@ -151,6 +154,31 @@ def _exp_c_source(run_dir, band, *, commit="c0ffee", config_hash="cfg0",
     return run_dir
 
 
+def _exp_a_source(run_dir, band, *, commit="c0ffee", config_hash="cfg0",
+                  provenance_config=None, feature_key=FEATURE_KEY, family="ridge",
+                  params=None):
+    """A minimal real Exp A selection artifact plus its lineage-bearing provenance."""
+    run_dir = Path(run_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    params = {"alpha": 1.0} if params is None else params
+    with (run_dir / f"selection_table_{band}.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["test_subject", "feature_key", "family", "params"])
+        for subject in range(1, N_SUBJECTS + 1):
+            writer.writerow([subject, repr(feature_key), family, repr(params)])
+    provenance = {"git": {"commit": commit}}
+    if provenance_config is None:
+        provenance["extra"] = {"config_hash": config_hash}
+    else:
+        provenance["config"] = provenance_config
+    (run_dir / "provenance.json").write_text(
+        json.dumps(provenance) + "\n", encoding="utf-8"
+    )
+    return run_dir
+
+
 # ------------------------------------------------------- structural isolation (constraint 2)
 
 
@@ -217,19 +245,20 @@ def test_output_path_allowlist_admits_only_tagged_exploratory_paths(tmp_path):
                                   results_dir=results)
 
 
-# ------------------------------------------------------------- the sanctioned 16-run matrix
+# ------------------------------------------------------------- the sanctioned 18-run matrix
 
 
-def test_matrix_is_exactly_the_owners_sixteen_runs():
-    assert len(FRAME_SPLIT_MATRIX) == 16
-    assert len(set(FRAME_SPLIT_MATRIX)) == 16
+def test_matrix_is_exactly_the_owner_authorized_eighteen_runs():
+    assert len(FRAME_SPLIT_MATRIX) == 18
+    assert len(set(FRAME_SPLIT_MATRIX)) == 18
     ordinal = {(t, u, b) for t, u, b in FRAME_SPLIT_MATRIX if t == "ordinal"}
     assert ordinal == {("ordinal", u, b) for u in ("arm_a", "arm_b") for b in ("10ghz", "77ghz")}
     regression = {u for t, u, _ in FRAME_SPLIT_MATRIX if t == "regression"}
-    assert regression == set(exp_d.EXPD_FAMILIES) and len(regression) == 6
-    # Exp A is deliberately absent: it is not an Exp D baseline, so the sanction does not
-    # reach it and running it would be an unauthorized addition.
-    assert not any(u == "exp_a" for _, u, _ in FRAME_SPLIT_MATRIX)
+    assert regression == {*exp_d.EXPD_FAMILIES, WST_REGRESSION_UNIT}
+    assert len(regression) == 7
+    assert {
+        ("regression", WST_REGRESSION_UNIT, band) for band in ("10ghz", "77ghz")
+    } <= set(FRAME_SPLIT_MATRIX)
 
 
 def test_run_frame_split_refuses_a_unit_outside_the_matrix(base_config, tmp_path):
@@ -338,6 +367,46 @@ def test_source_run_lineage_is_validated_by_name(base_config, tmp_path):
                         analysis_commit="c0ffee", config_hash="other")
     with pytest.raises(FrameSplitError, match="does not exist"):
         load_source_run(config, "10ghz", "ordinal", "arm_a", tmp_path / "nope")
+
+
+def test_exp_a_source_recovers_hash_from_real_provenance_config(base_config, tmp_path):
+    """Exp A stores the full canonical config, not ``extra.config_hash``.
+
+    The accepted source must therefore match ``config_fingerprint(config)`` exactly, and a
+    one-field mutation in that persisted config must still fail closed.
+    """
+    config = _tmp_config(base_config, tmp_path)
+    expected_hash = exp_b.config_fingerprint(config)
+    run_dir = _exp_a_source(
+        tmp_path / "exp_a_loso",
+        "10ghz",
+        provenance_config=config_to_dict(config),
+    )
+
+    source = load_source_run(
+        config,
+        "10ghz",
+        "regression",
+        WST_REGRESSION_UNIT,
+        run_dir,
+        analysis_commit="c0ffee",
+        config_hash=expected_hash,
+    )
+    assert source.config_hash == expected_hash
+
+    changed = config_to_dict(config)
+    changed["run"]["seed"] += 1
+    _exp_a_source(run_dir, "10ghz", provenance_config=changed)
+    with pytest.raises(FrameSplitError, match="config_hash"):
+        load_source_run(
+            config,
+            "10ghz",
+            "regression",
+            WST_REGRESSION_UNIT,
+            run_dir,
+            analysis_commit="c0ffee",
+            config_hash=expected_hash,
+        )
 
 
 # ------------------------------------------------ the tuned-ε recomputation (C10, trap 19)
@@ -561,6 +630,98 @@ def test_frame_order_and_fold_assignment_are_hashed_into_the_record(base_config,
 
 
 # ------------------------------------------------------------------ the regression families
+
+
+def test_full_wst_regression_refits_exp_a_modal_config_and_reports_both_scales(
+    base_config, tmp_path
+):
+    config = _tmp_config(base_config, tmp_path)
+    sessions = _sessions()
+    _write_store(config.paths.results_dir, sessions)
+    source = _exp_a_source(
+        tmp_path / "loso_a", "10ghz", feature_key=FEATURE_KEY,
+        family="ridge", params={"alpha": 1.0},
+    )
+
+    result = run_frame_split(
+        config, "10ghz", "regression", WST_REGRESSION_UNIT,
+        source_run_dir=source, sessions=sessions, store_dir=config.paths.results_dir,
+    )
+
+    assert result.resolved_config["feature_key"] == FEATURE_KEY
+    assert result.resolved_config["family"] == "ridge"
+    assert result.resolved_config["params"] == {"alpha": 1.0}
+    assert result.metric_names == WST_REGRESSION_METRICS
+    assert result.tuned_eps_aggregation == TUNED_EPS_AGGREGATION
+    assert result.notes["scientific_status"] == "leaky_protocol_demonstration_only"
+    assert result.notes["not_directly_comparable_to_loso"] is True
+    assert len(result.per_fold) == 5
+    for fold in result.per_fold:
+        assert fold["n_test_sessions"] > 0
+        assert fold["frame_mae"] >= 0.0
+        assert fold["session_mae"] >= 0.0
+        assert fold["subject_balanced_session_mae"] >= 0.0
+        assert len(fold["tuned_epsilon"]) == 2
+        assert len(fold["fitted_state_sha256"]) == 64
+    assert set(result.summary) == set(WST_REGRESSION_METRICS)
+
+
+def test_full_wst_regression_fitted_state_ignores_held_out_frames(base_config, tmp_path):
+    config = _tmp_config(base_config, tmp_path)
+    sessions = _sessions()
+    _write_store(config.paths.results_dir, sessions)
+    source = _exp_a_source(tmp_path / "loso_a", "10ghz", feature_key=FEATURE_KEY)
+    kwargs = dict(
+        source_run_dir=source, sessions=sessions, store_dir=config.paths.results_dir,
+    )
+    before = run_frame_split(
+        config, "10ghz", "regression", WST_REGRESSION_UNIT, **kwargs
+    )
+
+    _, test_idx = _fold_rows(
+        len(sessions) * N_FRAMES, int(config.run.seed) + KFOLD_SEED_OFFSET
+    )[0]
+    _scale_store_frames(config, sessions, test_idx, scale=11.0)
+    after = run_frame_split(
+        config, "10ghz", "regression", WST_REGRESSION_UNIT, **kwargs
+    )
+
+    assert after.per_fold[0]["tuned_epsilon"] == before.per_fold[0]["tuned_epsilon"]
+    assert after.per_fold[0]["fitted_state_sha256"] == before.per_fold[0]["fitted_state_sha256"]
+
+
+def test_77ghz_full_wst_regression_uses_77ghz_keys(base_config, tmp_path):
+    from dehyd.features.store import raw77_key
+
+    config = _tmp_config(base_config, tmp_path)
+    sessions = _sessions()
+    rng = np.random.default_rng(19)
+    for session in sessions:
+        n = len(session["frame_ids"])
+        write_session_store(
+            "77ghz", session["subject"], session["session_name"],
+            {
+                raw77_key(0): _raw_tensor(
+                    rng, n, session["session_idx"], session["subject"]
+                ),
+                order_key(0): np.array([0, 1, 2]),
+            },
+            {"n_frames": n}, config.paths.results_dir,
+        )
+    source = _exp_a_source(
+        tmp_path / "loso_a77", "77ghz", feature_key=(0, "frozen")
+    )
+
+    result = run_frame_split(
+        config, "77ghz", "regression", WST_REGRESSION_UNIT,
+        source_run_dir=source, sessions=sessions, store_dir=config.paths.results_dir,
+    )
+
+    assert result.resolved_config["feature_key"] == (0, "frozen")
+    assert result.tuned_eps_aggregation is None
+    assert len(result.per_fold) == 5
+    assert all(fold["tuned_epsilon"] is None for fold in result.per_fold)
+    assert all(np.isfinite(fold["session_mae"]) for fold in result.per_fold)
 
 
 def test_physics_and_session_index_frame_splits_run_and_are_labelled(base_config, tmp_path):
@@ -819,8 +980,8 @@ def test_cli_run_creates_nothing_under_results_runs(base_config, tmp_path, monke
     assert provenance["inputs"]["radar_files"]           # the manifest really was hashed
 
 
-def test_cli_rejects_exp_a_and_any_unit_outside_its_task(base_config, tmp_path):
-    """The parser is the outer gate: `exp_a` never reaches the module at all."""
+def test_cli_rejects_unknown_aliases_and_units_outside_their_task(base_config, tmp_path):
+    """The authorized name is radar_wst; ambiguous aliases and cross-task units fail."""
     import experiments.run_frame_split_exploratory as cli
 
     base = ["--config", "configs/exp_a_regression.yaml", "--band", "10ghz",
@@ -833,10 +994,44 @@ def test_cli_rejects_exp_a_and_any_unit_outside_its_task(base_config, tmp_path):
         cli.main(base + ["--task", "regression", "--unit", "arm_a"])
 
 
-def test_cli_accepts_exactly_the_sixteen_matrix_pairs():
+def test_cli_accepts_exactly_the_eighteen_matrix_pairs():
     """The CLI's accepted (task, unit) set IS the module's matrix — one table, not two."""
     import experiments.run_frame_split_exploratory as cli
 
     pairs = {(task, unit) for task in cli.TASKS for unit in frame_split.TASK_UNITS[task]}
     assert pairs == {(task, unit) for task, unit, _ in FRAME_SPLIT_MATRIX}
-    assert len(pairs) * len(frame_split.BANDS) == 16
+    assert len(pairs) * len(frame_split.BANDS) == 18
+
+
+def test_full_wst_frame_split_launcher_is_cpu_only_and_quarantined():
+    source = (
+        Path("scripts/ibex/run_wst_regression_frame_split.sbatch")
+        .read_text(encoding="utf-8")
+    )
+    assert "#SBATCH --cpus-per-task=1" in source
+    assert "#SBATCH --mem=64G" in source
+    assert "--task regression" in source
+    assert "--unit radar_wst" in source
+    assert "SOURCE_RUN_DIR" in source
+    assert "configs/ibex_sosagojm.yaml" in source
+    assert "run_regression.py" not in source
+    assert "record_run" not in source
+    assert "--gpus" not in source and "--gres" not in source
+
+
+def test_sosagojm_ibex_overlay_changes_paths_only_and_launchers_accept_it():
+    overlay = yaml.safe_load(Path("configs/ibex_sosagojm.yaml").read_text(encoding="utf-8"))
+    assert set(overlay) == {"paths"}
+    assert overlay["paths"] == {
+        "data_10ghz_dir": "/ibex/user/sosagojm/dehydration_loso_diagnostic/data/10ghz",
+        "data_77ghz_dir": "/ibex/user/sosagojm/dehydration_loso_diagnostic/data/77ghz",
+        "weight_xlsx": (
+            "/ibex/user/sosagojm/dehydration_loso_diagnostic/data/weight/"
+            "metadata_subjects_info.xlsx"
+        ),
+        "results_dir": "/ibex/user/sosagojm/dehydration_radar_2/results",
+    }
+    for script_name in ("extract10.sbatch", "extract77.sbatch", "run_exp_a.sbatch"):
+        source = Path("scripts/ibex", script_name).read_text(encoding="utf-8")
+        assert "IBEX_CONFIG=${IBEX_CONFIG:-configs/ibex.yaml}" in source
+        assert '--config "$IBEX_CONFIG"' in source

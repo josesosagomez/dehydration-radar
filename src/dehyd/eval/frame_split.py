@@ -65,13 +65,15 @@ EXPLORATORY_DIRNAME = "exploratory_frame_split"
 EXPLORATORY_TAG = "frameSplit_leaked_exploratory"
 TUNED_EPS_AGGREGATION = "frozen_hierarchy_training_frames_only"
 
-# THE MATRIX (plan §2.10, D11): 16 runs and no others. Exp A's radar regressor is
-# deliberately absent — it is not an Exp D baseline, so the owner's sanction does not reach
-# it and running it would be exactly the unauthorized addition the milestone invariant
-# forbids. `session_index` is near-degenerate under a frame split (every test frame's
-# session is trained on) and runs only because the sanction says "every Exp D baseline".
+# THE MATRIX (plan §2.10, D11), amended by explicit owner authorization on 2026-08-28.
+# The original 16 runs remain unchanged; the full Exp-A WST regressor is now added once per
+# band as `radar_wst`. It uses the same quarantine, modal-config refit and train-frame-only
+# fitted-transform rules. `session_index` is near-degenerate under a frame split (every test
+# frame's session is trained on) and runs only because the original sanction said "every Exp
+# D baseline".
 ORDINAL_UNITS = ("arm_a", "arm_b")
-REGRESSION_UNITS = exp_d.EXPD_FAMILIES
+WST_REGRESSION_UNIT = "radar_wst"
+REGRESSION_UNITS = (*exp_d.EXPD_FAMILIES, WST_REGRESSION_UNIT)
 TASK_UNITS = {"ordinal": ORDINAL_UNITS, "regression": REGRESSION_UNITS}
 FRAME_SPLIT_MATRIX = tuple(
     (task, unit, band)
@@ -83,6 +85,15 @@ DEGENERATE_UNITS = ("session_index",)
 
 ORDINAL_METRICS = ("class_unit_mae", "adjacent_accuracy", "quadratic_weighted_kappa", "accuracy")
 REGRESSION_METRICS = ("frame_mae",)
+WST_REGRESSION_METRICS = (
+    "frame_mae",
+    "frame_rmse",
+    "frame_pearson_r",
+    "session_mae",
+    "subject_balanced_session_mae",
+    "session_rmse",
+    "session_pearson_r",
+)
 
 
 class FrameSplitError(ValueError):
@@ -180,12 +191,12 @@ def _lowest_fold_winner(rows, key_of, fold_of):
 
 
 def modal_classical_config(rows) -> dict:
-    """The most-selected (feature_key, family, params) triple of one Exp C arm.
+    """The most-selected classical (feature_key, family, params) triple.
 
-    `rows` are that arm's rows of the LOSO `selection_table_{band}.csv` — the ARTIFACT,
+    `rows` are one Exp C arm or the Exp A LOSO `selection_table_{band}.csv` — the ARTIFACT,
     never a recomputation (plan §5 trap 15): a recomputation could silently diverge from
-    what the LOSO run actually selected. Exp C's fold identity is its held-out subject, so
-    that is the "fold id" the tie-break orders on.
+    what the LOSO run actually selected. The fold identity is its held-out subject, so that
+    is the "fold id" the tie-break orders on.
     """
     usable = [r for r in rows if not (r.get("reason") or "").strip()]
     if not usable:
@@ -248,6 +259,25 @@ def _check_lineage(where, found, expected, field_name) -> None:
         )
 
 
+def _provenance_config_hash(provenance, provenance_path) -> str:
+    """Recover Exp A's config fingerprint from its canonical provenance payload.
+
+    Exp A predates the later run-group schema and therefore records the complete
+    ``config`` mapping instead of duplicating its SHA-256 under ``extra.config_hash``.
+    This is deliberately the same JSON recipe as ``exp_b.config_fingerprint``; hashing
+    the persisted mapping lets the frame-split runner verify the source without weakening
+    the same-config requirement or asking users to edit a historical artifact.
+    """
+    config_payload = provenance.get("config")
+    if not isinstance(config_payload, dict):
+        raise FrameSplitError(
+            f"Exp A provenance {provenance_path} lacks its canonical config mapping"
+        )
+    return hashlib.sha256(
+        json.dumps(config_payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
 def load_source_run(config, band, task, unit, run_dir, *, analysis_commit=None,
                     config_hash=None) -> SourceRun:
     """Read (and validate) the LOSO artifact whose selection this run refits.
@@ -260,18 +290,24 @@ def load_source_run(config, band, task, unit, run_dir, *, analysis_commit=None,
     if not run_dir.is_dir():
         raise FrameSplitError(f"the source LOSO run dir {run_dir} does not exist")
 
-    if task == "ordinal":
+    if task == "ordinal" or unit == WST_REGRESSION_UNIT:
         artifact = run_dir / f"selection_table_{band}.csv"
         if not artifact.is_file():
-            raise FrameSplitError(f"missing Exp C selection table {artifact}")
-        arm = "a" if unit == "arm_a" else "b"
-        resolved = modal_classical_config([r for r in _read_csv_rows(artifact) if r["arm"] == arm])
+            experiment = "Exp C" if task == "ordinal" else "Exp A"
+            raise FrameSplitError(f"missing {experiment} selection table {artifact}")
+        rows = _read_csv_rows(artifact)
+        if task == "ordinal":
+            arm = "a" if unit == "arm_a" else "b"
+            rows = [row for row in rows if row["arm"] == arm]
+        resolved = modal_classical_config(rows)
         provenance_path = run_dir / "provenance.json"
         if not provenance_path.is_file():
             raise FrameSplitError(f"the source LOSO run dir {run_dir} has no provenance.json")
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
         found_commit = (provenance.get("git") or {}).get("commit")
         found_hash = (provenance.get("extra") or {}).get("config_hash")
+        if unit == WST_REGRESSION_UNIT and found_hash is None:
+            found_hash = _provenance_config_hash(provenance, provenance_path)
     else:
         artifact = run_dir / f"selection_{unit}_{band}.csv"
         metrics_path = run_dir / f"metrics_{unit}_{band}.json"
@@ -395,17 +431,9 @@ def _raw_keys(band, feature_key):
     return store_mod.raw77_key(ti), store_mod.order_key(ti)
 
 
-def build_ordinal_frame_table(config, band, sessions, store_dir, feature_key) -> FrameTable:
-    """Per-frame pooled WST vectors at one feature key, reconstructed from the stored RAW
-    tensors (never from the stored session vectors, which are already frame-aggregated).
-
-    For the off/frozen branches the vectors are data-independent and are built once; the
-    tuned branch depends on the fold's training frames, so only its raw tensors are kept and
-    the vectors are rebuilt per fold.
-    """
-    subjects, session_row, session_idx, frame_ids, y = _session_arrays(sessions)
+def _read_raw_wst_sessions(band, sessions, store_dir, feature_key) -> list:
+    """Read the per-frame raw WST tensors at one authenticated feature key."""
     raw_key, order_key = _raw_keys(band, feature_key)
-
     raw = []
     for session in sessions:
         store = store_mod.read_session_store(band, session["subject"], session["session_name"],
@@ -428,6 +456,13 @@ def build_ordinal_frame_table(config, band, sessions, store_dir, feature_key) ->
                 f"{S.shape[0]} raw frames but the QC spine selected {expected}"
             )
         raw.append((S, order))
+    return raw
+
+
+def build_ordinal_frame_table(config, band, sessions, store_dir, feature_key) -> FrameTable:
+    """Per-frame pooled WST vectors for the ordered S0--S4 task."""
+    subjects, session_row, session_idx, frame_ids, y = _session_arrays(sessions)
+    raw = _read_raw_wst_sessions(band, sessions, store_dir, feature_key)
 
     branch = feature_key[-1]
     table = FrameTable(
@@ -436,6 +471,32 @@ def build_ordinal_frame_table(config, band, sessions, store_dir, feature_key) ->
         y_class=np.array([int(s["class_idx"]) for s in sessions], dtype=int)[session_row],
         y_loss=np.array([float(s["loss_l"]) for s in sessions], dtype=float)[session_row],
         raw=raw, branch=branch,
+    )
+    if branch != "tuned":
+        table.x = _ordinal_features(config, band, raw, branch, epsilons=None)
+    return table
+
+
+def build_wst_regression_frame_table(config, band, sessions, store_dir,
+                                     feature_key) -> FrameTable:
+    """Per-frame WST design for the newly authorized full Exp-A regressor.
+
+    Session aggregates in the normal feature store cannot be used here because a random
+    frame split places frames from the same session on both sides. The raw tensors are
+    therefore reconstructed into one pooled vector per frame, exactly as for Exp C.
+    """
+    subjects, session_row, session_idx, frame_ids, y = _session_arrays(sessions)
+    raw = _read_raw_wst_sessions(band, sessions, store_dir, feature_key)
+    branch = feature_key[-1]
+    table = FrameTable(
+        band=band,
+        subjects=subjects,
+        session_row=session_row,
+        session_idx=session_idx,
+        frame_ids=frame_ids,
+        y=y,
+        raw=raw,
+        branch=branch,
     )
     if branch != "tuned":
         table.x = _ordinal_features(config, band, raw, branch, epsilons=None)
@@ -552,10 +613,8 @@ def _summarize(per_fold, metric_names) -> dict:
     return out
 
 
-def _fit_ordinal_fold(config, band, table, resolved, train_idx, test_idx, *, seed):
-    """One leaky fold of an Exp C arm: rebuild the tuned-ε features from training frames if
-    the modal config's branch calls for it, refit the modal estimator, score the held-out
-    frames."""
+def _wst_fold_design(config, band, table, train_idx):
+    """Return the WST design, fitting tuned epsilon on training frames only."""
     epsilons = None
     if table.branch == "tuned":
         train_mask = np.zeros(len(table.subjects), dtype=bool)
@@ -575,6 +634,12 @@ def _fit_ordinal_fold(config, band, table, resolved, train_idx, test_idx, *, see
         x = _ordinal_features(config, band, table.raw, table.branch, epsilons=epsilons)
     else:
         x = table.x
+    return x, epsilons
+
+
+def _fit_ordinal_fold(config, band, table, resolved, train_idx, test_idx, *, seed):
+    """One leaky fold of an Exp C arm using only train-fitted quantities."""
+    x, epsilons = _wst_fold_design(config, band, table, train_idx)
 
     y = np.column_stack([table.y_loss, table.y_class.astype(float)])
     estimator = build_estimator(resolved["family"], resolved["params"], seed=seed)
@@ -586,6 +651,76 @@ def _fit_ordinal_fold(config, band, table, resolved, train_idx, test_idx, *, see
     state["scaler_mean_"] = np.asarray(scaler.mean_, dtype=float)
     state["scaler_scale_"] = np.asarray(scaler.scale_, dtype=float)
     metrics = _ordinal_fold_metrics(table.y_class[test_idx], predictions)
+    metrics["tuned_epsilon"] = ([float(epsilons[1]), float(epsilons[2])]
+                                if epsilons is not None else None)
+    metrics["fitted_state_sha256"] = _state_sha256(state)
+    return metrics
+
+
+def _finite_pearson_r(truth, prediction) -> float:
+    truth = np.asarray(truth, dtype=float)
+    prediction = np.asarray(prediction, dtype=float)
+    if truth.size < 2 or truth.std(ddof=0) == 0.0 or prediction.std(ddof=0) == 0.0:
+        return float("nan")
+    return float(np.corrcoef(truth, prediction)[0, 1])
+
+
+def _wst_regression_fold_metrics(table, test_idx, predictions) -> dict:
+    """Frame metrics plus within-fold session aggregation for comparison with LOSO.
+
+    The session metrics take the median prediction over that fold's held-out frames from
+    each represented session. They remain leaky because other frames from those sessions
+    are in training; their purpose is only to put the protocol comparison on the same
+    session scale as Exp A, never to estimate generalization.
+    """
+    truth = np.asarray(table.y[test_idx], dtype=float)
+    predictions = np.asarray(predictions, dtype=float)
+    if truth.shape != predictions.shape or truth.size == 0:
+        raise FrameSplitError("WST regression fold has empty or misaligned predictions")
+
+    session_truth, session_prediction, session_subject = [], [], []
+    test_session_rows = table.session_row[test_idx]
+    for session_row in sorted(set(test_session_rows.tolist())):
+        mask = test_session_rows == session_row
+        values = truth[mask]
+        if not np.all(values == values[0]):
+            raise FrameSplitError("one session carries different regression targets")
+        session_truth.append(float(values[0]))
+        session_prediction.append(float(np.median(predictions[mask])))
+        session_subject.append(int(table.subjects[test_idx][mask][0]))
+
+    session_truth = np.asarray(session_truth, dtype=float)
+    session_prediction = np.asarray(session_prediction, dtype=float)
+    session_subject = np.asarray(session_subject, dtype=int)
+    session_absolute_error = np.abs(session_truth - session_prediction)
+    per_subject_mae = [
+        float(session_absolute_error[session_subject == subject].mean())
+        for subject in sorted(set(session_subject.tolist()))
+    ]
+    return {
+        "frame_mae": float(np.mean(np.abs(truth - predictions))),
+        "frame_rmse": float(np.sqrt(np.mean((truth - predictions) ** 2))),
+        "frame_pearson_r": _finite_pearson_r(truth, predictions),
+        "session_mae": float(session_absolute_error.mean()),
+        "subject_balanced_session_mae": float(np.mean(per_subject_mae)),
+        "session_rmse": float(np.sqrt(np.mean((session_truth - session_prediction) ** 2))),
+        "session_pearson_r": _finite_pearson_r(session_truth, session_prediction),
+        "n_test_sessions": int(session_truth.size),
+    }
+
+
+def _fit_wst_regression_fold(config, band, table, resolved, train_idx, test_idx, *, seed):
+    """Refit the modal full-WST Exp-A estimator on one leaky random-frame fold."""
+    x, epsilons = _wst_fold_design(config, band, table, train_idx)
+    estimator = build_estimator(resolved["family"], resolved["params"], seed=seed)
+    estimator.fit(x[train_idx], table.y[train_idx])
+    predictions = np.asarray(estimator.predict(x[test_idx]), dtype=float)
+
+    state = dict(fitted_state_params(resolved["family"], estimator.named_steps["model"]))
+    scaler = estimator.named_steps["scaler"]
+    state["scaler_mean_"] = np.asarray(scaler.mean_, dtype=float)
+    state["scaler_scale_"] = np.asarray(scaler.scale_, dtype=float)
+    metrics = _wst_regression_fold_metrics(table, test_idx, predictions)
     metrics["tuned_epsilon"] = ([float(epsilons[1]), float(epsilons[2])]
                                 if epsilons is not None else None)
     metrics["fitted_state_sha256"] = _state_sha256(state)
@@ -650,7 +785,7 @@ def _fit_cheap_fold(unit, table, train_idx, test_idx):
 def run_frame_split(config, band, task, unit, k=5, *, source_run_dir, sessions=None,
                     store_dir=None, analysis_commit=None, config_hash=None,
                     device=None) -> FrameSplitResult:
-    """One of the 16 sanctioned exploratory runs: refit the unit's modal LOSO configuration
+    """One of the sanctioned exploratory runs: refit the unit's modal LOSO configuration
     on 80% of pooled shuffled frames, score the held-out 20%, five times.
 
     NOT a nested search (Step 0 item 2): the owner asked for paper-comparable numbers for
@@ -661,8 +796,8 @@ def run_frame_split(config, band, task, unit, k=5, *, source_run_dir, sessions=N
     if (task, unit, band) not in FRAME_SPLIT_MATRIX:
         raise FrameSplitError(
             f"({task!r}, {unit!r}, {band!r}) is not one of the {len(FRAME_SPLIT_MATRIX)} "
-            "sanctioned exploratory runs — the owner's decision covers Exp C and every Exp D "
-            "baseline, and nothing else (Exp A in particular is NOT authorized)"
+            "sanctioned exploratory runs — the matrix covers Exp C, every Exp D baseline, "
+            "and the separately authorized full-WST Exp A refit"
         )
     store_dir = config.paths.results_dir if store_dir is None else store_dir
     device = config.run.device if device is None else device
@@ -681,6 +816,11 @@ def run_frame_split(config, band, task, unit, k=5, *, source_run_dir, sessions=N
         table = build_ordinal_frame_table(config, band, sessions, store_dir,
                                           resolved["feature_key"])
         metric_names = ORDINAL_METRICS
+    elif unit == WST_REGRESSION_UNIT:
+        table = build_wst_regression_frame_table(
+            config, band, sessions, store_dir, resolved["feature_key"]
+        )
+        metric_names = WST_REGRESSION_METRICS
     elif unit in cnn.CNN_FAMILIES:
         frames = exp_d.build_frames_d(config, band, unit, sessions, store_dir)
         table = FrameTable(band=band, subjects=frames.subjects, session_row=frames.session_row,
@@ -708,6 +848,11 @@ def run_frame_split(config, band, task, unit, k=5, *, source_run_dir, sessions=N
             # "first-seed" convention O-M9-1 uses for the ordinal tie-break's QWK.
             metrics = _fit_ordinal_fold(config, band, table, resolved, train_idx, test_idx,
                                         seed=int(config.run.seed_set[0]))
+        elif unit == WST_REGRESSION_UNIT:
+            metrics = _fit_wst_regression_fold(
+                config, band, table, resolved, train_idx, test_idx,
+                seed=int(config.run.seed_set[0]),
+            )
         elif unit in cnn.CNN_FAMILIES:
             metrics = _fit_cnn_fold(config, band, unit, frames, resolved, train_idx, test_idx,
                                     seed=int(config.run.seed) + FIT_SEED_OFFSET + j,
@@ -720,6 +865,15 @@ def run_frame_split(config, band, task, unit, k=5, *, source_run_dir, sessions=N
     notes = {}
     if unit in DEGENERATE_UNITS:
         notes["degenerate_by_construction"] = True
+    if unit == WST_REGRESSION_UNIT:
+        notes.update({
+            "scientific_status": "leaky_protocol_demonstration_only",
+            "session_metrics": (
+                "median over each fold's held-out frames per session; other frames from the "
+                "same subject/session remain in training"
+            ),
+            "not_directly_comparable_to_loso": True,
+        })
     return FrameSplitResult(
         band=band, task=task, unit=unit, k=int(k), kfold_random_state=random_state,
         n_frames=len(identities), n_subjects=len(set(table.subjects.tolist())),
@@ -728,8 +882,12 @@ def run_frame_split(config, band, task, unit, k=5, *, source_run_dir, sessions=N
         resolved_config=resolved, source_run=source.as_dict(),
         frame_order_sha256=exp_d._sha256_lines(identities),
         fold_assignment_sha256=exp_d._sha256_lines(assignment),
-        tuned_eps_aggregation=(TUNED_EPS_AGGREGATION
-                               if task == "ordinal" and table.branch == "tuned" else None),
+        tuned_eps_aggregation=(
+            TUNED_EPS_AGGREGATION
+            if (task == "ordinal" or unit == WST_REGRESSION_UNIT)
+            and table.branch == "tuned"
+            else None
+        ),
         notes=notes,
     )
 

@@ -1,0 +1,9 @@
+# Paths-only IBEX overlay for the owner's sosagojm account. Raw inputs are reused from
+# the completed diagnostic checkout; this project writes its own feature stores and run
+# artifacts under dehydration_radar_2, so neither repository can overwrite the other's
+# results. No scientific or modelling parameter is changed by this overlay.
+paths:
+  data_10ghz_dir: /ibex/user/sosagojm/dehydration_loso_diagnostic/data/10ghz
+  data_77ghz_dir: /ibex/user/sosagojm/dehydration_loso_diagnostic/data/77ghz
+  weight_xlsx: /ibex/user/sosagojm/dehydration_loso_diagnostic/data/weight/metadata_subjects_info.xlsx
+  results_dir: /ibex/user/sosagojm/dehydration_radar_2/results

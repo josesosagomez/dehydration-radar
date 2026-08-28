@@ -25,6 +25,8 @@ mkdir -p logs
 
 export HDF5_USE_FILE_LOCKING=FALSE
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-4}
+IBEX_CONFIG=${IBEX_CONFIG:-configs/ibex.yaml}
+[[ -f "$IBEX_CONFIG" ]] || { echo "ERROR: missing $IBEX_CONFIG" >&2; exit 2; }
 
 if [ -x .venv/bin/python ]; then
   PYTHON=(.venv/bin/python)
@@ -53,5 +55,5 @@ echo "task ${SLURM_ARRAY_TASK_ID} -> subject ${SUBJECT} ${SESSION}  (${PYTHON[*]
 
 "${PYTHON[@]}" experiments/extract_features.py \
   --config configs/exp_a_regression_77ghz.yaml \
-  --config configs/ibex.yaml \
+  --config "$IBEX_CONFIG" \
   --band 77ghz --subject "${SUBJECT}" --session "${SESSION}"
