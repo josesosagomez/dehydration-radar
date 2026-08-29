@@ -1,0 +1,495 @@
+{
+  "analysis_role": "descriptive_radar_only_quality_audit",
+  "census": {
+    "n_eligible_sessions": 73,
+    "n_frames": 8000,
+    "n_repeatability_analysable": 71,
+    "n_sessions": 80,
+    "n_subjects": 16
+  },
+  "config": {
+    "absent_remote_artifacts": [
+      "experiment_c_authoritative",
+      "experiment_d_authoritative"
+    ],
+    "data_10ghz_dir": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\data\\10ghz",
+    "epsilon_distance_factor": 1e-12,
+    "epsilon_path_factor": 1e-12,
+    "existing_qc_report": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\qc\\qc_survival_10ghz.csv",
+    "existing_results_dir": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results",
+    "expected_frames_per_session": 100,
+    "expected_subjects": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "frames_per_block": 20,
+    "min_passing_frames_per_block": 10,
+    "n_blocks": 5,
+    "output_figures_dir": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_10ghz",
+    "output_results_dir": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz",
+    "preprocess": {
+      "bandwidth_hz": 500000000.0,
+      "butter_order": 4,
+      "chirp_time_s": 0.001024,
+      "edge_trim": 32,
+      "fft_gate_transition_hz": 500.0,
+      "fs_hz": 520834.0,
+      "gate_method": "butterworth",
+      "mask_taper": true,
+      "model_gate_m": [
+        1.0,
+        2.0
+      ],
+      "peak_neighbors": 1,
+      "standardize": "robust"
+    },
+    "qc": {
+      "flatline_max_bin_fraction": 0.25,
+      "histogram_bins": 200,
+      "in_band_margin_hz": 1000.0,
+      "min_frame_fraction": 0.5,
+      "min_in_band_energy_ratio": 0.3,
+      "qc_gate_m": [
+        0.9,
+        3.0
+      ],
+      "rms_robust_z_threshold": 4.5
+    },
+    "wst": {
+      "backend": "numpy",
+      "log_epsilon": 1e-06,
+      "max_order": 2,
+      "tilings": [
+        {
+          "invariance_ms": 0.2,
+          "q": [
+            10,
+            4
+          ]
+        },
+        {
+          "invariance_ms": 0.3,
+          "q": [
+            8,
+            2
+          ]
+        },
+        {
+          "invariance_ms": 0.4,
+          "q": [
+            6,
+            2
+          ]
+        }
+      ]
+    }
+  },
+  "git": {
+    "branch": "codex/10ghz-session-quality-audit",
+    "commit": "bc5832b582e2d705c97bf7f445ba48fd38a4b2d3",
+    "dirty": false
+  },
+  "inputs": {
+    "radar_files": [
+      {
+        "rel_path": "subject_1_8am.mat",
+        "sha256": "3283458130b7672f559ff3992726506f363218faca54f0057d0973da278ca94d"
+      },
+      {
+        "rel_path": "subject_1_10am.mat",
+        "sha256": "878b43f5ebe25a8abc78adf648a77ebb7d0c0507bf0223d77e70f2f8958f256c"
+      },
+      {
+        "rel_path": "subject_1_12pm.mat",
+        "sha256": "e001d237ff933634551866b352a61828038d326ac26306d83401d8b56edd63c6"
+      },
+      {
+        "rel_path": "subject_1_2pm.mat",
+        "sha256": "f66dd1a63e69a82442aafe3e31bf94081c2fdd09bae7ab52a756ef159c158ec6"
+      },
+      {
+        "rel_path": "subject_1_4pm.mat",
+        "sha256": "cf8297bda0b1d275789953c97a34c767591bddfccfd044899241ac8f2c13376c"
+      },
+      {
+        "rel_path": "subject_2_8am.mat",
+        "sha256": "033c74460bcd14b7cd1d924cf9fb20606b806e12054074c1fd26505bd085594d"
+      },
+      {
+        "rel_path": "subject_2_10am.mat",
+        "sha256": "d4bd4b917a4416ff8ff85b4e6655e7d320a60aae5c2b9cfe24a15b0ca315027d"
+      },
+      {
+        "rel_path": "subject_2_12pm.mat",
+        "sha256": "c77bf6bd760d09e7e8f1643448f554e898a5114d3cd13818826eb3a7b8bb0a1d"
+      },
+      {
+        "rel_path": "subject_2_2pm.mat",
+        "sha256": "debf5e6e7ca9862162fd30705de6420b156de2cefebc72bdb65688c5c77e9c4e"
+      },
+      {
+        "rel_path": "subject_2_4pm.mat",
+        "sha256": "968cfc8c6dd6b8dc4be3c24c95cb4b903c54a033dbd34ff149e535196dd023cc"
+      },
+      {
+        "rel_path": "subject_3_8am.mat",
+        "sha256": "fbae832a28cb849d5c0ea15468f953d0329599178a8360f27258598a3a22f81c"
+      },
+      {
+        "rel_path": "subject_3_10am.mat",
+        "sha256": "eb8b56b0e0d3be9c2fd50471e5371b1eb86c13b282ea5d71b226e502f3100fa1"
+      },
+      {
+        "rel_path": "subject_3_12pm.mat",
+        "sha256": "0fe7964da103678c1e90302a6b4f890514ae4f2663a48f122fde9f234b745789"
+      },
+      {
+        "rel_path": "subject_3_2pm.mat",
+        "sha256": "b480c9ba1d8da5fe0b21a6d8c1a12286f56c64134e99b0c665599d70bb3f8f6a"
+      },
+      {
+        "rel_path": "subject_3_4pm.mat",
+        "sha256": "a2a08c21f7465ff20b9fb1b218ee702aa49418425989161df3e4e33e510e6ec2"
+      },
+      {
+        "rel_path": "subject_4_8am.mat",
+        "sha256": "938e62091a84afc8089336e8334edf538f592d4839ddc2095fc87f07df057f89"
+      },
+      {
+        "rel_path": "subject_4_10am.mat",
+        "sha256": "3cabe7eb144953312da1a0dfcdbd046040dcd44806dd6091f280ad1badf732b6"
+      },
+      {
+        "rel_path": "subject_4_12pm.mat",
+        "sha256": "41cbe5f4a349783ef678efa102d74af0ef88c5289edd8955f5204b71859b048a"
+      },
+      {
+        "rel_path": "subject_4_2pm.mat",
+        "sha256": "2a21f2afb15273f5410c031a94d3943760a9d209000a01e8778ed8b90ba6a0ce"
+      },
+      {
+        "rel_path": "subject_4_4pm.mat",
+        "sha256": "8afc0d4b57c59f3cd68dd676c06804eba9548a2c93a690c6869a153587f714ba"
+      },
+      {
+        "rel_path": "subject_5_8am.mat",
+        "sha256": "dc3ac9ac0ec03e4c86cdb0884bb2ea0c6b9a07e70d0f0b9027bfce1c2c2192b6"
+      },
+      {
+        "rel_path": "subject_5_10am.mat",
+        "sha256": "6b70532b28a4e98644b3d7ea4cb84fb9ed703e5fa426d2f7f7150ea3fd7131b0"
+      },
+      {
+        "rel_path": "subject_5_12pm.mat",
+        "sha256": "4bab31fb9ffb44460d792776d9fe23cded592c04287c8f9527d8295958c183aa"
+      },
+      {
+        "rel_path": "subject_5_2pm.mat",
+        "sha256": "05271b74b93b9f315b480b07573b47e5d0674e46fd93eed74e4875c5ac753c99"
+      },
+      {
+        "rel_path": "subject_5_4pm.mat",
+        "sha256": "67d796b8ee222bfa165fee7271d2e4dbd6185f49794794b10c41d571cf082fd0"
+      },
+      {
+        "rel_path": "subject_6_8am.mat",
+        "sha256": "060c979f3d7ade00ee91b5763eaf82ff29818001c7e44c53d81c2876a3c31c8d"
+      },
+      {
+        "rel_path": "subject_6_10am.mat",
+        "sha256": "544ccfb02a6132c2af61cc8b30353a7115a4ed0a604f82de903fac2bdf6d442f"
+      },
+      {
+        "rel_path": "subject_6_12pm.mat",
+        "sha256": "a2d7033e44c191d5c6481691b8f5ea2f711a08c6c315f306371aeb7c623ce0f0"
+      },
+      {
+        "rel_path": "subject_6_2pm.mat",
+        "sha256": "f969112ab7931c8bff2458702193f4eade0e7f34a9e8b65709a577a82105562a"
+      },
+      {
+        "rel_path": "subject_6_4pm.mat",
+        "sha256": "4a82b031f04ca309fdd00fcbc0ca28ad4ad2c09d9db7b75347dd0b060762e2af"
+      },
+      {
+        "rel_path": "subject_7_8am.mat",
+        "sha256": "9432f3739ef3ddebcae9a6a7ace3fd6284a70a52d1c1b5f274676f9b0d6d7c4c"
+      },
+      {
+        "rel_path": "subject_7_10am.mat",
+        "sha256": "47fe61554e95e06c2da17b89c3400e6336b4b85da22449cdf0763498f6852cb4"
+      },
+      {
+        "rel_path": "subject_7_12pm.mat",
+        "sha256": "c0de72203330efa984777784d4d48091c1a4c2f359be0b3e10f00d261c7644ab"
+      },
+      {
+        "rel_path": "subject_7_2pm.mat",
+        "sha256": "5ac6e826128f6406bee7ca1c9b1b1e0bd5017d9c020767ea15860f6a198c8383"
+      },
+      {
+        "rel_path": "subject_7_4pm.mat",
+        "sha256": "e211b1823da93ea1c2dc8c23c8957758224ddc32e617f9a4e885bfcf10bff016"
+      },
+      {
+        "rel_path": "subject_8_8am.mat",
+        "sha256": "c27f9c3c003f848cf88de8cc845f9b7358a2b76f3c6ed882e7681278f19acec8"
+      },
+      {
+        "rel_path": "subject_8_10am.mat",
+        "sha256": "6b922b36b0438a8c0ea2c969837dc986fc10aa9b7670903b9776d0383bd8d720"
+      },
+      {
+        "rel_path": "subject_8_12pm.mat",
+        "sha256": "dccd7770d070ca05c322177e485967f9d469f1a1f679d0c051a89d8d181bc550"
+      },
+      {
+        "rel_path": "subject_8_2pm.mat",
+        "sha256": "02f83a1706460313dd872a1a75562b19868fdf92ffb2ddf491c8380c488c7e36"
+      },
+      {
+        "rel_path": "subject_8_4pm.mat",
+        "sha256": "2e936776cc3db57c936f7e1ce7090f35e62712e3304973b5dedc6296ff826177"
+      },
+      {
+        "rel_path": "subject_9_8am.mat",
+        "sha256": "fe3b345cf1f081246b7d33c1f03b72841a48344b83594cd7dafa048583ac8e94"
+      },
+      {
+        "rel_path": "subject_9_10am.mat",
+        "sha256": "b2e67eaf0be561dad62c8cda86311e4d43e9629af0ba3b09ce1e3b095dc00a70"
+      },
+      {
+        "rel_path": "subject_9_12pm.mat",
+        "sha256": "9073618f1cfd27e6e064d2a18fa5dfc6b1bf8021ce2790765863550b6fae7415"
+      },
+      {
+        "rel_path": "subject_9_2pm.mat",
+        "sha256": "92f1762c53170d65574786a62efa506d876515fddcd078835fb2709f3a87061f"
+      },
+      {
+        "rel_path": "subject_9_4pm.mat",
+        "sha256": "af69cd9aa2a539f898bc3f02dc52261ea588b8ed95a8c1efe94d03be0d25562c"
+      },
+      {
+        "rel_path": "subject_10_8am.mat",
+        "sha256": "02b8236e50713683a51d25fde366e8bb1e86b3a02edb611661f6e14d3df588d4"
+      },
+      {
+        "rel_path": "subject_10_10am.mat",
+        "sha256": "7052957de33786a9a0692f01f8b46b8a1129d00aa63e632271c4ce1420184d86"
+      },
+      {
+        "rel_path": "subject_10_12pm.mat",
+        "sha256": "a7dc2d9e5ab890945ba32c21e55652defb5dfe5b36cc55898192ec89ca34820c"
+      },
+      {
+        "rel_path": "subject_10_2pm.mat",
+        "sha256": "41bac611712f7b48952c1f44d73366a6aff520fe24df4754f530376f584693ec"
+      },
+      {
+        "rel_path": "subject_10_4pm.mat",
+        "sha256": "f400892f9b7c4acdeac944e1cd8536b28893d87a029e1b727cd2ef03c69b972c"
+      },
+      {
+        "rel_path": "subject_11_8am.mat",
+        "sha256": "344db74c2835d4a84c14e4d47db1d17f8021e476543ada6158c0901dc7be76e2"
+      },
+      {
+        "rel_path": "subject_11_10am.mat",
+        "sha256": "ed4d7a17a12a4ad87752dc36d3cb9cf0bf41d73d02430d0c20f62145b5ac7517"
+      },
+      {
+        "rel_path": "subject_11_12pm.mat",
+        "sha256": "b8c00554753c225879e5124d5d88b49843a01453884686f969e405bc662f589f"
+      },
+      {
+        "rel_path": "subject_11_2pm.mat",
+        "sha256": "48e66148217f131d21b3588817daef07a1e995eb2581b583b037807056703abd"
+      },
+      {
+        "rel_path": "subject_11_4pm.mat",
+        "sha256": "c58b324e9bb6dfbc93bdb861af65ef65cb9b94c2dd4faf6abf62e35ddc3d9fcd"
+      },
+      {
+        "rel_path": "subject_12_8am.mat",
+        "sha256": "25f2729aa1411aaa433f16891a9c512598a103ff9cbba16d6a5d52f7a70b902a"
+      },
+      {
+        "rel_path": "subject_12_10am.mat",
+        "sha256": "f21c1152de52867549050c6393cba16365e0931975d949ea42da0990440aaedc"
+      },
+      {
+        "rel_path": "subject_12_12pm.mat",
+        "sha256": "ffd5ddd309489044fe1ecef5892d5c44c40e69f5865e7e261e36fce062ff3cda"
+      },
+      {
+        "rel_path": "subject_12_2pm.mat",
+        "sha256": "06d86a699df65082dd30fdb7e6e9e7464ad8122d056c67816b830134a3fb6961"
+      },
+      {
+        "rel_path": "subject_12_4pm.mat",
+        "sha256": "6ab08dacf554403a116095d1e73c40337d4113cbb3b981e8c403bb7d4b02b515"
+      },
+      {
+        "rel_path": "subject_13_8am.mat",
+        "sha256": "0d9fc20c5db7f29c8910da9107cc3a113fb867cceddc84c0e5ccbf03ead2dada"
+      },
+      {
+        "rel_path": "subject_13_10am.mat",
+        "sha256": "2ef4bfcb8b38acee93f5b7df3ebed61c310c363f7ee43eb548e271a01893edf2"
+      },
+      {
+        "rel_path": "subject_13_12pm.mat",
+        "sha256": "84a635374fad1ad7a8fe059ca8bdc48c6fe92c961bc23850ecec6ec279f53dc2"
+      },
+      {
+        "rel_path": "subject_13_2pm.mat",
+        "sha256": "2d94b3fe23d328b40bc3d09aa8f4f4d61f91e3293b1283d8ba9e57d3f2c273cb"
+      },
+      {
+        "rel_path": "subject_13_4pm.mat",
+        "sha256": "273822a904cb234acc2288eb7202b4fc3f5d6908ceee4f1d9278f9feb6a25a9d"
+      },
+      {
+        "rel_path": "subject_14_8am.mat",
+        "sha256": "74c6e008b133b820abd966e1c0aa5d25dc022720181c71b58f6ae7d88fc56a90"
+      },
+      {
+        "rel_path": "subject_14_10am.mat",
+        "sha256": "0788cdaf424703146374f12a53e980b1e17b9ac0c7ef4e710874bb5314f69f64"
+      },
+      {
+        "rel_path": "subject_14_12pm.mat",
+        "sha256": "5b31987cdf832837b61e7643d5a80c92d4c71a33ea7a3d6fd63c2961425ab4a8"
+      },
+      {
+        "rel_path": "subject_14_2pm.mat",
+        "sha256": "90a499061a545ec9771b5538de937bec132adf122df8408ffdde816685932cb7"
+      },
+      {
+        "rel_path": "subject_14_4pm.mat",
+        "sha256": "c9c6d4043dd1ba78e2ff981d701de819d335277bbddee66c296d1e81f5da5b52"
+      },
+      {
+        "rel_path": "subject_15_8am.mat",
+        "sha256": "180065d737bb1c1f64ad1f0ba5c08abcb0bca5e5f63858fe5b9dcd384e479b2c"
+      },
+      {
+        "rel_path": "subject_15_10am.mat",
+        "sha256": "9527b10c4900688bc3291af33edb587ea9328a49081f8bf3455dccdc22202318"
+      },
+      {
+        "rel_path": "subject_15_12pm.mat",
+        "sha256": "fc44521d8ddf08da15eee467a7eccc3fd69083afec72d673b53ccc6e53fad749"
+      },
+      {
+        "rel_path": "subject_15_2pm.mat",
+        "sha256": "c46f9da14a52901f1478e025663fe4f3646c516c6dc2547662c7ee88b1bfca60"
+      },
+      {
+        "rel_path": "subject_15_4pm.mat",
+        "sha256": "519bdc939c0cc5450b05e93b8870b6b15b1bb9e30f04139ee30434464e4be147"
+      },
+      {
+        "rel_path": "subject_16_8am.mat",
+        "sha256": "09aeeb604bd709aeb075d83c11df4b40cf911eb3c90f71a7eb6b2647f95ef37d"
+      },
+      {
+        "rel_path": "subject_16_10am.mat",
+        "sha256": "79c71b6771ec10739614d3245c5f9056325e91204c2754fb5797137de5601dbf"
+      },
+      {
+        "rel_path": "subject_16_12pm.mat",
+        "sha256": "901469bb6ce698277ab60bc02f1ea7b62499283bd7e36698c5418ead1638c0e8"
+      },
+      {
+        "rel_path": "subject_16_2pm.mat",
+        "sha256": "bc5f9634d34ea0834465aa3a367858745509f9cc5ed1a89a95492b788eeb058a"
+      },
+      {
+        "rel_path": "subject_16_4pm.mat",
+        "sha256": "cbf1ab7e1160f4c6770502714fba04933f4ef4996428ae253891825ba371d2d0"
+      }
+    ],
+    "source_artifacts": {
+      "base_config": {
+        "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\configs\\exp_a_regression.yaml",
+        "resolved_mapping_sha256": "96b31875cc316b42c789e5c2bfc3851e50e67934884c3ae1c66149c88855f076",
+        "sha256": "d5ebd36e99d425857790c2f2ea93f11fae677e791d885e039fb5137c30959a06"
+      },
+      "existing_qc_report": {
+        "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\qc\\qc_survival_10ghz.csv",
+        "sha256": "ac9fbcc7035b54f88c15d607a7c311976abad2147656ed396a829faa0887b03c"
+      }
+    }
+  },
+  "interpretation": "High repeatability means stable radar structure within an acquisition; it does not prove hydration validity and does not change sample eligibility.",
+  "outputs": {
+    "block_quality": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\block_quality.csv",
+      "sha256": "c9198aa1bcb4e1b4f2331b35a3db0b1fcbd42f11b2b97de88b7ac5f8b09a301c"
+    },
+    "component_heatmap": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_10ghz\\session_component_heatmap.png",
+      "sha256": "85f0b719e0edb7bc4ab081f2eaba1715190c42339ea378c278392f75933ae954"
+    },
+    "frozen_inputs": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\frozen_inputs_before.json",
+      "sha256": "360408ae4967488429b0c5c8df12081d6537dad6fe5f255d33dfb1c9917a15a3"
+    },
+    "repeatability": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\wst_block_repeatability.csv",
+      "sha256": "6696678d92a68817a2c755c07b0b459feb509f2ea8c366716ec05f0daa1af37b"
+    },
+    "session_quality": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\session_quality_all_80.csv",
+      "sha256": "1f75a61601ac7e2b9d7debad5ad8a67afd418c66b7652365622152f40df085da"
+    },
+    "subject_10": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_10ghz\\subject_10_quality_card.png",
+      "sha256": "efed357753e184d269db44b76d91f2ad1db6926288998a3dcc858c6dc5f928f4"
+    },
+    "subject_relative": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\subject_relative_quality.csv",
+      "sha256": "58c1a6f6b0994b009249d1bc0b484a5d71ec8d58d0d965fd6cb55b8d9b6a7819"
+    }
+  },
+  "packages": {
+    "PyYAML": "6.0.3",
+    "h5py": "3.16.0",
+    "kymatio": "0.3.0",
+    "matplotlib": "3.11.1",
+    "numpy": "2.4.6",
+    "openpyxl": "3.1.5",
+    "pandas": "3.0.3",
+    "pytest": "9.1.1",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.16.3",
+    "torch": "2.13.0"
+  },
+  "platform": {
+    "cpu_model": "Intel64 Family 6 Model 165 Stepping 2, GenuineIntel",
+    "machine": "AMD64",
+    "python": "3.11.15",
+    "release": "10",
+    "slurm_nodelist": null,
+    "system": "Windows"
+  },
+  "schema_version": "quality_10ghz_radar_provenance_v1",
+  "timestamp_utc": "2026-08-29T12:42:57.097119+00:00"
+}

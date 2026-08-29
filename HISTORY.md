@@ -4,7 +4,7 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
-## 2026-08-29 — 10 GHz session-quality audit: pre-commit provenance and mass-quarantine repair
+## 2026-08-29 — 10 GHz session-quality audit: clean production run and final verification
 
 Final independent review found that radar provenance was querying Git only after the audit had
 created its approved output files. On a checkout where those outputs are visible to Git, a clean
@@ -21,8 +21,17 @@ input/workbook, and runs that separated stage again. Every radar-only byte remai
 set of changed paths is constrained to the equal-mass CSV, PNG, and provenance. The equal-mass
 writer was factored into one explicit post-radar function so the production runner and test share
 the same boundary. Focused verification succeeded: **32 passed, 1 real-data test skipped** in
-5.37 s with the pinned `.venv` interpreter. No production artifacts were regenerated during this
-repair; the clean committed regeneration and its success journal entry remain a later step.
+5.37 s with the pinned `.venv` interpreter. The earlier dirty-provenance outputs were moved to
+`archive/results/quality_10ghz_dirty_provenance_20260829/` before regeneration. The clean
+production run was then made from commit `bc5832b582e2d705c97bf7f445ba48fd38a4b2d3`, with
+`dirty=false`: 80 sessions were inventoried, 71 were `REPEATABILITY_ANALYSABLE`, 2 were
+`REVIEW_BLOCK_COVERAGE`, and 7 were `INELIGIBLE_EXISTING_QC`. The generated row counts were
+80 session cards, 400 block rows, 2,880 WST rows, 25,920 relative rows, and 288 recorded-
+equal-mass rows. Subject 10 passed 100/100 frames in every session; its 12pm recording was
+strong and stable, while 4pm was the clearest review candidate. The recorded-equal-mass
+sanity pair for Subject 10 was 8am–10am and remained a review aid only. Final checks were **32 focused
+tests passed, 1 skipped; mass-quarantine integration test passed; 383 critical tests passed,
+10 skipped**. The frozen 317 pre-existing files were unchanged.
 
 ## 2026-08-29 — 10 GHz session-quality audit implementation: review repairs and final verification
 

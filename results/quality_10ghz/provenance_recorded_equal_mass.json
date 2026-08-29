@@ -1,0 +1,54 @@
+{
+  "analysis_role": "separate_recorded_equal_mass_sanity_view",
+  "ground_truth": {
+    "rel_path": "metadata_subjects_info.xlsx",
+    "sha256": "da309e6b3bf8a9d93f696b3164a68f3386b5bac125c6cd241654ecfa72bf24b3"
+  },
+  "n_recorded_equal_mass_pairs": 8,
+  "outputs": {
+    "figure": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_10ghz\\recorded_equal_mass_sanity.png",
+      "sha256": "5d2c3cd6044d1a8a27a8d74d7ce8ca1fb6a7535c5be67c0ec79ac6bdadd5fca4"
+    },
+    "table": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\recorded_equal_mass_sanity.csv",
+      "sha256": "b25a2f638e3287d8fc6962911f91fa45af54f55b53525606e1ca5ecd6e63969f"
+    }
+  },
+  "radar_artifacts": {
+    "block_quality": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\block_quality.csv",
+      "sha256": "c9198aa1bcb4e1b4f2331b35a3db0b1fcbd42f11b2b97de88b7ac5f8b09a301c"
+    },
+    "component_heatmap": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_10ghz\\session_component_heatmap.png",
+      "sha256": "85f0b719e0edb7bc4ab081f2eaba1715190c42339ea378c278392f75933ae954"
+    },
+    "frozen_inputs": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\frozen_inputs_before.json",
+      "sha256": "360408ae4967488429b0c5c8df12081d6537dad6fe5f255d33dfb1c9917a15a3"
+    },
+    "provenance_radar": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\provenance_radar.json",
+      "sha256": "8c773da49218417907a82060a6b3e2b9abe9fc8385581a64703111eb9d12c980"
+    },
+    "repeatability": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\wst_block_repeatability.csv",
+      "sha256": "6696678d92a68817a2c755c07b0b459feb509f2ea8c366716ec05f0daa1af37b"
+    },
+    "session_quality": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\session_quality_all_80.csv",
+      "sha256": "1f75a61601ac7e2b9d7debad5ad8a67afd418c66b7652365622152f40df085da"
+    },
+    "subject_10": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_10ghz\\subject_10_quality_card.png",
+      "sha256": "efed357753e184d269db44b76d91f2ad1db6926288998a3dcc858c6dc5f928f4"
+    },
+    "subject_relative": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\subject_relative_quality.csv",
+      "sha256": "58c1a6f6b0994b009249d1bc0b484a5d71ec8d58d0d965fd6cb55b8d9b6a7819"
+    }
+  },
+  "schema_version": "quality_10ghz_recorded_equal_mass_provenance_v1",
+  "warning": "Recorded equality is rounded body mass, not proof of unchanged physiology. This output cannot set QC, exclusion, WST choice, or training weight."
+}

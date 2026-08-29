@@ -654,6 +654,32 @@ it claims to be. The two independence properties — batched equals single-frame
 extraction is deterministic under a fixed seed — are again what make the claim of an unfitted,
 per-session, population-independent representation executable rather than merely asserted.
 
+### 10 GHz session-quality audit  *(milestone 5a — complete)*
+
+The WST features are useful only when the recording itself is usable. A separate target-free
+audit therefore examined all 80 10 GHz subject-session files. It reports a component card—not
+one weighted “quality score”—covering frame availability and existing QC failures, stored-index
+block coverage, signal level and preprocessing diagnostics, and within-session WST repeatability.
+This avoids inventing a magic number whose weights would be hard to defend.
+
+Existing QC eligibility is a hard, frozen condition: seven sessions failed it and remain visible
+as `INELIGIBLE_EXISTING_QC`. Block coverage and WST repeatability are soft review signals: two
+sessions were labelled `REVIEW_BLOCK_COVERAGE`, while 71 were `REPEATABILITY_ANALYSABLE`. The
+WST check uses the frozen preprocessing and all three tilings, with separate within-path-shape
+and across-path-energy-composition views. It fits no population transform, uses no body mass,
+and removes no sample. Body mass is used only afterward for a separate recorded-equal-mass
+comparison, which is a sanity aid—not a quality label or training rule.
+
+The clean run used commit `bc5832b582e2d705c97bf7f445ba48fd38a4b2d3` with `dirty=false` and wrote
+80 session-card rows, 400 block rows, 2,880 WST rows, 25,920 relative-comparison rows, and 288
+recorded-equal-mass rows. Subject 10 passed 100/100 frames in every session: 12pm was strong and
+stable, while 4pm was the clearest review candidate. Subject 10's equal-mass pair was 8am–10am. These are
+recording-consistency observations, not proof of hydration validity; a review flag is not proof
+of equipment failure. Verification passed 32 focused tests with one real-data test skipped, the
+mass-quarantine integration test, and 383 critical tests with 10 skipped. The 317 frozen files
+were unchanged. Earlier pre-fix outputs remain in
+`archive/results/quality_10ghz_dirty_provenance_20260829/`.
+
 ## 4. The 77 GHz front-end  *(milestone 5 — complete)*
 
 The 77 GHz Inras band was promoted from a fusion-only afterthought to a full parallel primary
