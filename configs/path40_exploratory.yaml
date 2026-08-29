@@ -1,0 +1,36 @@
+schema_version: path40_exploratory_config_v1
+
+# Immutable source snapshot produced by the separately frozen WST-order diagnostic.
+source:
+  band: 10ghz
+  population: A65
+  diagnostic_git_commit: 97bf98d4f1be2c09fa10b65e3915e6a40a539a8f
+  analysis_sha256: 9eb12b830d9eca4a27a8f94531a22443e255e3b75a64b955b06a629204e38e19
+
+feature:
+  frontend: complex10_fasttime_twosided
+  bank_id: primary
+  channel: ''
+  position_pooling: all_positions
+  order: 1
+  path_id: 40
+  value_column: value
+  target_column: delta_m_pct
+  target_definition: signed body-mass change as percent of baseline; fluid loss is negative
+
+# Fixed before this exploratory fit. With one feature there is no model or alpha search.
+model:
+  family: ridge
+  ridge_alpha: 1.0
+  standardize: train_fold_only
+
+evaluation:
+  loso: leave_one_subject_out
+  random_session_n_splits: 5
+  random_session_seed: 20260821
+
+expected_census:
+  sessions: 65
+  subjects: 16
+  complete_trajectory_subjects_used_to_identify_candidate: 12
+

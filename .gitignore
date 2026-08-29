@@ -50,6 +50,10 @@ results/wst/shards/
 # refuse to submit a "DIRTY tree" that contained no source change at all.
 results/exploratory_frame_split/
 
+# Post-selection path-40 curiosity run. The LOSO arm is subject-isolated but still
+# post-selection; the random-session arm is deliberately leaky. Neither is a curated result.
+results/exploratory_path40/
+
 # The milestone-7 per-session feature store (npz + fingerprint sidecars). Large and fully
 # regenerable from a clean commit by experiments/extract_features.py; never committed.
 results/features/

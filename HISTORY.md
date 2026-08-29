@@ -46,6 +46,71 @@ leakage-critical broad suite (`test_no_leakage`, `test_frame_split`, `test_exp_a
 and `test_run_regression`) passed 197 with three expected skips. Bash syntax validation passed
 for the new launcher and all three parameterized IBEX launchers.
 
+## 2026-08-21 — Added an explicitly exploratory path-40 LOSO versus random-session comparison for IBEX
+
+At the owner's request, a small CPU-only analysis was added to test the frozen 10 GHz
+primary order-1 path 40 as a single regression feature. The input is the completed
+diagnostic's compact A65 session table (65 sessions across all 16 subjects), not the raw
+radar. Before fitting, the loader authenticates the diagnostic commit
+`97bf98d4f1be2c09fa10b65e3915e6a40a539a8f`, analysis SHA-256
+`9eb12b830d9eca4a27a8f94531a22443e255e3b75a64b955b06a629204e38e19`,
+the session/population/metadata/group-table hashes, the A65 census, and the frozen
+shared-candidate row.
+
+The two arms deliberately use the same model so the split is the only difference:
+the raw all-position path-40 session coefficient is standardized on training rows only,
+then fit with deterministic Ridge (`alpha=1.0`, `solver=cholesky`). The reference is the
+training-fold target mean. Arm 1 is 16-fold subject LOSO. Arm 2 is five-fold shuffled
+random-session CV with seed `20260821`, which intentionally mixes subjects across train
+and test. Both arms are labelled post-selection because path 40 was identified on this
+same cohort; the random-session arm is additionally labelled leaky. All filenames and
+JSON/CSV rows carry exploratory/never-confirmatory markers, and outputs are confined to
+`results/exploratory_path40/` (gitignored).
+
+Implementation succeeded. Four focused tests cover source-hash rejection, exact
+one-row-per-session extraction, LOSO disjointness versus random-split subject overlap,
+held-out-target mutation independence, and output isolation. They passed 4/4. The hard
+non-real-data leakage suite also remained green: 25 passed and one real-data test was
+deselected. No scientific score has been produced locally because the authenticated WST
+tables exist only on IBEX; `scripts/ibex/run_path40_exploratory.sbatch` performs that run.
+
+## 2026-08-21 — The frozen two-band WST-order trajectory diagnostic completed: one descriptive 10 GHz path, no confirmatory path evidence
+
+The separate diagnostic repository completed its guarded M2–M4 sequence on IBEX at
+commit `97bf98d4f1be2c09fa10b65e3915e6a40a539a8f`. M2 generated and validated real
+coefficients for all 80 mapped cells in each band: 10 GHz retained 73 eligible sessions
+and seven frozen-QC skips; 77 GHz retained 72 and eight. M3 then wrote the complete
+predeclared subject/path and group tables for both bands (10 GHz: 100,624 subject-effect
+rows and 6,289 group-summary rows; 77 GHz: 51,040 and 3,190). Their analysis SHA-256
+values are `9eb12b830d9eca4a27a8f94531a22443e255e3b75a64b955b06a629204e38e19`
+and `74cdb2b9a48052c7bbb9caf582a39fa4481857f842538a2b80cda0c34ad92dec`.
+M4 rehashed all 80 raw files per band, published the normalized report hash
+`d7eab500560e8f49519647032cd8998c90464082f8160b9b3f142c063bcd1994`, and its
+report/no-leakage verification exited zero.
+
+The 10 GHz primary order-1 family produced exactly one predeclared descriptive shared
+candidate, path 40. Its majority sign was positive and it persisted in the QC73 and
+boundary checks, but its Holm-adjusted p-value was `1.0`; it is therefore
+hypothesis-generating, not confirmatory. The 10 GHz primary order-2 family produced no
+candidate. Sensitivity-bank and legacy-context flags were retained exactly as planned
+but cannot create, replace, or rescue a primary result. At 77 GHz neither primary order
+produced a descriptive candidate and no sensitivity bank produced a flag.
+
+Multiplicity is part of the result rather than a footnote. With 12 fixed complete-trajectory A65 subjects, the
+minimum two-sided sign-test p-value is `0.00048828125`; Holm support is structurally
+impossible for all large 10 GHz order-2 families except that the 95-path `s_q1` family
+is theoretically capable. With 13 QC72_77 subjects the minimum is `0.000244140625`,
+which is insufficient for every 77 GHz order-2 family of 211–561 paths. This limits
+confirmatory power; it does not prove the underlying coefficient structure is absent.
+
+The accepted interpretation is deliberately bounded. This diagnostic supplies no
+multiplicity-corrected WST-order evidence, does not validate a dielectric or hydration
+mechanism, and does not alter the LOSO finding that radar adds no recoverable fluid-loss
+information beyond the clock in this cohort. Path 40 is not selected for ML, no bank is
+ranked, and no cross-band path matching or fusion is performed. The auxiliary report is
+integrated into `SECOND_CHAPTER.md` and `REPORT_RESULTS.md` only as an independently
+frozen mechanism check.
+
 ## 2026-08-12 — The IBEX analysis clone was corrupted by an external sync: `.git` refs overwritten with the LAPTOP's commit. Recovered without loss. Third and worst occurrence of the same cause.
 
 **Escalation, same root cause, three occurrences:**

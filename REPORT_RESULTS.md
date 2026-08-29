@@ -245,6 +245,33 @@ unimportant while carrying the same signal. The aggregate picture — a distribu
 with 3% of groups consistently helpful, which is about what chance would give — is what carries
 the weight, not any single row.
 
+### Supplementary frozen WST-order trajectory diagnostic
+
+An independently frozen diagnostic tested the complete first- and second-order trajectories
+directly rather than asking whether a fitted predictor relied on them. It analyzed every path and
+retained all null and inconsistent rows; sensitivity banks could test persistence but could not
+create or rescue a primary candidate.
+
+| | 10 GHz headline | 77 GHz secondary |
+|---|---|---|
+| Population | A65: 65 sessions; 12 fixed complete-trajectory subjects in the candidate rule | QC72_77: 72 sessions; 13 fixed complete-trajectory subjects in the candidate rule |
+| Primary order 1 | **Path 40 descriptive candidate**; positive majority sign; QC and boundary persistence; Holm-adjusted p = **1.0** | No candidate |
+| Primary order 2 | No candidate | No candidate |
+| Sensitivity result | Several predeclared flags, none eligible to replace the primary result | No flags in any bank |
+
+The attractive-looking 10 GHz path is not a corrected statistical result. Persistence shows that
+its descriptive direction survives the declared QC and boundary checks; it does not overcome the
+family size. With 12 fixed complete-trajectory subjects the smallest possible two-sided sign
+p-value is 0.00048828125, which makes Holm support structurally impossible for nearly every large
+10 GHz order-2 family. With 13 subjects, every 77 GHz order-2 family is structurally incapable.
+That is a power limitation, not a proof that coefficient structure is absent.
+
+The diagnostic therefore sharpens rather than changes Experiment E's interpretation: there is one
+hypothesis-generating 10 GHz trajectory, but no multiplicity-corrected order evidence and no
+independent 77 GHz counterpart. Path 40 is not selected for ML, no bank is ranked, and no paths are
+matched or fused across bands. The complete report is bound to normalized SHA-256
+`d7eab500560e8f49519647032cd8998c90464082f8160b9b3f142c063bcd1994`.
+
 ### Experiment F — confound sensitivity
 
 Direction convention: **positive means adding that component makes prediction worse.** 73 sessions
@@ -285,7 +312,7 @@ outcome.
 
 ## 6. Why the fault is unlikely to be the features or the model
 
-Six independent lines converge, each capable of failing separately:
+Seven independent lines converge, each capable of failing separately:
 
 - **Model class is ruled out by breadth.** Five classical families with grids, selected per fold,
   plus two networks trained end to end. Best and worst differ by about 0.12 MAE; the gap to the
@@ -305,6 +332,10 @@ Six independent lines converge, each capable of failing separately:
   group is worth less than the margin by which the model loses to a constant. If the representation
   were hiding a usable signal in some subset of paths, this is the experiment that would have
   surfaced it.
+- **Complete WST-order trajectories do not supply confirmatory path evidence.** The frozen
+  trajectory diagnostic retained one descriptive 10 GHz order-1 pattern, but its Holm-adjusted
+  p-value is 1.0 and 77 GHz has no primary candidate in either order. Persistence is useful for
+  hypothesis generation; it does not rescue the predictive result.
 - **Adding radar to the clock actively hurts.** Exp F's two primary contrasts are Holm-significant
   in both bands with the radar increment *positive* — the radar term does not merely fail to add
   information, it degrades a clock-only model.

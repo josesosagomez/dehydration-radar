@@ -1329,6 +1329,51 @@ This is not evidence that radar-based hydration sensing is infeasible. It is evi
 study cannot demonstrate it, and — through the frame-split measurement above — an account of why
 an earlier analysis of the same data appeared to.
 
+### Supplementary mechanism check: frozen WST-order trajectories
+
+A separate, outcome-independent diagnostic asked a narrower question after the predictive
+experiments: do complete first- or second-order scattering trajectories contain a path whose
+direction is shared across subjects and robust to the predeclared boundaries? This is not
+Experiment E. Experiment E measures how much a fixed predictive model relies on a path group;
+the trajectory diagnostic instead analyzes every saved path directly, without fitting a hydration
+predictor, choosing a bank, or using one band to select or explain the other.
+
+The diagnostic was frozen before its real-data run and executed through four guarded stages in a
+separate repository. For 10 GHz, all 80 mapped cells were accounted for, with 73 eligible sessions
+and seven frozen-QC skips; for 77 GHz the corresponding counts were 80, 72 and eight. The complete
+M3 tables contain 100,624 subject-effect and 6,289 group-summary rows at 10 GHz, and 51,040 and
+3,190 at 77 GHz. Before publishing the two-band report, M4 rehashed all 80 raw files in each band.
+The two analysis hashes are `9eb12b83…38e19` and `74cdb2b9…92dec`; the normalized report hash is
+`d7eab500…d1994`. The final report and no-leakage gate exited zero. No ML or cross-band fusion ran.
+
+The result is compact:
+
+| arm | primary order 1 | primary order 2 |
+|---|---|---|
+| 10 GHz, A65 | path 40 met the descriptive shared-candidate rule; positive majority sign; QC73 and boundary persistence; Holm-adjusted p = 1.0 | no descriptive candidate |
+| 77 GHz, QC72_77 | no descriptive candidate | no descriptive candidate |
+
+Path 40 is therefore a hypothesis, not evidence that survives multiplicity. Its persistence says
+the descriptive pattern is not created by the QC73 inclusion or the tested path boundaries; it
+does not make the association statistically confirmatory. The sensitivity banks preserve several
+10 GHz flags, as the frozen protocol required, but those flags cannot create, replace or rescue a
+primary candidate. All 77 GHz sensitivity banks are null. No paths are matched across banks or
+bands, and no bank is ranked.
+
+The multiplicity ceiling is severe and must qualify the null. With 12 A65 subjects, the minimum
+two-sided sign p-value is 0.00048828125; Holm significance is mathematically unavailable to the
+129-, 303- and 686-path 10 GHz order-2 families, while only the 95-path `s_q1` family is even
+theoretically capable. With 13 QC72_77 subjects the minimum is 0.000244140625, leaving every
+77 GHz order-2 family (211–561 paths) structurally incapable of Holm significance. This is low
+confirmatory power, not proof that no trajectory structure exists.
+
+The appropriate synthesis with §§6–8 is nevertheless unchanged. The trajectory diagnostic finds
+no multiplicity-corrected path evidence, and its one descriptive 10 GHz pattern has no independent
+77 GHz counterpart. It therefore does not rescue the failed LOSO predictions, establish a
+water-driven dielectric mechanism, or justify selecting path 40 for a later model. It is retained
+because a complete null-sensitive mechanism analysis is more informative than reporting only an
+attractive path.
+
 ## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
 Not yet written. **No milestone-10 result exists as of 2026-08-08** — implementation is in progress

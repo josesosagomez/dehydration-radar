@@ -85,6 +85,29 @@ file), and only then writes the curated `results/wst/wst_diagnostics_77ghz.csv`.
 DEHYD_REALDATA=1 uv run pytest -q        # exercises the loader/QC/extraction on real files
 ```
 
+## Exploratory path-40 LOSO versus random-session comparison
+
+This light CPU job reads the already completed compact WST-order tables from the separate
+diagnostic repository. It runs one subject-level LOSO score and one deliberately leaky
+random-session score. Both are post-selection exploratory and neither is confirmatory.
+
+```bash
+cd /path/to/dehydration_radar_2
+uv sync --frozen
+sbatch scripts/ibex/run_path40_exploratory.sbatch
+```
+
+The diagnostic root defaults to
+`/ibex/user/sosagojm/dehydration_loso_diagnostic`. Override it only if that repository moved:
+
+```bash
+DIAGNOSTIC_ROOT=/new/diagnostic/root \
+  sbatch --export=ALL,DIAGNOSTIC_ROOT scripts/ibex/run_path40_exploratory.sbatch
+```
+
+Results go only to `results/exploratory_path40/`; stdout and stderr go to
+`logs/path40_exploratory_<jobid>.out` and `.err`.
+
 ## Notes / gotchas (pre-paid, see plans/MILESTONE_5_PLAN.md §5)
 
 - `HDF5_USE_FILE_LOCKING=FALSE` is set in the sbatch env (GPFS can spuriously fail read-opens).
