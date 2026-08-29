@@ -1,0 +1,97 @@
+{
+  "analysis_role": "exploratory_quality_vs_frozen_loso_error_no_exclusion_rule",
+  "bootstrap": {
+    "attempted_draws_per_metric": 10000,
+    "confidence_level": 0.95,
+    "maximum_invalid_fraction": 0.05,
+    "seed": 20260829
+  },
+  "git": {
+    "branch": "codex/quality-vs-loso-error",
+    "commit": "d298ee7764dc806519e61cff00473a157b1f4368",
+    "dirty": false
+  },
+  "metrics": [
+    "one_minus_pass_fraction",
+    "twenty_minus_minimum_block_n_pass",
+    "negative_in_band_ratio_p10_margin",
+    "peak_bin_iqr",
+    "wst_tiling_0_block_distance_maximum",
+    "wst_tiling_1_block_distance_maximum",
+    "wst_tiling_2_block_distance_maximum"
+  ],
+  "outputs": {
+    "association_forest": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_error_10ghz\\association_forest.png",
+      "sha256": "3a32ebc5b110868fdd6df36cf5dd3c061275ac45d873d0fc91dd1c404cda85ec"
+    },
+    "association_summary": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_error_10ghz\\association_summary.csv",
+      "sha256": "f035ae55c5b3e1292844d6bca298bf872c44bf8101f0ef295d10688fa0263738"
+    },
+    "influence": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_error_10ghz\\leave_one_subject_out_influence.csv",
+      "sha256": "fc0a6355a3e8334ae8a216050f1869d194bbae7fdf729045b601e9849490b9f3"
+    },
+    "metric_catalog": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_error_10ghz\\quality_metric_catalog.csv",
+      "sha256": "d5fef5a037934018a8357181e2577d895e459ff33185841200d5ecaa3836ad4d"
+    },
+    "population_flow": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_error_10ghz\\population_flow.csv",
+      "sha256": "cd4de27e288368be716e31c344e65297b4b1bc3ec9310302cf50fb4c8442021b"
+    },
+    "population_flow_figure": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_error_10ghz\\population_flow.png",
+      "sha256": "a9d0ccc223a3d319cb9657bfba5cf9027a6676be855653560337e2111e8b2a2d"
+    },
+    "residual_panels": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\figures\\quality_error_10ghz\\quality_error_residual_panels.png",
+      "sha256": "47fae78dd1c4a848aa9e4e333f5f3a2218d55c1b2a5bf40894641d54c2225cad"
+    },
+    "session_table": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_error_10ghz\\session_quality_vs_loso_error.csv",
+      "sha256": "c30dfb2ca1a1448d165e1daa3c512fe7f8f70b2b1787a057191a71def9c031de"
+    }
+  },
+  "population": {
+    "card_metric_n": 73,
+    "n_subjects": 16,
+    "wst_metric_n": 71
+  },
+  "prediction_contract": {
+    "analysis_unit": "subject-session; repeated seeds summarized within session",
+    "obsolete_sha256_rejected": "4bd21201cb87a62aed32b19e7f5fbb478fd7354a6a2c08040cfad6a377145c57",
+    "reconstructed_sha256": "78d6076c5c5fcd79cf7b994c5f7ad508832228f6cf9baca70bbdc39cf1cebf9e",
+    "source": "reference_exp_a_manifest.json bands.10ghz.selected_folds[*].predictions"
+  },
+  "schema_version": "quality_error_10ghz_provenance_v1",
+  "sources": {
+    "exp_a_sources": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\milestone10\\exp_a_sources.json",
+      "sha256": "23cae7d561dda5b894d2a70e2c31bc934f0b9884b470ce554517c9efc2f1c635"
+    },
+    "quality_provenance": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\provenance_radar.json",
+      "sha256": "8c773da49218417907a82060a6b3e2b9abe9fc8385581a64703111eb9d12c980"
+    },
+    "reconstructed_predictions": {
+      "path": "in-memory authoritative manifest reconstruction",
+      "sha256": "78d6076c5c5fcd79cf7b994c5f7ad508832228f6cf9baca70bbdc39cf1cebf9e"
+    },
+    "reference_manifest": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\milestone10\\reference_exp_a_manifest.json",
+      "sha256": "7921fddf4d5fc32feca0b612c27973afd39e5146d7cba056017677441802ba5d"
+    },
+    "session_quality": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\session_quality_all_80.csv",
+      "sha256": "1f75a61601ac7e2b9d7debad5ad8a67afd418c66b7652365622152f40df085da"
+    },
+    "wst_repeatability": {
+      "path": "C:\\Users\\josemsosag\\Desktop\\dehydration_radar_2\\results\\quality_10ghz\\wst_block_repeatability.csv",
+      "sha256": "6696678d92a68817a2c755c07b0b459feb509f2ea8c366716ec05f0daa1af37b"
+    }
+  },
+  "timestamp_utc": "2026-08-29T15:54:32.593503+00:00",
+  "warning": "Exploratory association only; no threshold, exclusion, weighting, retraining, or causal claim."
+}

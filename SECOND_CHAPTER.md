@@ -680,6 +680,45 @@ mass-quarantine integration test, and 383 critical tests with 10 skipped. The 31
 were unchanged. Earlier pre-fix outputs remain in
 `archive/results/quality_10ghz_dirty_provenance_20260829/`.
 
+### Quality measurements versus LOSO prediction error (exploratory follow-up — complete)
+
+The next question was whether a weaker recording-quality measurement is associated with
+a larger prediction error. This diagnostic used the already completed Experiment A; it
+did not retrain the model, change preprocessing, remove sessions, or create a threshold.
+Predictions came from the authoritative nested-LOSO held-out manifest. Multiple model
+seeds were collapsed to each session's mean absolute seed error, rather than treated as
+independent observations.
+
+Seven worse-oriented quality metrics were analysed separately with ordinary least
+squares, subject fixed effects, and session-index fixed effects. The coefficient is the
+change in absolute error, in percentage-body-mass points, for one sample standard
+deviation of worse quality. Uncertainty used 10,000 whole-subject bootstrap draws, and
+influence was checked by leaving out each subject. No p-values, learned thresholds,
+exclusions, or quality recommendations were produced. The quality-card population had
+73 sessions and WST repeatability had 71; the two missing WST rows were the known
+block-coverage review sessions.
+
+Only worse in-band p10 margin had an interval separated from zero: coefficient
+**+0.108786 percentage points of MAE per 1 SD worse**, partial correlation **0.26038**,
+95% bootstrap CI **[0.008994, 0.224276]**, and leave-one-subject-out influence range
+**[0.067937, 0.126047]**. The other six intervals crossed zero. Invalid bootstrap
+counts in metric order were **[4, 4, 0, 1, 0, 0, 0]**.
+
+Subject 10's absolute errors at 08:00, 10:00, 12:00, 14:00, and 16:00 were
+**[0.474948, 0.641480, 0.024455, 0.066806, 0.258854]** percentage points. All five
+sessions passed hard QC; 12:00 had the smallest error, while 16:00 looked review-like
+in the quality audit but was not the largest-error session. Its recorded-equal-mass
+08:00/10:00 pair differed, suggesting possible non-hydration influences but not proving
+their cause. Quality measures therefore remain diagnostics, not validated removal rules.
+
+The final run used clean commit `d298ee7764dc806519e61cff00473a157b1f4368`
+(`dirty=false`) and produced six result tables and three figures. Independent checks
+passed 46 focused tests, 133 broad tests with 2 skipped, and a reviewer check with 71
+tests and 1 skipped; final artifact determinism held and 328 frozen files were unchanged.
+The initial review failure—an equal-target Subject 10 row swap could pass because the
+population hash was not authenticated—was repaired by authenticating and recomputing
+the ordered population relation before the final run.
+
 ## 4. The 77 GHz front-end  *(milestone 5 — complete)*
 
 The 77 GHz Inras band was promoted from a fusion-only afterthought to a full parallel primary

@@ -4,6 +4,35 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-29 — quality versus LOSO-error diagnostic: production verification complete
+
+The quality-versus-error follow-up was run against authoritative nested-LOSO held-out
+predictions. The final production run used clean commit
+`d298ee7764dc806519e61cff00473a157b1f4368` with `dirty=false`. It analysed 73 quality
+cards, 71 WST-repeatability rows, 7 quality metrics, and 112 subject-influence fits.
+The exact 10,000-draw-per-metric whole-subject bootstrap invalid counts were
+`[4, 4, 0, 1, 0, 0, 0]`.
+
+The first review failed because the source gate trusted a recorded population hash and
+did not authenticate the ordered relation; equal-target Subject 10 08:00/10:00 rows
+could therefore be swapped without rejection. The repair authenticated the required
+source evidence and recomputed the ordered population relation before analysis. No
+preprocessing, model, QC rule, exclusion, or threshold was changed.
+
+The only interval separated from zero was the worse in-band p10-margin metric:
+coefficient `+0.108786` percentage-body-mass points of MAE per one SD worse quality,
+partial correlation `0.26038`, bootstrap 95% CI `[0.008994, 0.224276]`, and
+leave-one-subject-out influence range `[0.067937, 0.126047]`. The other six intervals
+crossed zero. Subject 10 errors for 08:00/10:00/12:00/14:00/16:00 were
+`[0.474948, 0.641480, 0.024455, 0.066806, 0.258854]`; all hard QC checks passed,
+12:00 was best predicted, and 16:00 looked review-like without being the worst error.
+Its recorded-equal-mass 08:00/10:00 pair differed, which suggests possible
+non-hydration influences but does not prove a cause.
+
+Independent verification passed 46 focused tests, 133 broad tests with 2 skipped, and
+the reviewer check with 71 tests and 1 skipped. Final artifact determinism held and 328
+frozen files were unchanged. The run produced six result tables and three figures.
+
 ## 2026-08-29 — quality/error diagnostic review failure repaired
 
 Independent review correctly found that the first source gate trusted the three recorded

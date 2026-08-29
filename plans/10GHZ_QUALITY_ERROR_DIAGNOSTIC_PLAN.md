@@ -2,7 +2,7 @@
 
 ## Status and question
 
-**Status: accepted for implementation on 2026-08-29.**
+**Status: implemented and verified on 2026-08-29.**
 
 This diagnostic asks whether sessions with worse radar-quality measurements also have
 larger errors in the already-completed, leakage-safe Experiment A LOSO predictions.  It

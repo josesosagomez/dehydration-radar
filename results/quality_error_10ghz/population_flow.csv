@@ -1,0 +1,5 @@
+stage,n_sessions,n_subjects,reason
+raw quality-card census,80,16,all acquired sessions
+Exp-A eligible joined sessions,73,16,frozen existing QC
+card-metric analytic population,73,16,four finite card metrics
+WST-metric analytic population,71,16,two review-block-coverage sessions unavailable; no imputation

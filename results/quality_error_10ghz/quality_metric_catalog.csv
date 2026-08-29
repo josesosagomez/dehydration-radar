@@ -1,0 +1,8 @@
+metric_id,source_table,source_key,units,worse_orientation,analytic_population,diagnostic_channel,tiling_idx,scattering_order,view,role
+one_minus_pass_fraction,session_quality_all_80.csv,pass_fraction,fraction,1 - source; larger means worse,Exp-A eligible sessions (N=73),,,,,exploratory association; no exclusion rule
+twenty_minus_minimum_block_n_pass,session_quality_all_80.csv,minimum_block_n_pass,frames,20 - source; larger means worse,Exp-A eligible sessions (N=73),,,,,exploratory association; no exclusion rule
+negative_in_band_ratio_p10_margin,session_quality_all_80.csv,in_band_ratio_p10_margin,dimensionless ratio,negative source; larger means worse,Exp-A eligible sessions (N=73),,,,,exploratory association; no exclusion rule
+peak_bin_iqr,session_quality_all_80.csv,peak_bin_iqr,FFT bins,identity; larger means worse,Exp-A eligible sessions (N=73),,,,,exploratory association; no exclusion rule
+wst_tiling_0_block_distance_maximum,wst_block_repeatability.csv,block_to_session_distance_maximum,dimensionless Euclidean distance,identity; larger means worse,repeatability-analysable Exp-A sessions (N=71),mag,0,2,within_path_shape,exploratory association; no exclusion rule
+wst_tiling_1_block_distance_maximum,wst_block_repeatability.csv,block_to_session_distance_maximum,dimensionless Euclidean distance,identity; larger means worse,repeatability-analysable Exp-A sessions (N=71),mag,1,2,within_path_shape,exploratory association; no exclusion rule
+wst_tiling_2_block_distance_maximum,wst_block_repeatability.csv,block_to_session_distance_maximum,dimensionless Euclidean distance,identity; larger means worse,repeatability-analysable Exp-A sessions (N=71),mag,2,2,within_path_shape,exploratory association; no exclusion rule
