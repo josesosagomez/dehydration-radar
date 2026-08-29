@@ -4,6 +4,75 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-29 — quality/error diagnostic review failure repaired
+
+Independent review correctly found that the first source gate trusted the three recorded
+population hashes without recomputing their ordered relations, accepted comparison lists
+without proving all 11 evidence classes occurred exactly once, and did not pin the two
+production output paths at `run()` time.  This was a failed review, not a production run;
+no diagnostic artifacts had been generated.
+
+The repair now requires schemas `reference_exp_a_manifest_v1` and
+`exp_a_sources_v1`; requires the exact evidence-class set (`population`, `folds`,
+`stage1_candidates`, `selected_feature_keys`, `stage2_candidates`, `feature_inputs`,
+`tuned_epsilon`, `feature_matrices`, `selection_table`, `predictions`, `scores`) once
+each; and recomputes the reference gate's canonical ordered JSON relations.  Both the
+recorded and recomputed values must equal the pinned session-key hash `ef937439...`,
+target hash `1f0530dd...`, and frame-population hash `e2d0ea2c...`.  A dedicated test
+swaps Subject 10's equal-target 8am/10am rows and proves the key relation now rejects it.
+Production `run()` also requires the resolved repository roots
+`results/quality_error_10ghz` and `figures/quality_error_10ghz`.
+
+The cluster bootstrap gained a test-only prescribed-draw seam while retaining unchanged
+10,000-draw seeded production behavior.  A duplicate-Subject-1 / omitted-Subject-2 draw
+now passes through the actual bootstrap function and matches a manual fit whose two
+Subject-1 copies have unique cluster labels; the original metric mean `3.0`, SD
+`1.1062537992497157`, and coefficient/CI endpoint `2.0` are pinned.  Focused repair
+verification passed **46 tests** in 1.24 seconds.  The strict real-data analysis again
+completed 70,000 attempts in 16.33 seconds with unchanged invalid counts
+`[4, 4, 0, 1, 0, 0, 0]`.  The broader diagnostic, reference-gate, leakage, and
+prior-quality suite passed **130 tests, with 2 real-data tests skipped**, in 25.94 seconds;
+compileall and `git diff --check` also passed.
+
+## 2026-08-29 — quality-versus-LOSO-error diagnostic implemented (source only)
+
+Implemented the accepted diagnostic without retraining or changing the frozen 10 GHz
+pipeline.  Predictions are reconstructed solely from
+`reference_exp_a_manifest.json` after authenticating the authoritative/approved
+Milestone-10 source ledger, exact comparison records, run
+`20260810T153739562215Z_04dc9521`, commit
+`04dc9521346215cc20a8402f0d00f63c36cf3b42`, and mutually consistent hashes.  The
+reconstruction reproduced the required Exp-A writer bytes at SHA-256
+`78d6076c5c5fcd79cf7b994c5f7ad508832228f6cf9baca70bbdc39cf1cebf9e`;
+the obsolete `4bd212...` prediction source is explicitly rejected.
+
+The implementation maps fold predictions to all 73 canonical session cells with exact
+target equality.  Repeated model seeds remain inside the session: primary error is mean
+absolute seed error, with seed count, ensemble mean/residual, ensemble absolute error,
+and seed spread retained as diagnostics.  The authenticated quality-card population is
+73/73; each fixed magnitude/order-2/within-path WST metric has 71 finite rows, with the
+two missing keys exactly equal to the block-coverage review sessions.  No imputation is
+performed.
+
+Each of the seven metrics is worse-oriented once, then fitted separately as one original
+sample SD (`ddof=1`) with subject and session-index fixed effects.  Partial correlation
+uses the identical fixed-effect-only design.  The strict in-memory real-population check
+completed all **70,000 attempted cluster draws** (10,000 per metric, seed `20260829`) in
+16.1 seconds.  Invalid draws were 4, 4, 0, 1, 0, 0, and 0 respectively—well below the
+5% reliability limit.  These values are implementation checks, not final production
+results; production artifacts are deliberately deferred until the source is committed so
+provenance can record a clean commit.
+
+Focused verification succeeded: **35 passed** in 1.03 seconds after adding an explicit
+clean-commit/census gate for the quality provenance.  The broader diagnostic,
+reference-gate, leakage, and prior session-quality suite then succeeded with **118 passed,
+2 real-data tests skipped** in 35.00 seconds.  Tests cover approval and
+authority gates, exact prediction bytes, population/target alignment, repeated-seed
+summarization, exact 73/71 joins, quality mutation, WST cell and orientation, numerical
+and rank failure paths, duplicate-cluster relabelling, strict invalid-bootstrap failure,
+known fixed-effect slope/partial correlation, LOSO influence, deterministic CSV bytes,
+write isolation, and forbidden pipeline imports.
+
 ## 2026-08-29 — 10 GHz session-quality audit: clean production run and final verification
 
 Final independent review found that radar provenance was querying Git only after the audit had
