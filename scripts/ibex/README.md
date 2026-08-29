@@ -108,6 +108,26 @@ DIAGNOSTIC_ROOT=/new/diagnostic/root \
 Results go only to `results/exploratory_path40/`; stdout and stderr go to
 `logs/path40_exploratory_<jobid>.out` and `.err`.
 
+## Quality-aware training sensitivity (10 GHz)
+
+This CPU job compares baseline training, training-only removal of the five negative
+in-band-margin sessions, and appending that raw margin as one train-scaled feature.  LOSO
+is primary; the separately written subject-overlap session split is an optimistic post-hoc
+diagnostic only.
+
+The feature store must first be rebuilt at the implementation commit.  The store validator
+rejects an older build commit rather than weakening provenance.
+
+```bash
+IBEX_CONFIG=configs/ibex_sosagojm.yaml sbatch scripts/ibex/extract10.sbatch
+# Wait for all 80 extraction array tasks and validate the rebuilt store, then:
+IBEX_CONFIG=configs/ibex_sosagojm.yaml \
+  sbatch scripts/ibex/run_quality_training_sensitivity.sbatch
+```
+
+Outputs are isolated below `results/quality_training_sensitivity_10ghz/loso/` and
+`results/quality_training_sensitivity_10ghz/subject_overlap_session_cv/`.
+
 ## Notes / gotchas (pre-paid, see plans/MILESTONE_5_PLAN.md §5)
 
 - `HDF5_USE_FILE_LOCKING=FALSE` is set in the sbatch env (GPFS can spuriously fail read-opens).

@@ -1,0 +1,28 @@
+schema_version: quality_training_sensitivity_10ghz_v1
+
+# The frozen Experiment-A search and Experiment-C ordinal rules are reused.  This file
+# declares only the new quality treatment and diagnostic split; it cannot reopen them.
+base_configs:
+  - exp_a_regression.yaml
+  - exp_c.yaml
+
+sources:
+  reference_manifest: ../results/milestone10/reference_exp_a_manifest.json
+  exp_a_sources: ../results/milestone10/exp_a_sources.json
+  quality_provenance: ../results/quality_10ghz/provenance_radar.json
+  session_quality: ../results/quality_10ghz/session_quality_all_80.csv
+
+outputs:
+  results: ../results/quality_training_sensitivity_10ghz
+
+split:
+  n_outer_splits: 5
+  n_inner_splits: 4
+  seed: 20260829
+
+treatments:
+  - baseline
+  - filter_negative_margin
+  - append_margin_feature
+
+strict: true

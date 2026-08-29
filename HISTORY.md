@@ -4,6 +4,110 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-30 — quality-aware training sensitivity: final validation seams completed
+
+The bounded re-review requested direct evidence for three already-implemented guards rather
+than another protocol change.  Production provenance construction was extracted into one
+testable helper; its test pins the resolved-config fingerprint, every sensitivity/base/overlay
+config hash, resolved mapping, model seeds `(1,2,3,4,5)`, session split seed `20260829`,
+store lineage, replay result, package/platform fields, output hashes, and strict finite JSON
+serialization.  The authenticated quality-table relation was similarly separated after the
+byte-hash gate, allowing direct mutation tests for the `71/2/7` status census, the 73-row
+eligibility relation, and `margin = p10 - 0.3`.  A successful staging test now complements
+the late-failure test by proving the complete nested tree moves to the final root and leaves
+no staging directory.
+
+Focused verification passed **21/21** in 3.35 seconds.  The final new-feature plus hard
+no-leakage subset passed **46 tests with 1 expected real-data skip** in 14.98 seconds;
+`compileall` and `git diff --check` passed.  No scientific design, split, threshold, model,
+or metric changed in this pass.
+
+## 2026-08-30 — quality-aware training sensitivity: independent review failed, then repaired
+
+The first independent review failed before commit.  It found fail-closed weaknesses rather
+than a requested change to the three-treatment design: duplicate session keys could alias
+different row indices; paired test rows were compared as sets; the subject-overlap ordinal
+selection pooled repeated seeds for QWK; seeds/output paths were not fully pinned; the current
+session relation did not authenticate names/targets; the new baseline was not replayed against
+Exp A before writing; the quality provenance checks trusted too much mutable metadata; and a
+late failure could leave a partially published result root.  Provenance also lacked complete
+config, environment, store, and output hashes.  No production result had been run or written.
+
+The repair rejects duplicate canonical keys, duplicate indices, duplicate fit/test keys, and
+any fit/test key intersection even when different indices alias the same key.  Paired test
+relations now compare their complete ordered sequence and multiplicity.  Subject-overlap Exp C
+selection computes class MAE once per effective seed and averages those values, while QWK uses
+only the first effective seed, matching frozen Exp C.  The session split seed is fixed at
+`20260829`, full-run model seeds at `(1,2,3,4,5)`, and the output resolves only to
+`results/quality_training_sensitivity_10ghz`.
+
+Current sessions must exactly match the authoritative ordered `(subject, session_idx,
+session_name, delta_m_pct)` relation.  Before any write, the LOSO regression baseline now
+replays every authenticated fold and checks selection, canonical effective seeds, target/key
+order, tuned epsilons, and predictions at absolute tolerance `1e-10`.  Deterministic learners
+retain their one realized seed; seed-sensitive learners retain all five rather than fabricating
+copies.  The quality source is pinned to clean commit
+`bc5832b582e2d705c97bf7f445ba48fd38a4b2d3` and CSV SHA-256
+`1f75a61601ac7e2b9d7debad5ad8a67afd418c66b7652365622152f40df085da`; all 80 unique
+subject/session rows, audit-status counts `71/2/7`, 73 eligibility flags, finite p10/margins,
+and `margin = p10 - 0.3` are reconciled.  The formula bound is four float64 epsilons solely
+because independent CSV decimal parsing differed by at most `2.220446049250313e-16`.
+
+Production output is now built in a unique sibling staging directory and atomically renamed
+only after both protocols, the replay gate, artifact hashes, and provenance succeed.  A late
+failure removes only that staging directory and never overwrites even an empty pre-existing
+target.  Provenance records every sensitivity/base/overlay config hash, resolved config and
+fingerprint, model/split seeds, packages/platform, compact store-fingerprint lineage, replay
+evidence, source hashes, and every scientific output hash.
+
+Focused repaired verification passed **18 tests** in 3.38 seconds.  The broad new-feature,
+hard-leakage, Exp-A, Exp-C, tuned-epsilon, and store suite passed **116 tests with 1 expected
+real-data skip** in 247.13 seconds.  The deterministic mechanism-only smoke, `compileall`, and
+`git diff --check` also passed.  The Windows host still has no Bash executable, so the earlier
+recorded Linux-side `bash -n` limitation remains and no new shell validation was claimed.
+
+## 2026-08-30 — quality-aware training sensitivity: source implementation and mechanism smoke
+
+Implemented the new exploratory 10 GHz sensitivity in an isolated module and output root;
+the frozen Experiment-A/C implementations and their existing artifacts were not changed.
+The sole quality signal is the authenticated radar-only `in_band_ratio_p10_margin`, with
+threshold exactly `0.0`.  Its canonical eligible join is exactly 73 rows across 16 subjects,
+all finite, and the five negative keys are fixed at Subject/session `(4,S2), (8,S0),
+(8,S2), (12,S0), (16,S3)`.  Config validation rejects quality inputs whose paths name
+prediction, residual, absolute-error, or quality-error sources.
+
+The three paired treatments are baseline, remove negative-margin rows from training only,
+and append the one raw margin before train-only scaling.  Held-out rows remain unfiltered and
+identical.  Exact training row keys reach tuned WST epsilon before the scaler, ordinal
+weights/cutpoints, and model; no quality weighting was added.  LOSO is the primary protocol.
+The secondary diagnostic is session-level `StratifiedKFold(5, shuffle=True,
+random_state=20260829)` with baseline-only inner `StratifiedKFold(4, shuffle=True)` selection
+and fold-specific seeds `20261829..20261833`; its explicit subject-overlap census and output
+labels say it is optimistic, post-hoc, and not new-subject generalization.
+
+Regression LOSO resolves the fixed per-fold feature/learner from the authenticated Exp-A
+manifest.  Ordinal LOSO runs the existing frozen Exp-C baseline nested selection for both
+arms, then holds each winner fixed across treatments.  The subject-overlap diagnostic runs
+the frozen Stage-1/Stage-2 candidate spaces on explicit session row masks.  Reports contain
+subject-balanced regression MAE/RMSE and paired subject deltas, plus ordinal class-unit MAE,
+adjacent accuracy and QWK; exact accuracy is secondary only.
+
+The first local mechanism attempt succeeded: the synthetic CPU smoke exercised 24 cells
+(two tasks × two protocols × two folds × three treatments), suppressed all performance
+values, and completed deterministically.  The first focused test run passed **11/11** in
+3.27 seconds.  A broader regression run then passed **109 tests with 1 expected real-data
+skip** in 245.98 seconds, covering the new suite plus `test_no_leakage`, Exp A, Exp C,
+tuned epsilon, and store validation.  The focused rerun passed 11/11; `compileall` and
+`git diff --check` passed.  An attempted local `bash -n` did not run because this Windows
+host has no `bash` executable; this was an environment/tool absence, not a shell parse
+failure, so the Slurm script still requires its normal Linux-side syntax check before submit.
+After changing the Exp-C LOSO baseline selection to use its existing outer-fold worker pool,
+the final bounded new-feature plus hard-leakage rerun passed **36 tests with 1 expected
+real-data skip** in 15.36 seconds; no test process remained running.
+Full real-data execution was intentionally not attempted locally: the strict
+runner requires a clean committed analysis revision and a 10 GHz feature store rebuilt at
+that exact commit, then runs as the CPU-only IBEX batch job (16 CPUs, 128 GiB, 24 hours).
+
 ## 2026-08-29 — quality versus LOSO-error diagnostic: production verification complete
 
 The quality-versus-error follow-up was run against authoritative nested-LOSO held-out
