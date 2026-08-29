@@ -1,0 +1,28 @@
+schema_version: quality_audit_10ghz_v1
+base_config: exp_a_regression.yaml
+
+outputs:
+  results: results/quality_10ghz
+  figures: figures/quality_10ghz
+
+audit:
+  expected_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  expected_frames_per_session: 100
+  n_blocks: 5
+  frames_per_block: 20
+  min_passing_frames_per_block: 10
+  epsilon_path_factor: 1.0e-12
+  epsilon_distance_factor: 1.0e-12
+
+diagnostic:
+  reduction: a
+  channels: [mag, iq]
+  family: pooled
+  log_on: false
+  tilings: all_frozen
+
+sources:
+  existing_qc_report: results/qc/qc_survival_10ghz.csv
+  absent_remote_artifacts:
+    - experiment_c_authoritative
+    - experiment_d_authoritative

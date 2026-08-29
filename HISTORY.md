@@ -4,6 +4,82 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-29 — 10 GHz session-quality audit: pre-commit provenance and mass-quarantine repair
+
+Final independent review found that radar provenance was querying Git only after the audit had
+created its approved output files. On a checkout where those outputs are visible to Git, a clean
+committed implementation could therefore report itself as dirty because of its own artifacts.
+The runner now captures Git as its first operation, before config loading or output-root creation;
+it requires a 40-character commit and `dirty=false`, then passes that immutable start-of-run record
+into radar provenance. A missing, short, dirty, or indeterminate Git state fails before any audit
+output is created.
+
+The review also requested a stronger ground-truth quarantine integration check. A lightweight
+test now installs sentinels for every radar-only CSV and PNG plus `provenance_radar.json`, runs the
+separated mass-output writer with an equal recorded-mass fixture, mutates only the synthetic mass
+input/workbook, and runs that separated stage again. Every radar-only byte remains identical; the
+set of changed paths is constrained to the equal-mass CSV, PNG, and provenance. The equal-mass
+writer was factored into one explicit post-radar function so the production runner and test share
+the same boundary. Focused verification succeeded: **32 passed, 1 real-data test skipped** in
+5.37 s with the pinned `.venv` interpreter. No production artifacts were regenerated during this
+repair; the clean committed regeneration and its success journal entry remain a later step.
+
+## 2026-08-29 — 10 GHz session-quality audit implementation: review repairs and final verification
+
+Independent review found that retaining every eligible session's full normalized WST geometry
+would require roughly 3 GB before array/object overhead. The production runner was changed to
+compare each target-free adjacent radar-session pair while streaming the 80 sessions, retaining
+only the previous and current session geometry. The compact adjacent-pair comparisons stay in
+memory; only after all radar-only CSVs, figures, hashes, and radar provenance are finalized does
+the runner load body mass and select the exactly equal recorded-mass pairs. No intermediate
+target-bearing or hidden radar artifact was added.
+
+The same repair pass made every undefined session/block component carry a named reason, handled
+an all-zero WST order without a dictionary-key failure, made even an empty pre-existing output
+root fail closed, and changed frozen-result verification to reject newly created files as well as
+changed/deleted files. Tests now pin pair-common session-active paths, recomputed pair-space
+epsilon values, both near-zero frame-path and inactive-session-path counts, target-free byte
+stability under a mass mutation, an empty equal-mass result, and unexpected-result-file creation.
+The base YAML receives both a file SHA-256 and resolved-mapping SHA-256 in radar provenance.
+
+Verification succeeded with the pinned `.venv` interpreter and repository-local pytest temporary
+roots: focused audit tests **25 passed, 1 skipped**; the leakage/config/loader/QC/preprocessing/WST/
+provenance regression set **376 passed, 10 skipped**; the real Subject 10 12pm WST smoke
+**1 passed** in 6.22 s; and the complete non-real-data repository suite **1,543 passed, 40
+skipped** in 1,199.97 s. The only warnings were the expected disabled-cache configuration warning
+and joblib falling back from unavailable physical-core discovery to logical cores. Independent
+code review reported no remaining material finding. The full 80-session production audit was not
+executed in this implementation pass, so real output artifacts and chapter documentation remain
+for independent verification before `SECOND_CHAPTER.md` is updated.
+
+## 2026-08-29 — 10 GHz session-quality audit implementation: target-free contracts and focused synthetic tests
+
+The owner-approved descriptive audit was implemented in new, isolated quality modules without
+changing the frozen loader, QC, preprocessing, WST, feature store, experiment harness, global
+config schema, or leakage test. The fixed design is five stored-index blocks of 20 frames,
+minimum 10 passing frames per block for repeatability analysis, reduction A, magnitude primary
+plus separately labelled I/Q sensitivity, pooled WST with log off, all three frozen tilings, and
+epsilon factors `1e-12`. Session eligibility remains the existing `ceil(0.5 * n_raw)` rule.
+
+The dimensionless implementation keeps within-path shape and across-path energy composition
+separate. For I/Q, both channel-specific pooled blocks belong to the same canonical Kymatio path.
+It records both the count of near-zero frame-by-path blocks and the count of session-inactive
+paths; pair-common active-path intersections use only the latter. `session_wobble` is the median
+frame distance from the componentwise session median. A zero-norm block centroid makes cosine
+similarity explicitly missing (`zero_centroid_norm`), never a fabricated 0 or 1. Subject-relative
+ranks are dense and computed only within an identical metric/channel/tiling/order/view cell.
+
+Two test-launch failures were environmental, before scientific assertions ran. First, `uv run`
+could not initialize its default cache under the sandboxed Windows user profile; redirecting it
+to the repository `.uv-cache` then failed in uv's Windows trampoline while canonicalizing the
+script path. The tests were therefore run with the exact pinned `.venv` interpreter. The first
+pytest invocation reached the tests: 16 relevant tests passed, one formula-reconciliation test
+failed because `experiments/` was not on that test's import path, and four `tmp_path` setups
+errored because pytest's default Windows temporary root was inaccessible. The import path was
+made explicit and pytest was rerun with a verified repository-local basetemp and cache plugin
+disabled. Outcome: **21 passed, 1 real-data test skipped**. The temporary test directory was
+then removed after verifying its resolved path was exactly the intended workspace child.
+
 ## 2026-08-28 — Authorized full-WST leaky regression comparison: baseline test invocation corrected
 
 The owner authorized adding the previously excluded full Experiment-A WST regressor to the

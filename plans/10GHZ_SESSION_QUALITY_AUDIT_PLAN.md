@@ -2,7 +2,7 @@
 
 ## 0. Status, purpose, and approval boundary
 
-**Status: proposed for owner review. No implementation is authorized yet.**
+**Status: owner-approved on 2026-08-29. Implementation is authorized.**
 
 This audit asks a question that the current binary QC does not answer:
 
