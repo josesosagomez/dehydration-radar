@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -15,6 +16,7 @@ from dehyd.eval.harness import Candidate
 from dehyd.eval.quality_training_sensitivity import (
     EXPECTED_NEGATIVE_KEYS,
     TREATMENTS,
+    _loso_classification_candidates,
     _selection_metrics_from_rows,
     ArrayFeatureSource,
     QualityTrainingError,
@@ -283,6 +285,48 @@ def test_classification_viability_is_checked_after_filtering():
             task="ordinal_classification", treatment="filter_negative_margin", seeds=(1,),
             authorize=None,
         )
+
+
+def test_loso_classification_passes_exp_c_ordinal_session_schema(monkeypatch, tmp_path):
+    sensitivity_config = load_quality_training_config(CONFIG)
+    reference = authenticate_reference(sensitivity_config)
+    sessions = copy.deepcopy(reference["population"]["sessions"])
+    assert len(sessions) == 73
+    original_sessions = copy.deepcopy(sessions)
+    expected_keys = [
+        (int(row["subject"]), int(row["session_idx"])) for row in sessions
+    ]
+    expected_classes = [int(row["session_idx"]) for row in sessions]
+    expected_loss_l = [-float(row["delta_m_pct"]) for row in sessions]
+    expected_delta_m_pct = [float(row["delta_m_pct"]) for row in sessions]
+
+    def capture_exp_c_sessions(config, band, received, store_dir, *, seeds, n_workers):
+        assert band == "10ghz"
+        assert store_dir == tmp_path
+        assert seeds == (1, 2, 3, 4, 5)
+        assert n_workers == 3
+        assert [(row["subject"], row["session_idx"]) for row in received] == expected_keys
+        assert [row["class_idx"] for row in received] == expected_classes
+        assert [row["loss_l"] for row in received] == expected_loss_l
+        assert [row["delta_m_pct"] for row in received] == expected_delta_m_pct
+        return []
+
+    monkeypatch.setattr(
+        "dehyd.eval.quality_training_sensitivity.exp_c.run_exp_c",
+        capture_exp_c_sessions,
+    )
+    monkeypatch.setattr(
+        "dehyd.eval.quality_training_sensitivity.exp_c.stage1_candidates_c",
+        lambda *args: [],
+    )
+    config = SimpleNamespace(
+        search_10ghz=SimpleNamespace(stage1_anchor_ridge_alpha=1.0)
+    )
+
+    assert _loso_classification_candidates(
+        config, sessions, tmp_path, (1, 2, 3, 4, 5), n_workers=3
+    ) == {}
+    assert sessions == original_sessions
 
 
 def test_all_treatments_have_identical_test_keys_and_mismatch_fails():

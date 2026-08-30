@@ -4,6 +4,45 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-30 — Exp-C session-boundary repair verified locally
+
+The bounded repair for IBEX job `51028584` passed its final focused sensitivity suite:
+**22/22 tests** in 3.95 seconds.  The new integration regression uses the authenticated
+canonical 73-session relation and proves that its complete ordered subject/session keys and
+unchanged `delta_m_pct` targets reach `exp_c.run_exp_c` together with exact
+`class_idx = session_idx` and `loss_l = -delta_m_pct` values; it also proves the input rows
+are not mutated.  The relevant frozen Exp-C plus hard no-leakage suites passed **67 tests
+with 1 expected real-data skip** in 131.07 seconds.  `compileall` for `src`, `experiments`,
+and the focused test module passed, as did `git diff --check`.
+
+Two earlier local invocations were environmental rather than code failures: `uv` could not
+read its user cache, and direct pytest initially encountered an unreadable Windows default
+temporary directory after 15 tests had passed.  Rerunning through the existing project
+virtual environment with a fresh workspace-local pytest base directory resolved both without
+changing dependencies or test behavior.  No full performance run or output artifact was
+produced locally; the repaired clean commit must still be used to rebuild the feature store
+and rerun the full sensitivity on IBEX.
+
+## 2026-08-30 — first IBEX quality-aware full run failed at the Exp-C session boundary
+
+IBEX job `51028584` attempted the full 10 GHz quality-aware training sensitivity after all
+80 feature-extraction tasks had completed successfully.  The run failed after 17 minutes
+23 seconds when the 16-worker Exp-C LOSO pool constructed `OrdinalFeatures`: the sensitivity
+runner had passed the authenticated Exp-A session rows directly, but Exp C additionally
+requires `class_idx` and `loss_l`.  The first access to `class_idx` therefore raised
+`KeyError: 'class_idx'`.  This was an interface/schema defect, not a scientific or numerical
+failure.  Atomic staging worked as intended: no partial
+`results/quality_training_sensitivity_10ghz` output was published.
+
+The bounded repair copies the already aligned session rows immediately before the existing
+Exp-C LOSO selection call and adds only the two frozen Exp-C fields:
+`class_idx = session_idx` and `loss_l = -delta_m_pct`.  It preserves the canonical row order,
+all 73 original records and targets, and does not change a split, model, treatment, quality
+threshold, seed, or metric.  A regression test now exercises the actual failed call boundary
+and verifies the exact fields and values received by `exp_c.run_exp_c` without mutating the
+authenticated input rows.  Verification results are recorded in the next entry after the
+repair completes.
+
 ## 2026-08-30 — quality-aware training sensitivity: final validation seams completed
 
 The bounded re-review requested direct evidence for three already-implemented guards rather

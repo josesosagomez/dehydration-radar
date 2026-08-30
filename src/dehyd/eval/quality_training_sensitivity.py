@@ -891,8 +891,19 @@ def _loso_classification_candidates(
 ) -> dict[int, dict[str, SelectedCandidate]]:
     """Run the unchanged Exp-C baseline selection, then expose its two fixed winners."""
     output = {}
+    # The sensitivity runner's canonical spine comes from Exp A.  Exp C uses the same rows
+    # and continuous target, but additionally expects the frozen ordinal target columns.
+    # Copy each row so this adapter cannot mutate the authenticated 73-session relation.
+    ordinal_sessions = [
+        {
+            **session,
+            "loss_l": -float(session["delta_m_pct"]),
+            "class_idx": int(session["session_idx"]),
+        }
+        for session in sessions
+    ]
     results = exp_c.run_exp_c(
-        config, "10ghz", sessions, store_dir, seeds=seeds, n_workers=n_workers
+        config, "10ghz", ordinal_sessions, store_dir, seeds=seeds, n_workers=n_workers
     )
     stage1_candidates = exp_c.stage1_candidates_c(
         config, "10ghz", config.search_10ghz.stage1_anchor_ridge_alpha
