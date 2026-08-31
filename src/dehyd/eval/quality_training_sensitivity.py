@@ -1018,11 +1018,101 @@ def assert_identical_test_keys(predictions: list[dict]) -> None:
             raise QualityTrainingError(f"{group}: treatments have different held-out keys")
 
 
+def expand_deterministic_seed_predictions(predictions: list[dict]) -> list[dict]:
+    """Give every split the same realized seed axis before computing metrics.
+
+    Experiment A and Experiment C realize one prediction for deterministic learners and
+    all configured seeds for stochastic learners.  Their canonical reporters copy a
+    deterministic fold across the realized seed axis so every held-out session has equal
+    weight.  This function applies that same reporting-only rule to sensitivity rows.
+
+    Seed 1 is the canonical deterministic outcome.  Within each protocol/task/arm/
+    treatment group, a split must contain either seed 1 alone or the complete seed set
+    realized by that group.  Session order and truth must be identical across a split's
+    realized seeds; malformed prediction tables fail instead of being scored.
+    """
+    if not predictions:
+        raise QualityTrainingError("cannot summarize an empty prediction table")
+
+    frame = pd.DataFrame(predictions)
+    required_columns = {
+        "protocol", "task", "split_id", "arm", "treatment", "seed",
+        "subject", "session_idx", "y_true", "y_pred",
+    }
+    missing = sorted(required_columns - set(frame.columns))
+    if missing:
+        raise QualityTrainingError(f"prediction table is missing columns: {missing}")
+
+    group_columns = ["protocol", "task", "arm", "treatment"]
+    expanded: list[dict] = []
+    for group, group_rows in frame.groupby(group_columns, sort=False):
+        seed_values = group_rows["seed"].to_numpy()
+        if any(not isinstance(seed, (int, np.integer)) for seed in seed_values):
+            raise QualityTrainingError(f"{group}: seed IDs must be integers")
+        realized_seeds = tuple(sorted({int(seed) for seed in seed_values}))
+        if not realized_seeds or realized_seeds[0] != 1:
+            raise QualityTrainingError(f"{group}: realized seed IDs must include seed 1")
+
+        for split_id, split_rows in group_rows.groupby("split_id", sort=False):
+            split_seed_ids = tuple(sorted({int(seed) for seed in split_rows["seed"]}))
+            if split_seed_ids not in ((1,), realized_seeds):
+                raise QualityTrainingError(
+                    f"{group}/{split_id}: seed IDs {split_seed_ids} are neither deterministic "
+                    f"(1,) nor the complete realized set {realized_seeds}"
+                )
+
+            rows_by_seed: dict[int, list[dict]] = {}
+            reference_keys: list[tuple[int, int]] | None = None
+            reference_truth: np.ndarray | None = None
+            for seed, seed_rows in split_rows.groupby("seed", sort=False):
+                records = seed_rows.to_dict(orient="records")
+                keys = [
+                    (int(row["subject"]), int(row["session_idx"])) for row in records
+                ]
+                if len(keys) != len(set(keys)):
+                    raise QualityTrainingError(
+                        f"{group}/{split_id}/seed_{int(seed)}: duplicate session keys"
+                    )
+                truth = np.asarray([row["y_true"] for row in records], dtype=float)
+                predicted = np.asarray([row["y_pred"] for row in records], dtype=float)
+                if not np.isfinite(truth).all() or not np.isfinite(predicted).all():
+                    raise QualityTrainingError(
+                        f"{group}/{split_id}/seed_{int(seed)}: non-finite truth or prediction"
+                    )
+                if reference_keys is None:
+                    reference_keys = keys
+                    reference_truth = truth
+                elif keys != reference_keys:
+                    raise QualityTrainingError(
+                        f"{group}/{split_id}: ordered session keys differ across seeds"
+                    )
+                elif not np.array_equal(truth, reference_truth):
+                    raise QualityTrainingError(
+                        f"{group}/{split_id}: truth differs across seeds"
+                    )
+                rows_by_seed[int(seed)] = records
+
+            if split_seed_ids == (1,):
+                source_rows = rows_by_seed[1]
+                for seed in realized_seeds:
+                    for row in source_rows:
+                        copied = dict(row)
+                        copied["seed"] = seed
+                        expanded.append(copied)
+            else:
+                for seed in realized_seeds:
+                    expanded.extend(rows_by_seed[seed])
+
+    return expanded
+
+
 def summarize_predictions(predictions: list[dict]) -> dict:
     """Ordinal-first classification metrics and subject-balanced regression metrics."""
-    frame = pd.DataFrame(predictions)
+    observed_frame = pd.DataFrame(predictions)
+    frame = pd.DataFrame(expand_deterministic_seed_predictions(predictions))
     summary = {"exploratory_post_hoc": True, "groups": []}
     group_columns = ["protocol", "task", "arm", "treatment"]
+    observed_counts = observed_frame.groupby(group_columns, sort=True).size().to_dict()
     per_subject_rows = []
     for group, rows in frame.groupby(group_columns, sort=True):
         protocol, task, arm, treatment = group
@@ -1059,7 +1149,10 @@ def summarize_predictions(predictions: list[dict]) -> dict:
         metric_names = [name for name in seed_metrics[0] if name != "seed"]
         summary["groups"].append({
             "protocol": protocol, "task": task, "arm": arm, "treatment": treatment,
-            "n_prediction_rows": int(len(rows)), "n_unique_sessions": int(rows[["subject", "session_idx"]].drop_duplicates().shape[0]),
+            "n_prediction_rows": int(observed_counts[group]),
+            "n_seed_expanded_scoring_rows": int(len(rows)),
+            "n_realized_seeds": int(rows["seed"].nunique()),
+            "n_unique_sessions": int(rows[["subject", "session_idx"]].drop_duplicates().shape[0]),
             **{name: float(np.nanmean([item[name] for item in seed_metrics])) for name in metric_names},
         })
 

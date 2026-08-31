@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import csv
 import hashlib
 import json
 from dataclasses import replace
@@ -12,6 +13,7 @@ import pandas as pd
 import pytest
 
 from experiments.run_quality_training_sensitivity import _build_sensitivity_provenance
+from experiments import correct_quality_training_seed_collapse as correction
 from dehyd.eval.harness import Candidate
 from dehyd.eval.quality_training_sensitivity import (
     EXPECTED_NEGATIVE_KEYS,
@@ -24,6 +26,7 @@ from dehyd.eval.quality_training_sensitivity import (
     assert_identical_test_keys,
     authenticate_reference,
     canonical_keys_from_reference,
+    expand_deterministic_seed_predictions,
     fit_selected_candidate,
     load_quality_margin,
     load_quality_training_config,
@@ -32,6 +35,7 @@ from dehyd.eval.quality_training_sensitivity import (
     require_full_model_seeds,
     subject_overlap_census,
     synthetic_mechanism_smoke,
+    summarize_predictions,
     validate_quality_table,
     verify_loso_regression_baseline_replay,
     write_protocol_outputs,
@@ -375,6 +379,113 @@ def test_ordinal_session_selection_averages_mae_by_seed_but_qwk_uses_first_seed(
     assert qwk == pytest.approx(1.0)
 
 
+def _reporting_row(
+    *, task, split_id, seed, subject, session_idx, truth, prediction,
+    treatment="baseline", protocol="loso",
+):
+    return {
+        "protocol": protocol,
+        "task": task,
+        "split_id": split_id,
+        "arm": "regression" if task == "regression" else "a",
+        "treatment": treatment,
+        "seed": seed,
+        "subject": subject,
+        "session_idx": session_idx,
+        "y_true": truth,
+        "y_pred": prediction,
+    }
+
+
+def test_regression_reporting_replicates_deterministic_fold_across_five_seeds():
+    rows = [
+        _reporting_row(
+            task="regression", split_id="subject_1", seed=1, subject=1,
+            session_idx=session, truth=truth, prediction=0.0,
+        )
+        for session, truth in ((0, 0.0), (1, 2.0))
+    ]
+    for seed in range(1, 6):
+        rows.extend([
+            _reporting_row(
+                task="regression", split_id="subject_2", seed=seed, subject=2,
+                session_idx=session, truth=truth, prediction=truth,
+            )
+            for session, truth in ((0, 0.0), (1, 2.0))
+        ])
+
+    expanded = expand_deterministic_seed_predictions(rows)
+    assert len(expanded) == 20
+    assert sorted({row["seed"] for row in expanded if row["split_id"] == "subject_1"}) == [1, 2, 3, 4, 5]
+    group = summarize_predictions(rows)["groups"][0]
+    assert group["n_prediction_rows"] == 12
+    assert group["n_seed_expanded_scoring_rows"] == 20
+    assert group["n_realized_seeds"] == 5
+    assert group["subject_balanced_mae_pct_points"] == pytest.approx(0.5)
+    assert group["subject_balanced_rmse_pct_points"] == pytest.approx(np.sqrt(2.0) / 2.0)
+
+
+def test_ordinal_reporting_replicates_deterministic_fold_across_five_seeds():
+    rows = [
+        _reporting_row(
+            task="ordinal_classification", split_id="subject_1", seed=1, subject=1,
+            session_idx=session, truth=truth, prediction=prediction,
+        )
+        for session, truth, prediction in ((0, 0, 0), (4, 4, 0))
+    ]
+    for seed in range(1, 6):
+        rows.extend([
+            _reporting_row(
+                task="ordinal_classification", split_id="subject_2", seed=seed,
+                subject=2, session_idx=session, truth=truth, prediction=truth,
+            )
+            for session, truth in ((0, 0), (4, 4))
+        ])
+
+    group = summarize_predictions(rows)["groups"][0]
+    assert group["n_prediction_rows"] == 12
+    assert group["n_seed_expanded_scoring_rows"] == 20
+    assert group["n_realized_seeds"] == 5
+    assert group["class_unit_mae"] == pytest.approx(1.0)
+    assert group["adjacent_accuracy"] == pytest.approx(0.75)
+    assert group["exact_accuracy_secondary"] == pytest.approx(0.75)
+    assert group["quadratic_weighted_kappa"] == pytest.approx(0.5)
+
+
+def test_seed_expansion_rejects_incomplete_duplicate_and_misaligned_rows():
+    complete = [
+        _reporting_row(
+            task="regression", split_id="full", seed=seed, subject=1,
+            session_idx=session, truth=float(session), prediction=float(session),
+        )
+        for seed in range(1, 6)
+        for session in (0, 1)
+    ]
+    incomplete = complete + [
+        _reporting_row(
+            task="regression", split_id="partial", seed=seed, subject=2,
+            session_idx=0, truth=0.0, prediction=0.0,
+        )
+        for seed in (1, 2)
+    ]
+    with pytest.raises(QualityTrainingError, match="neither deterministic"):
+        expand_deterministic_seed_predictions(incomplete)
+
+    duplicate = complete + [dict(complete[0])]
+    with pytest.raises(QualityTrainingError, match="duplicate session keys"):
+        expand_deterministic_seed_predictions(duplicate)
+
+    misaligned_keys = copy.deepcopy(complete)
+    misaligned_keys[3]["session_idx"] = 2
+    with pytest.raises(QualityTrainingError, match="ordered session keys differ"):
+        expand_deterministic_seed_predictions(misaligned_keys)
+
+    misaligned_truth = copy.deepcopy(complete)
+    misaligned_truth[3]["y_true"] = 10.0
+    with pytest.raises(QualityTrainingError, match="truth differs across seeds"):
+        expand_deterministic_seed_predictions(misaligned_truth)
+
+
 def test_authenticated_baseline_replay_gate_fails_on_prediction_or_epsilon_drift():
     reference = {
         "population": {"sessions": [
@@ -449,6 +560,244 @@ def test_outputs_are_deterministic_and_isolated(tmp_path):
         name: path.read_bytes() for name, path in second.items()
     }
     assert not (tmp_path / "one" / "subject_overlap_session_cv").exists()
+
+
+def _write_synthetic_v1_result_tree(result_root):
+    """Create an authenticated mixed-seed run without depending on production outputs."""
+    result_root.mkdir(parents=True)
+    output_hashes = {}
+    invalid_metric_hashes = {}
+    for protocol in ("loso", "subject_overlap_session_cv"):
+        protocol_root = result_root / protocol
+        protocol_root.mkdir()
+        rows = []
+        for treatment, deterministic_predictions in (
+            ("baseline", (0.0, 0.0)),
+            ("filter_negative_margin", (0.0, 1.0)),
+            ("append_margin_feature", (0.0, 2.0)),
+        ):
+            rows.extend([
+                _reporting_row(
+                    task="regression", split_id="subject_1", seed=1, subject=1,
+                    session_idx=session_idx, truth=truth, prediction=prediction,
+                    treatment=treatment, protocol=protocol,
+                )
+                for session_idx, (truth, prediction) in enumerate(
+                    zip((0.0, 2.0), deterministic_predictions, strict=True)
+                )
+            ])
+            for seed in range(1, 6):
+                rows.extend([
+                    _reporting_row(
+                        task="regression", split_id="subject_2", seed=seed, subject=2,
+                        session_idx=session_idx, truth=truth, prediction=truth,
+                        treatment=treatment, protocol=protocol,
+                    )
+                    for session_idx, truth in enumerate((0.0, 2.0))
+                ])
+        predictions_path = protocol_root / "predictions.csv"
+        with predictions_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=correction.PREDICTION_FIELDS)
+            writer.writeheader()
+            for row_index, row in enumerate(rows):
+                writer.writerow({**row, "row_index": row_index})
+
+        for name, content in (
+            ("fit_audit.jsonl", '{"synthetic": true}\n'),
+            ("selections.json", "[]\n"),
+            ("split_manifest.json", "[]\n"),
+            ("metrics.json", '{"invalid_raw_seed_report": true}\n'),
+        ):
+            (protocol_root / name).write_text(content, encoding="utf-8")
+
+        for path in protocol_root.iterdir():
+            relative_path = path.relative_to(result_root).as_posix()
+            output_hashes[relative_path] = correction._sha256_file(path)
+        invalid_metric_hashes[f"{protocol}/metrics.json"] = output_hashes[
+            f"{protocol}/metrics.json"
+        ]
+
+    provenance = {
+        "schema_version": "quality_training_sensitivity_provenance_v1",
+        "git": {"commit": correction.TRAINING_COMMIT, "branch": "synthetic", "dirty": False},
+        "output_sha256": output_hashes,
+    }
+    provenance_path = result_root / "provenance.json"
+    provenance_path.write_text(
+        json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return correction._sha256_file(provenance_path), invalid_metric_hashes
+
+
+def test_reporting_only_correction_archives_only_invalid_reports(monkeypatch, tmp_path):
+    result_root = tmp_path / "results" / "quality_training_sensitivity_10ghz"
+    archive_root = (
+        tmp_path / "archive" / "results"
+        / "quality_training_sensitivity_seed_collapse_invalid_20260831"
+    )
+    provenance_hash, metric_hashes = _write_synthetic_v1_result_tree(result_root)
+    original_bytes = {
+        path.relative_to(result_root).as_posix(): path.read_bytes()
+        for path in result_root.rglob("*") if path.is_file()
+    }
+    correction_commit = "b" * 40
+    monkeypatch.setattr(correction, "RESULT_ROOT", result_root.resolve())
+    monkeypatch.setattr(correction, "ARCHIVE_ROOT", archive_root.resolve())
+    monkeypatch.setattr(correction, "ORIGINAL_PROVENANCE_SHA256", provenance_hash)
+    monkeypatch.setattr(correction, "ORIGINAL_METRICS_SHA256", metric_hashes)
+    monkeypatch.setattr(
+        correction,
+        "capture_clean_correction_commit",
+        lambda: {
+            "commit": correction_commit,
+            "branch": "test",
+            "dirty_except_fixed_result_root": False,
+        },
+    )
+
+    outcome = correction.correct_existing_reports()
+    invalid_paths = {
+        "provenance.json",
+        "loso/metrics.json",
+        "subject_overlap_session_cv/metrics.json",
+    }
+    assert {
+        path.relative_to(archive_root).as_posix()
+        for path in archive_root.rglob("*") if path.is_file()
+    } == invalid_paths
+    for relative_path in invalid_paths:
+        assert (archive_root / relative_path).read_bytes() == original_bytes[relative_path]
+    for relative_path, content in original_bytes.items():
+        if relative_path not in invalid_paths:
+            assert (result_root / relative_path).read_bytes() == content
+
+    loso = json.loads((result_root / "loso" / "metrics.json").read_text(encoding="utf-8"))
+    regression = next(
+        group for group in loso["groups"]
+        if group["task"] == "regression" and group["treatment"] == "baseline"
+    )
+    assert regression["n_prediction_rows"] == 12
+    assert regression["n_seed_expanded_scoring_rows"] == 20
+    assert regression["n_realized_seeds"] == 5
+    assert regression["subject_balanced_mae_pct_points"] == pytest.approx(0.5)
+    provenance = json.loads((result_root / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["git"]["commit"] == correction.TRAINING_COMMIT
+    assert provenance["original_training_git"]["commit"] == correction.TRAINING_COMMIT
+    assert provenance["reporting_correction"]["git"]["commit"] == correction_commit
+    assert provenance["reporting_correction"]["models_or_features_rerun"] is False
+    assert provenance["reporting_correction"]["predictions_changed"] is False
+    for relative_path, expected_hash in provenance["output_sha256"].items():
+        assert correction._sha256_file(result_root / relative_path) == expected_hash
+    assert outcome["models_or_features_rerun"] is False
+
+
+def test_reporting_correction_rolls_back_after_partial_install(monkeypatch, tmp_path):
+    result_root = tmp_path / "results" / "quality_training_sensitivity_10ghz"
+    archive_root = (
+        tmp_path / "archive" / "results"
+        / "quality_training_sensitivity_seed_collapse_invalid_20260831"
+    )
+    provenance_hash, metric_hashes = _write_synthetic_v1_result_tree(result_root)
+    original_bytes = {
+        path.relative_to(result_root).as_posix(): path.read_bytes()
+        for path in result_root.rglob("*") if path.is_file()
+    }
+    monkeypatch.setattr(correction, "RESULT_ROOT", result_root.resolve())
+    monkeypatch.setattr(correction, "ARCHIVE_ROOT", archive_root.resolve())
+    monkeypatch.setattr(correction, "ORIGINAL_PROVENANCE_SHA256", provenance_hash)
+    monkeypatch.setattr(correction, "ORIGINAL_METRICS_SHA256", metric_hashes)
+    monkeypatch.setattr(
+        correction,
+        "capture_clean_correction_commit",
+        lambda: {
+            "commit": "b" * 40,
+            "branch": "test",
+            "dirty_except_fixed_result_root": False,
+        },
+    )
+
+    real_replace = Path.replace
+    installed_replacements = 0
+
+    def fail_during_second_install(source, target):
+        nonlocal installed_replacements
+        source_path = Path(source)
+        target_path = Path(target)
+        is_staged_install = (
+            source_path.parent != result_root
+            and ".quality-seed-correction-" in source_path.as_posix()
+            and result_root in target_path.parents
+        )
+        if is_staged_install:
+            installed_replacements += 1
+            if installed_replacements == 2:
+                raise OSError("injected failure after one corrected report install")
+        return real_replace(source_path, target_path)
+
+    monkeypatch.setattr(Path, "replace", fail_during_second_install)
+    with pytest.raises(OSError, match="injected failure"):
+        correction.correct_existing_reports()
+
+    assert installed_replacements == 2
+    assert not archive_root.exists()
+    assert list(result_root.parent.glob(".quality-seed-correction-*")) == []
+    restored_bytes = {
+        path.relative_to(result_root).as_posix(): path.read_bytes()
+        for path in result_root.rglob("*") if path.is_file()
+    }
+    assert restored_bytes == original_bytes
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_error"),
+    [
+        ("tamper_hashed_output", "original output hash mismatch"),
+        ("add_unexpected_file", "result file inventory changed"),
+    ],
+)
+def test_reporting_correction_fails_closed_before_archiving(
+    monkeypatch, tmp_path, mutation, expected_error,
+):
+    result_root = tmp_path / "results" / "quality_training_sensitivity_10ghz"
+    archive_root = (
+        tmp_path / "archive" / "results"
+        / "quality_training_sensitivity_seed_collapse_invalid_20260831"
+    )
+    provenance_hash, metric_hashes = _write_synthetic_v1_result_tree(result_root)
+    monkeypatch.setattr(correction, "RESULT_ROOT", result_root.resolve())
+    monkeypatch.setattr(correction, "ARCHIVE_ROOT", archive_root.resolve())
+    monkeypatch.setattr(correction, "ORIGINAL_PROVENANCE_SHA256", provenance_hash)
+    monkeypatch.setattr(correction, "ORIGINAL_METRICS_SHA256", metric_hashes)
+    monkeypatch.setattr(
+        correction,
+        "capture_clean_correction_commit",
+        lambda: {
+            "commit": "b" * 40,
+            "branch": "test",
+            "dirty_except_fixed_result_root": False,
+        },
+    )
+
+    if mutation == "tamper_hashed_output":
+        path = result_root / "loso" / "selections.json"
+        path.write_text('[{"tampered": true}]\n', encoding="utf-8")
+    else:
+        (result_root / "unexpected.txt").write_text("unexpected\n", encoding="utf-8")
+    bytes_before = {
+        path.relative_to(result_root).as_posix(): path.read_bytes()
+        for path in result_root.rglob("*") if path.is_file()
+    }
+
+    with pytest.raises(QualityTrainingError, match=expected_error):
+        correction.correct_existing_reports()
+
+    bytes_after = {
+        path.relative_to(result_root).as_posix(): path.read_bytes()
+        for path in result_root.rglob("*") if path.is_file()
+    }
+    assert bytes_after == bytes_before
+    assert not archive_root.exists()
+    assert list(result_root.parent.glob(".quality-seed-correction-*")) == []
 
 
 def test_atomic_publish_cleans_late_failure_and_never_overwrites(tmp_path):

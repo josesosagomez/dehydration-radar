@@ -4,6 +4,49 @@ Running record of every attempt, newest-first. Each entry: what was tried, wheth
 succeeded/failed **and why**, and the concrete parameter values + reasoning. Failures
 stay in the log. A new session reads only the most recent entries to orient.
 
+## 2026-08-31 — quality-training report seed collapse was wrong; reporting-only repair built
+
+Review of the completed 10 GHz sensitivity found a **reporting failure**, not a training
+failure.  A deterministic selected learner writes one outcome (seed 1), while a stochastic
+learner writes all five configured outcomes (seeds 1--5).  The first sensitivity reporter
+grouped the raw rows directly.  That gave a stochastic fold five times the reporting weight
+of a deterministic fold, unlike the frozen Experiment-A `_per_seed_matrix` and Experiment-C
+`_oof_matrix_c` convention, which replicate a deterministic prediction across the realized
+seed axis.  The stored predictions, fold selections, fit audits, split manifests, features,
+and models are valid and unchanged; **no model or feature retraining is needed**.
+
+The corrected reporter derives the realized seeds separately within each
+protocol/task/arm/treatment, requires each split to contain either seed 1 alone or the entire
+realized seed set, verifies unique ordered session keys and identical finite truth across
+seeds, and only then copies deterministic rows for scoring.  It rejects incomplete seed sets,
+duplicate keys, reordered keys, changed truth, and non-finite values.  The completed IBEX
+predictions produce these corrected headline values:
+
+- Primary LOSO regression subject-balanced MAE (percentage-body-mass points): baseline
+  `0.46948630181215856`; filtering the five negative-margin training sessions
+  `0.4751071844684362` (worse by `+0.005620882656277637`); appending the quality margin
+  `0.46963046437599826` (worse by `+0.00014416256383970039`).  The correction therefore
+  reverses the invalid raw-row conclusion that filtering helped LOSO regression.
+- Primary LOSO ordinal arm A class-unit MAE: baseline `1.5534246575342465`, filtering
+  `1.6027397260273972` (worse by `+0.049315068493150704`), appended margin
+  `1.5589041095890412` (worse by `+0.00547945205479472`).  Adjacent accuracies are
+  `0.5342465753424658`, `0.4931506849315069`, and `0.5287671232876713`, respectively.
+- Optimistic subject-overlap regression MAE: baseline `0.47159954683855754`, filtering
+  `0.46762911735391083` (better by `-0.003970429484646709`), appended margin
+  `0.47160943383699294` (worse by `+0.000009886998435404415`).  This remains a post-hoc
+  diagnostic and is not new-subject generalization.
+
+A bounded correction entry point was added.  Before changing a byte it authenticates the
+original training commit `4aa814d1338ec25671d34bf0f1a73dac91762fe9`, original provenance
+SHA-256 `8d64d45a297d8523efa52c4bb7e496f1073f3dffa5df4b3bb7ed6bd47d94b306`,
+all ten provenance-recorded output hashes, the exact result inventory, and the strict
+prediction relations.  It archives only the two invalid `metrics.json` files and original
+`provenance.json` under
+`archive/results/quality_training_sensitivity_seed_collapse_invalid_20260831`, then writes
+canonical metrics and v2 provenance containing both the original training commit and the
+clean correction commit/source hashes.  Production correction is deliberately deferred until
+this source repair is reviewed and committed cleanly.
+
 ## 2026-08-30 — Exp-C session-boundary repair verified locally
 
 The bounded repair for IBEX job `51028584` passed its final focused sensitivity suite:
