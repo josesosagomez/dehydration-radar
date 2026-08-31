@@ -1,0 +1,5252 @@
+{
+  "exploratory_post_hoc": true,
+  "groups": [
+    {
+      "adjacent_accuracy": 0.5287671232876713,
+      "arm": "a",
+      "class_unit_mae": 1.5589041095890412,
+      "exact_accuracy_secondary": 0.22465753424657536,
+      "n_prediction_rows": 181,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "quadratic_weighted_kappa": -0.21882123623989497,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "adjacent_accuracy": 0.5342465753424658,
+      "arm": "a",
+      "class_unit_mae": 1.5534246575342465,
+      "exact_accuracy_secondary": 0.2219178082191781,
+      "n_prediction_rows": 181,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "quadratic_weighted_kappa": -0.2124500866333904,
+      "task": "ordinal_classification",
+      "treatment": "baseline"
+    },
+    {
+      "adjacent_accuracy": 0.4931506849315069,
+      "arm": "a",
+      "class_unit_mae": 1.6027397260273972,
+      "exact_accuracy_secondary": 0.2328767123287671,
+      "n_prediction_rows": 181,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "quadratic_weighted_kappa": -0.21056997283778003,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "adjacent_accuracy": 0.5205479452054794,
+      "arm": "b",
+      "class_unit_mae": 1.6575342465753424,
+      "exact_accuracy_secondary": 0.2328767123287671,
+      "n_prediction_rows": 73,
+      "n_realized_seeds": 1,
+      "n_seed_expanded_scoring_rows": 73,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "quadratic_weighted_kappa": -0.1966027831426731,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "adjacent_accuracy": 0.5205479452054794,
+      "arm": "b",
+      "class_unit_mae": 1.6575342465753424,
+      "exact_accuracy_secondary": 0.2328767123287671,
+      "n_prediction_rows": 73,
+      "n_realized_seeds": 1,
+      "n_seed_expanded_scoring_rows": 73,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "quadratic_weighted_kappa": -0.1966027831426731,
+      "task": "ordinal_classification",
+      "treatment": "baseline"
+    },
+    {
+      "adjacent_accuracy": 0.547945205479452,
+      "arm": "b",
+      "class_unit_mae": 1.643835616438356,
+      "exact_accuracy_secondary": 0.1780821917808219,
+      "n_prediction_rows": 73,
+      "n_realized_seeds": 1,
+      "n_seed_expanded_scoring_rows": 73,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "quadratic_weighted_kappa": -0.20101244463193413,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "n_prediction_rows": 149,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "subject_balanced_mae_pct_points": 0.46963046437599826,
+      "subject_balanced_rmse_pct_points": 0.5575860182518197,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "n_prediction_rows": 149,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "subject_balanced_mae_pct_points": 0.46948630181215856,
+      "subject_balanced_rmse_pct_points": 0.5574058659619997,
+      "task": "regression",
+      "treatment": "baseline"
+    },
+    {
+      "arm": "regression",
+      "n_prediction_rows": 149,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "loso",
+      "subject_balanced_mae_pct_points": 0.4751071844684362,
+      "subject_balanced_rmse_pct_points": 0.5612542001166745,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    }
+  ],
+  "interpretation": {
+    "loso": "Primary estimate for a completely unseen subject.",
+    "negative_delta": "For error metrics, a negative treatment-minus-baseline delta is better.",
+    "subject_overlap_session_cv": "Optimistic diagnostic only: train and test contain sessions from many of the same subjects; this is not new-subject generalization and is post-hoc."
+  },
+  "paired_per_subject_deltas": [
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010870767871587528,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03269988833191895,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04699292441970404,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01985191216354376,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.054557204095826706,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00595893685868637,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024171669724870726,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03624342834647515,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006716631579721799,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.09463884022441865,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.018264743488564328,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.037816848524106605,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005429864253393646,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005538697783221469,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005666402434602924,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0384325030584699,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010870767871587528,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.05258565595179965,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04699292441970404,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01985191216354376,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.054557204095826706,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.008596027339673129,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024171669724870726,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03624342834647515,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006716631579721799,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.09463884022441865,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.018264743488564328,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03781468006285177,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005429864253393646,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005538697783221469,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.012621499643073464,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0384325030584699,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010870767871587528,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04680949598008877,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04699292441970404,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01985191216354376,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.054557204095826706,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0022422013497527815,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024171669724870726,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03624342834647515,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006716631579721799,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.09463884022441865,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.018264743488564328,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03970511372410035,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005429864253393646,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005538697783221469,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.012850709393947723,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0384325030584699,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010870767871587528,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.028036573247249397,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04699292441970404,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01985191216354376,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.054557204095826706,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004710781021229293,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024171669724870726,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03624342834647515,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006716631579721799,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.09463884022441865,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.018264743488564328,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03766437825546343,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005429864253393646,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005538697783221469,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011429254710590864,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0384325030584699,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010870767871587528,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01450530108065562,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04699292441970404,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01985191216354376,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.054557204095826706,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005131807573421243,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024171669724870726,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03624342834647515,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006716631579721799,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.09463884022441865,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.018264743488564328,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.037199868414624304,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005429864253393646,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005538697783221469,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.001632328474215905,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0384325030584699,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006830788475389871,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.008035946746800193,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -6.1248087121490435e-06,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -7.276997827709852e-06,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.318461408661431e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.050995504381369e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0005971823656426567,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.581537301885264e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0004213348017386709,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006830788475389871,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0038327692677703196,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0028268258396325074,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -7.276997827709852e-06,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.318461408661431e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.050995504381369e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0009431347102307197,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.581537301885264e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0008747705790279614,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006830788475389871,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.007017612029779241,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0008008966585517641,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -7.276997827709852e-06,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.318461408661431e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.050995504381369e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.004824867567422952,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.581537301885264e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005628964773537137,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006830788475389871,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.017088618074440176,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0002831370622948248,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -7.276997827709852e-06,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.318461408661431e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.050995504381369e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003968168660702487,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.581537301885264e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.004368504510461002,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006830788475389871,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.009935854944803313,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006978204100834828,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -7.276997827709852e-06,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.318461408661431e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.050995504381369e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.001495816033382058,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.581537301885264e-05,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0009189614269887736,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.017386177654923562,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.030665943572412258,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.031108670258578663,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013654191169865992,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.055352806317487624,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013721837995108288,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01796238806865924,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03762358709752445,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006131629184780607,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0951176331912067,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01499041251750477,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.049170464134310365,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005737481829444113,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006908113923095538,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.02656816906739612,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01609731815963822,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.017386177654923562,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04095904707894282,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.031108670258578663,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013654191169865992,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.055352806317487624,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.015831928579107257,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01796238806865924,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03762358709752445,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006131629184780607,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0951176331912067,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01499041251750477,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0481472876449921,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005737481829444113,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006908113923095538,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03777830957942496,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01609731815963822,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.017386177654923562,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04862934330880886,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.031108670258578663,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013654191169865992,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.055352806317487624,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.008881562423015521,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01796238806865924,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03762358709752445,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006131629184780607,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0951176331912067,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01499041251750477,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.050637054283170335,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005737481829444113,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006908113923095538,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.02895513827654561,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01609731815963822,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.017386177654923562,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.030218476357154578,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.031108670258578663,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013654191169865992,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.055352806317487624,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01180277988785361,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01796238806865924,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03762358709752445,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006131629184780607,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0951176331912067,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01499041251750477,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04806932748296611,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005737481829444113,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006908113923095538,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.026642185432056542,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01609731815963822,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.017386177654923562,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.016381100778715352,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.031108670258578663,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013654191169865992,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.055352806317487624,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013068699570205677,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01796238806865924,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03762358709752445,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006131629184780607,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0951176331912067,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01499041251750477,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.050810221115887844,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005737481829444113,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006908113923095538,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010550569669838028,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01609731815963822,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006060370750301525,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.008222565473533505,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0008837641240252991,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -5.334739853146697e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.4430824159750166e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 2.1528215250143923e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0006628999255728907,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 9.512438047365457e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0005132189657989228,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006060370750301525,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.004648352847040238,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0022632772904512266,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -5.334739853146697e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.4430824159750166e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 2.1528215250143923e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0010612149353420586,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 9.512438047365457e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0019332962406152232,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006060370750301525,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.004799840893965901,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00021820138863276606,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -5.334739853146697e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.4430824159750166e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 2.1528215250143923e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.006362393155667667,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 9.512438047365457e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.007478744447419583,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006060370750301525,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.012313521368879532,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0006466079620112697,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -5.334739853146697e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.4430824159750166e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 2.1528215250143923e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003534321799165907,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 9.512438047365457e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005066514936171718,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0006060370750301525,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013014230920447623,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0011426159617294318,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -5.334739853146697e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 1.4430824159750166e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 2.1528215250143923e-05,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0007894993865025235,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 9.512438047365457e-06,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.00038616982106443043,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "rmse",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.33333333333333326,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.33333333333333326,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.33333333333333326,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 2,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 3,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.33333333333333337,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 4,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 5,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "loso",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    }
+  ]
+}

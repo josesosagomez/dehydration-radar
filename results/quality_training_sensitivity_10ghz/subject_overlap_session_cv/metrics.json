@@ -1,0 +1,5252 @@
+{
+  "exploratory_post_hoc": true,
+  "groups": [
+    {
+      "adjacent_accuracy": 0.5150684931506848,
+      "arm": "a",
+      "class_unit_mae": 1.5424657534246573,
+      "exact_accuracy_secondary": 0.18904109589041096,
+      "n_prediction_rows": 249,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "quadratic_weighted_kappa": -0.09801899802442415,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "adjacent_accuracy": 0.5178082191780822,
+      "arm": "a",
+      "class_unit_mae": 1.5424657534246573,
+      "exact_accuracy_secondary": 0.1863013698630137,
+      "n_prediction_rows": 249,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "quadratic_weighted_kappa": -0.10014818582161836,
+      "task": "ordinal_classification",
+      "treatment": "baseline"
+    },
+    {
+      "adjacent_accuracy": 0.4794520547945205,
+      "arm": "a",
+      "class_unit_mae": 1.6136986301369862,
+      "exact_accuracy_secondary": 0.1780821917808219,
+      "n_prediction_rows": 249,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "quadratic_weighted_kappa": -0.14274681188538635,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "adjacent_accuracy": 0.5068493150684932,
+      "arm": "b",
+      "class_unit_mae": 1.7534246575342465,
+      "exact_accuracy_secondary": 0.1643835616438356,
+      "n_prediction_rows": 73,
+      "n_realized_seeds": 1,
+      "n_seed_expanded_scoring_rows": 73,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "quadratic_weighted_kappa": -0.20614793467819426,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "adjacent_accuracy": 0.5068493150684932,
+      "arm": "b",
+      "class_unit_mae": 1.7534246575342465,
+      "exact_accuracy_secondary": 0.1643835616438356,
+      "n_prediction_rows": 73,
+      "n_realized_seeds": 1,
+      "n_seed_expanded_scoring_rows": 73,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "quadratic_weighted_kappa": -0.20614793467819426,
+      "task": "ordinal_classification",
+      "treatment": "baseline"
+    },
+    {
+      "adjacent_accuracy": 0.4794520547945205,
+      "arm": "b",
+      "class_unit_mae": 1.7671232876712328,
+      "exact_accuracy_secondary": 0.1506849315068493,
+      "n_prediction_rows": 73,
+      "n_realized_seeds": 1,
+      "n_seed_expanded_scoring_rows": 73,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "quadratic_weighted_kappa": -0.22885915979661364,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "n_prediction_rows": 189,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "subject_balanced_mae_pct_points": 0.47160943383699294,
+      "subject_balanced_rmse_pct_points": 0.5455432594060896,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "n_prediction_rows": 189,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "subject_balanced_mae_pct_points": 0.47159954683855754,
+      "subject_balanced_rmse_pct_points": 0.5446663867184537,
+      "task": "regression",
+      "treatment": "baseline"
+    },
+    {
+      "arm": "regression",
+      "n_prediction_rows": 189,
+      "n_realized_seeds": 5,
+      "n_seed_expanded_scoring_rows": 365,
+      "n_unique_sessions": 73,
+      "protocol": "subject_overlap_session_cv",
+      "subject_balanced_mae_pct_points": 0.46762911735391083,
+      "subject_balanced_rmse_pct_points": 0.5374063575008463,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    }
+  ],
+  "interpretation": {
+    "loso": "Primary estimate for a completely unseen subject.",
+    "negative_delta": "For error metrics, a negative treatment-minus-baseline delta is better.",
+    "subject_overlap_session_cv": "Optimistic diagnostic only: train and test contain sessions from many of the same subjects; this is not new-subject generalization and is post-hoc."
+  },
+  "paired_per_subject_deltas": [
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0541047474209318,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.018098118917307504,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0051433835787834115,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0011608056688299784,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.020532402715261355,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01408077149809589,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.052453358699717956,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004554410825403088,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.07379299955769925,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0033085231205547405,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.007899271762251914,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0240804665061789,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04611809950773127,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011869268730028915,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0009112051997612891,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.008563030324586496,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.053348410802199375,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00626625231984268,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.015432262217293768,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0033002370047145457,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.020532402715261355,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.030252090530781317,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.02482093392201029,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.05229358152586272,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0960251358264328,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0033085231205547405,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03904463202975661,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.029426214316201516,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.030878119612608057,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.036087167009871746,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005331701343831763,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003797015690009231,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.06792008862426607,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0062328740481705225,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005891536172828837,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003947761157284568,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.020532402715261355,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03688440459711079,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.05317850441424399,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0014106334105348228,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.07167108421277657,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0033085231205547405,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00044889039252982155,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03252231990555243,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01861828561022688,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.030856017340971542,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004748094153230298,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01905209968343391,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.029465576053952725,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003175472997036799,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005794829630225373,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0033002370047146012,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.020532402715261355,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.028901176085875113,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.022372221286064475,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.019417982222526997,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.09455787845463237,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0033085231205547405,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.031116035668326547,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.02025206125676776,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.016941335957083137,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04671082685046746,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0006467065731845523,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.012462571802041245,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.054019378330633305,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01743574852710933,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.022829259849507844,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.008249355093040311,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.020532402715261355,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.02521136803861629,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04851933089343902,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.056504064575235935,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04038958430185047,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0033085231205547405,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03421888776028337,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.02157121901475395,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.05267763003436188,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03889654631402928,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005383030977804015,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005638155293082647,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00530289278240581,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0013587516739497207,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0065944072629282036,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005595574220047694,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.40708961136194e-06,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.001646022372997713,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.012675150172694938,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00299033544452465,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0017478911233330674,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -1.1713299735705007e-07,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011421207773990139,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00504389910843317,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.006399875188529636,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0018623444911476383,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.009684316815343763,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.008162539985945128,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01772812377768912,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -1.6388661577160235e-05,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0037122914430868237,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0011345315465031702,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.40708961136194e-06,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005332489133533236,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0011919207208943017,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0018689331951816657,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.007737716951047968,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -1.1713299735705007e-07,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0029539391492241496,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.00033753157979621307,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0017325220247559892,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0019334210326530377,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.007526919870509019,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.004415534210799876,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.015329889914004857,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.00973075044722177,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0018525847331101741,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.00048700739393320314,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.40708961136194e-06,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004271689688494229,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.002821045973994518,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0009281532388317748,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.012153428393027577,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -1.1713299735705007e-07,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.008029352767202957,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0038894574237526847,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.007890015927796978,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.008377159790775524,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00026452481508210113,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.026720445915045188,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.011704437449509109,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0021685925583080357,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003640518492263045,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0011345315465031702,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.40708961136194e-06,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0005564146596368502,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011715794468258434,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0031255790279165474,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.008863384662261886,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -1.1713299735705007e-07,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.02083429141514148,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0013181916026709928,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01965530036057328,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.02798244182794124,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.007958555672163525,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0065022621769123545,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005650798783433497,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.001119129096665894,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.002749405390058579,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003974035279611321,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.40708961136194e-06,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0008578149725032569,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.008673715851350128,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.010763190822371427,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.014700874127431707,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -1.1713299735705007e-07,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.015611346510432389,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0017975701277591072,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.012939469398303871,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013639038537979764,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005887381180177176,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.006090149711471482,
+      "metric": "mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04707490292841321,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.014884882219431295,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.009978220279242611,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.02205731703536007,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013479594111166282,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.010597924031616801,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04333827612291624,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01687413024409845,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.08778159864800172,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.016236666079175788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.015465380266170947,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.01282206909361372,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.045654318421392615,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.026485695512257768,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.002636907833071467,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01844152963266077,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03893602050427297,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004007115320539767,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024687685658183245,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.029960439967936847,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013479594111166282,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.027611917832941535,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.034979349658806336,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.05653563792497596,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.10260484985112894,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.016236666079175788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.031214333199900635,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0121410997611614,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03519128231954782,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.042066049312829534,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006263131502232788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0040673827504392746,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04747190915034716,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.007797816164029525,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.012389225763032807,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03110990630520194,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013479594111166282,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03470706377429489,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.05261048150427561,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.003393249927549191,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.08398983406658767,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.016236666079175788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0013380297539240527,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011062048217217235,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024141342506919294,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.05540097970431068,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.005866131951556053,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03577785208385409,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03917859592730988,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.001056314871345554,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011507629390578089,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.029960439967936958,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013479594111166282,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.026566520325189746,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.03047811793642219,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0174584745384474,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.102111621239666,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.016236666079175788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.028066038487772893,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013302060822910522,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01889878258751837,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.05296554974555012,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0013165996634952881,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.024594870788813283,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04231526241882605,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.016759610982557793,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.04236550295418745,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.03843684893092625,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.013479594111166282,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.022125085000075817,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0528949841100278,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.06868864667562946,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.05839061682481983,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.016236666079175788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0339657068978656,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013524982387476125,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04710269262890099,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.051968842245016744,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.001136915879537792,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.01299417200689379,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00032292223178898016,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0014245787711739122,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.011418810337152696,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.009940847319710566,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.746686939176129e-07,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0016292776096377137,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005781424714492778,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0019210430286447089,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0024348237664812977,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.138494812539918e-06,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013498542535907987,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00041347310023664985,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005929265514202198,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.008678944861274296,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005107384578881158,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.014522097596170347,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004841179188099509,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -2.481537623333363e-05,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006015061602939409,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.002037724387133788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.746686939176129e-07,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.005237333166349278,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0007277261252509049,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0012467468105529234,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006379020723234374,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.138494812539918e-06,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.002769686236576474,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.00010270317373672899,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0015988779229949013,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0049618420388329865,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00707501095220342,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.007755539948385848,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.007280230569797874,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.009682245795332334,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.003263414003559506,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0008882580498688064,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.746686939176129e-07,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003465712749914418,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0009500266344781294,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0006994319132150872,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.013543521456163443,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.138494812539918e-06,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011702834684774177,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00032945685040874917,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.00727546342944041,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.012624179679695868,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0006848736556955837,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.04657930813108391,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0030746217239223106,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.002144813103236609,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006270969037217078,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.002037724387133788,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.746686939176129e-07,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0008209293463227185,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.006616464803863298,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003457914399780826,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.007872653184783696,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.138494812539918e-06,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.025465997185829092,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.00019101664754661574,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.015826677681637424,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.021726372604331967,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.007725808673928025,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.011254159423253474,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0034580305419577018,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 1,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0012720828563205777,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 2,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.004900242497794416,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 3,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.0070183812828369385,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 4,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.746686939176129e-07,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 5,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0008501111810456652,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 6,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.004539851759476854,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 7,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.010048166246079515,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 8,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.0141755989213328,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 9,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 5.138494812539918e-06,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 10,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.018671122443425725,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 11,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -8.849220075612951e-05,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 12,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.009082476204616885,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 13,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.009343030870109792,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 14,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": -0.003149025408131556,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 15,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "regression",
+      "delta_treatment_minus_baseline": 0.010776209429883943,
+      "metric": "rmse",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 16,
+      "task": "regression",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.4,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.5,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.6000000000000001,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.3333333333333335,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.75,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.3999999999999999,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.7999999999999998,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": -0.5,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "filter_negative_margin"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 2,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 3,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.19999999999999996,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.20000000000000018,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 4,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": -0.25,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.40000000000000013,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "a",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 5,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 1,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 2,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 3,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 4,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 5,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 6,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 7,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 8,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 9,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 10,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 11,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 12,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 13,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 14,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 15,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    },
+    {
+      "arm": "b",
+      "delta_treatment_minus_baseline": 0.0,
+      "metric": "class_unit_mae",
+      "protocol": "subject_overlap_session_cv",
+      "seed": 1,
+      "subject": 16,
+      "task": "ordinal_classification",
+      "treatment": "append_margin_feature"
+    }
+  ]
+}

@@ -1,0 +1,938 @@
+[
+  {
+    "arm": "regression",
+    "candidate_id": "svr_4",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0,
+      "epsilon": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_1",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "rf_5",
+    "family": "rf",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "max_depth": null,
+      "n_estimators": 300
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_2",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_4",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 11
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_3",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_5",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 13
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_4",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_5",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 13
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_5",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "gbm_0",
+    "family": "gbm",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      2,
+      "frozen"
+    ],
+    "params": {
+      "learning_rate": 0.01,
+      "max_depth": 2,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_6",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_0",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.01
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_7",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_2",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.3
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_8",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_1",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      1,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 5
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_9",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_5",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 13
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_10",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_0",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      1,
+      "frozen"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.01
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_11",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "gbm_0",
+    "family": "gbm",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "learning_rate": 0.01,
+      "max_depth": 2,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_12",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_5",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 13
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_13",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_0",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.01
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_14",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "gbm_4",
+    "family": "gbm",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "learning_rate": 0.01,
+      "max_depth": 2,
+      "n_estimators": 300
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_15",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "knn_5",
+    "family": "knn",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "n_neighbors": 13
+    },
+    "protocol": "loso",
+    "selection_source": "authenticated_exp_a_outer_fold",
+    "split_id": "subject_16",
+    "task": "regression"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_rf_2",
+    "family": "ord_a_rf",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "max_depth": null,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_1",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_1",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_gbm_1",
+    "family": "ord_a_gbm",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "learning_rate": 0.01,
+      "max_depth": 3,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_2",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_2",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_5",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "alpha": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_3",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_3",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_0",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "alpha": 0.001
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_4",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_2",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 10.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_4",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_0",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "alpha": 0.001
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_5",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_5",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_rf_1",
+    "family": "ord_a_rf",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "max_depth": 5,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_6",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_6",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_svr_6",
+    "family": "ord_a_svr",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "C": 10.0,
+      "epsilon": 0.01
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_7",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_7",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_svr_1",
+    "family": "ord_a_svr",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_8",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_2",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "C": 10.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_8",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_gbm_6",
+    "family": "ord_a_gbm",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "learning_rate": 0.1,
+      "max_depth": 2,
+      "n_estimators": 300
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_9",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "frozen"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_9",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_3",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "alpha": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_10",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_10",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_gbm_2",
+    "family": "ord_a_gbm",
+    "feature_key": [
+      1,
+      "B",
+      "iq",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "learning_rate": 0.1,
+      "max_depth": 2,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_11",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "B",
+      "iq",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_11",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_gbm_2",
+    "family": "ord_a_gbm",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "learning_rate": 0.1,
+      "max_depth": 2,
+      "n_estimators": 100
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_12",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_12",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_6",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "off"
+    ],
+    "params": {
+      "alpha": 3.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_13",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_2",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "off"
+    ],
+    "params": {
+      "C": 10.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_13",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_6",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "off"
+    ],
+    "params": {
+      "alpha": 3.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_14",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      2,
+      "off"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_14",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_7",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "alpha": 10.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_15",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_15",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_0",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "alpha": 0.001
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_16",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "loso",
+    "selection_source": "frozen_exp_c_nested_loso_baseline",
+    "split_id": "subject_16",
+    "task": "ordinal_classification"
+  }
+]

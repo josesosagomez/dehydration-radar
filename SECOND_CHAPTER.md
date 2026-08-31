@@ -1439,6 +1439,46 @@ water-driven dielectric mechanism, or justify selecting path 40 for a later mode
 because a complete null-sensitive mechanism analysis is more informative than reporting only an
 attractive path.
 
+## 8.1 Quality-aware training sensitivity — 10 GHz *(exploratory, complete)*
+
+This post-hoc sensitivity asked whether the radar-only session-quality measurement could identify
+training rows that harmed prediction. The quality variable was the authenticated
+`in_band_ratio_p10_margin`, defined as the measured in-band ratio minus the fixed threshold 0.3.
+Its zero threshold was fixed before scoring and did not use body mass, predictions, or errors. Five
+of the 73 eligible sessions had negative margins: `(4,S2)`, `(8,S0)`, `(8,S2)`, `(12,S0)`, and
+`(16,S3)`. Three treatments were compared using the same held-out rows: the baseline, removing
+those five rows from training only, and appending the raw margin as one feature before the
+train-only scaler. No quality weighting was used.
+
+The primary analysis was subject-level LOSO on 16 subjects and 73 eligible sessions. Regression of
+signed fluid loss, Δm% (percentage-body-mass points), remained the primary task. The secondary
+5-class S0–S4 analysis used ordinal metrics in two fixed arms: arm A regressed and then thresholded
+the continuous prediction; arm B used the frozen Frank–Hall ordinal model. All choices and fitted
+quantities remained inside the training folds. For reporting, deterministic folds with only seed 1
+were replicated across the realized seed axis, while stochastic folds used their realized seeds;
+this gives each fold the same seed weight. The corrected report changed no prediction, selection,
+feature, or fit-audit file.
+
+| LOSO treatment | regression MAE | regression RMSE | arm A class-unit MAE | arm A adjacent accuracy | arm B class-unit MAE |
+|---|---:|---:|---:|---:|---:|
+| baseline | 0.46949 | 0.55741 | 1.55342 | 0.53425 | 1.65753 |
+| remove negative-margin training sessions | 0.47511 | 0.56125 | 1.60274 | 0.49315 | 1.64384 |
+| append quality margin | 0.46963 | 0.55759 | 1.55890 | 0.52877 | 1.65753 |
+
+The only other split was a session-level subject-overlap CV, retained as an optimistic diagnostic
+because the same subjects can occur in training and evaluation. Filtering appeared to improve its
+regression MAE from 0.47160 to 0.46763, but this small gain conflicts with the primary LOSO result
+and is not evidence of new-subject generalization. Under LOSO, filtering worsened regression MAE
+by 0.00562 percentage points and arm A class-unit MAE by 0.04932; appending the margin was
+effectively unchanged and slightly worse. Arm B was mixed and remained weak. Thus, for this cohort,
+the measured quality flag did not improve prediction for an unseen subject. It is a useful audit
+signal to retain and investigate, not a demonstrated cure for the model's generalization problem.
+
+This sensitivity is exploratory and does not establish that radar isolates hydration from time of
+day, nor does it support clinical use. The models and features were trained in IBEX at commit
+`4aa814d`; the seed-reporting correction was made at commit `c7addb4` without retraining.
+Artifacts are in `results/quality_training_sensitivity_10ghz/`.
+
 ## 9. Fusion, interpretability, confounds, statistics — G, E, F, H  *(fill at milestone 10)*
 
 Not yet written. **No milestone-10 result exists as of 2026-08-08** — implementation is in progress

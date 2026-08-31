@@ -20,3 +20,7 @@ results/milestone10/*.json -text
 # above: they are lineage evidence, and `core.autocrlf=true` here would otherwise rewrite them
 # on checkout and hand a CR-terminated path to whatever reads them back.
 results/milestone10/sources/*.txt -text
+
+# The quality-sensitivity provenance records byte-level hashes for every result file.
+# Preserve those exact bytes across Windows and Linux checkouts.
+results/quality_training_sensitivity_10ghz/** -text

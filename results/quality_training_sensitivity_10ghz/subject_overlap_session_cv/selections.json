@@ -1,0 +1,299 @@
+[
+  {
+    "arm": "regression",
+    "candidate_id": "rf_0",
+    "family": "rf",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      2,
+      "tuned"
+    ],
+    "params": {
+      "max_depth": 3,
+      "n_estimators": 100
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_0",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_2",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      1,
+      "frozen"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.3
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_1",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_2",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.3
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_2",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "svr_2",
+    "family": "svr",
+    "feature_key": [
+      1,
+      "A",
+      "iq",
+      2,
+      "frozen"
+    ],
+    "params": {
+      "C": 0.1,
+      "epsilon": 0.3
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_3",
+    "task": "regression"
+  },
+  {
+    "arm": "regression",
+    "candidate_id": "gbm_2",
+    "family": "gbm",
+    "feature_key": [
+      0,
+      "A",
+      "iq",
+      2,
+      "frozen"
+    ],
+    "params": {
+      "learning_rate": 0.1,
+      "max_depth": 2,
+      "n_estimators": 100
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_4",
+    "task": "regression"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_svr_7",
+    "family": "ord_a_svr",
+    "feature_key": [
+      0,
+      "A",
+      "iq",
+      1,
+      "tuned"
+    ],
+    "params": {
+      "C": 10.0,
+      "epsilon": 0.1
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_0",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      0,
+      "A",
+      "iq",
+      1,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_0",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_rf_4",
+    "family": "ord_a_rf",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "max_depth": 5,
+      "n_estimators": 300
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_1",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "A",
+      "mag",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_1",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_gbm_6",
+    "family": "ord_a_gbm",
+    "feature_key": [
+      1,
+      "B",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "learning_rate": 0.1,
+      "max_depth": 2,
+      "n_estimators": 300
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_2",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "B",
+      "iq",
+      0,
+      "off"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_2",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_ridge_0",
+    "family": "ord_a_ridge",
+    "feature_key": [
+      1,
+      "B",
+      "iq",
+      1,
+      "frozen"
+    ],
+    "params": {
+      "alpha": 0.001
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_3",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_0",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      1,
+      "B",
+      "iq",
+      1,
+      "frozen"
+    ],
+    "params": {
+      "C": 0.1
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_3",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "a",
+    "candidate_id": "ord_a_gbm_0",
+    "family": "ord_a_gbm",
+    "feature_key": [
+      0,
+      "B",
+      "iq",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "learning_rate": 0.01,
+      "max_depth": 2,
+      "n_estimators": 100
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_4",
+    "task": "ordinal_classification"
+  },
+  {
+    "arm": "b",
+    "candidate_id": "ord_b_frank_hall_1",
+    "family": "ord_b_frank_hall",
+    "feature_key": [
+      0,
+      "B",
+      "iq",
+      0,
+      "tuned"
+    ],
+    "params": {
+      "C": 1.0
+    },
+    "protocol": "subject_overlap_session_cv",
+    "selection_source": "baseline_nested_session_cv",
+    "split_id": "fold_4",
+    "task": "ordinal_classification"
+  }
+]

@@ -1,0 +1,601 @@
+{
+  "baseline_replay_gate": {
+    "canonical_seed_semantics": "deterministic_one_seed; seed_sensitive_all_realized_seeds",
+    "max_abs_prediction_delta": 2.3303581286882036e-13,
+    "max_abs_tuned_epsilon_delta": 2.710505431213761e-20,
+    "n_prediction_rows": 149,
+    "status": "passed",
+    "tolerance": 1e-10
+  },
+  "configs": [
+    {
+      "path": "/ibex/user/sosagojm/dehydration_radar_2/configs/quality_training_sensitivity_10ghz.yaml",
+      "sha256": "06c477c018d9f74552f0a13e967fcd7072c9b55721ca53a90295f8bc41e6409e"
+    },
+    {
+      "path": "/ibex/user/sosagojm/dehydration_radar_2/configs/exp_a_regression.yaml",
+      "sha256": "d5ebd36e99d425857790c2f2ea93f11fae677e791d885e039fb5137c30959a06"
+    },
+    {
+      "path": "/ibex/user/sosagojm/dehydration_radar_2/configs/exp_c.yaml",
+      "sha256": "a9bf222b754b426f395c93fa01aa21a2637ab5d68b052d3ab6a9118737923c96"
+    },
+    {
+      "path": "/ibex/user/sosagojm/dehydration_radar_2/configs/ibex_sosagojm.yaml",
+      "sha256": "993c0ad393bac5686be47528768e1e670845222950444ecc458655ad5c0f2e5e"
+    }
+  ],
+  "git": {
+    "branch": "codex/quality-aware-training-sensitivity",
+    "commit": "4aa814d1338ec25671d34bf0f1a73dac91762fe9",
+    "dirty": false
+  },
+  "n_sessions": 73,
+  "n_subjects": 16,
+  "negative_training_rows": [
+    [
+      4,
+      2
+    ],
+    [
+      8,
+      0
+    ],
+    [
+      8,
+      2
+    ],
+    [
+      12,
+      0
+    ],
+    [
+      16,
+      3
+    ]
+  ],
+  "original_training_git": {
+    "branch": "codex/quality-aware-training-sensitivity",
+    "commit": "4aa814d1338ec25671d34bf0f1a73dac91762fe9",
+    "dirty": false
+  },
+  "output_sha256": {
+    "loso/fit_audit.jsonl": "9d3458c2e3fa1a6f2295b844e48ba263fcce870294afb6dabcca147026b20e1f",
+    "loso/metrics.json": "d5c91a26bfc3f74a7ca27121a50f300fcd84800019aad2a950e9f89c15b072c1",
+    "loso/predictions.csv": "b5128c92e5e68c17fb2d1df95825e7cedc8499608656e2466ec3de9a5b55f263",
+    "loso/selections.json": "e17274c0aedeb72fdb1c12fca1ed0fb1c550157f5bb050cb2ace2ee0050ec4fb",
+    "loso/split_manifest.json": "066e1cc0ed4a0296ebb0152ba388d4e25366657a17e4167164787f322ee206e8",
+    "subject_overlap_session_cv/fit_audit.jsonl": "99dbbfaddbc1c7c819e32c3d86257bbb365262b00875dc2a1ab20d99f2febcb0",
+    "subject_overlap_session_cv/metrics.json": "564e9167fabb6387f9a3bb30ba4571257aa6eba159b5761d1aa7af51abb3475f",
+    "subject_overlap_session_cv/predictions.csv": "1314b9ee5d87ea3681a9ecb11023c644a33968ec96452f72e170b22fae5cf596",
+    "subject_overlap_session_cv/selections.json": "e41a2cd2a723dad4c0e5df17a9af5c20d729a94929e2797f14d06df561fb9847",
+    "subject_overlap_session_cv/split_manifest.json": "ed9c3c32165a681e459f491264b00dc9f2fb311e5359b14dbe4ad88422ffc939"
+  },
+  "packages": {
+    "PyYAML": "6.0.3",
+    "h5py": "3.16.0",
+    "kymatio": "0.3.0",
+    "matplotlib": "3.11.1",
+    "numpy": "2.4.6",
+    "openpyxl": "3.1.5",
+    "pandas": "3.0.3",
+    "pytest": "9.1.1",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.16.3",
+    "torch": "2.13.0+cu126"
+  },
+  "platform": {
+    "cpu_model": "AMD EPYC 9655 96-Core Processor",
+    "machine": "x86_64",
+    "release": "5.14.0-427.20.1.el9_4.0.1.x86_64",
+    "system": "Linux"
+  },
+  "protocol_labels": {
+    "loso": "primary new-subject generalization",
+    "subject_overlap_session_cv": "optimistic post-hoc diagnostic; not generalization"
+  },
+  "quality_signal": "radar-only in_band_ratio_p10_margin",
+  "quality_threshold": 0.0,
+  "reporting_correction": {
+    "archived_invalid_reports": [
+      "provenance.json",
+      "loso/metrics.json",
+      "subject_overlap_session_cv/metrics.json"
+    ],
+    "git": {
+      "branch": "codex/quality-aware-training-sensitivity",
+      "commit": "c7addb435ed82b520a56064f5ef9d274403c8a7d",
+      "dirty_except_fixed_result_root": false
+    },
+    "models_or_features_rerun": false,
+    "original_provenance_sha256": "8d64d45a297d8523efa52c4bb7e496f1073f3dffa5df4b3bb7ed6bd47d94b306",
+    "predictions_changed": false,
+    "reason": "The v1 reporter scored raw seed groups, overweighting stochastic folds. Metrics now replicate deterministic seed-1 folds across each group's realized seed axis, matching canonical Experiment A/C reporting.",
+    "schema_version": "quality_training_seed_collapse_correction_v1",
+    "source_sha256": {
+      "experiments/correct_quality_training_seed_collapse.py": "4a2866ab0ce8f4ffbe8abd735282af7279e275763c3532b3bd090c6f1c1f2e1e",
+      "src/dehyd/eval/quality_training_sensitivity.py": "38bb686bd2f5aecc37b2782ef6380584febe115d8d98255cbe84579ced324439"
+    },
+    "timestamp_utc": "2026-08-31T14:35:42.705540+00:00"
+  },
+  "resolved_config": {
+    "baselines": {
+      "adam_betas": [
+        0.9,
+        0.999
+      ],
+      "adam_weight_decay_default": 0.0,
+      "batch_size": 16,
+      "checkpoint_direction": "minimize",
+      "checkpoint_metric": "inner_val_session_mae",
+      "cnn2d_channels": [
+        16,
+        32
+      ],
+      "cnn2d_kernel": 3,
+      "cnn2d_pool": 2,
+      "cnn_channels": [
+        16,
+        32,
+        64
+      ],
+      "cnn_kernel": 7,
+      "cnn_pool": 4,
+      "early_stopping_min_delta": 0.0001,
+      "early_stopping_patience": 15,
+      "frame_to_session_aggregation": "median",
+      "loss": "mse",
+      "lr": 0.001,
+      "matched_channels_77ghz": 2,
+      "matched_input_77ghz": "chain_steps_1_5_single_rx_range_bin_mean",
+      "matched_reference_rx_index_77ghz": 0,
+      "max_epochs": 200,
+      "optimizer": "adam",
+      "physics_background_range_m_10ghz": [
+        1.5,
+        3.0
+      ],
+      "physics_motion_band_bins_77ghz": [
+        1,
+        127
+      ],
+      "physics_prf_hz_77ghz": 1953.125,
+      "physics_static_band_bins_77ghz": [
+        0,
+        0
+      ],
+      "physics_target_range_m_10ghz": [
+        0.9,
+        1.5
+      ],
+      "raw_channels_77ghz": 1,
+      "raw_matched_standardize": "robust_per_channel",
+      "raw_reduction_77ghz": "mean_over_fast_time_and_rx",
+      "spectrogram_ablation_channels_77ghz": 2,
+      "spectrogram_hann": 64,
+      "spectrogram_hop": 16,
+      "spectrogram_nfft": 128,
+      "spectrogram_primary_channels_77ghz": 1,
+      "spectrogram_standardize": "train_only_per_frequency_mean_std",
+      "weight_init": "framework_default"
+    },
+    "exp_b": {
+      "objective": "equal_session_residual_mae",
+      "reuse_exp_a_search_space": true,
+      "session_specific_variant_enabled": true
+    },
+    "exp_c": {
+      "class_weight_formula": "inverse_frequency_inner_train",
+      "class_weight_unsupported_families": [
+        "knn"
+      ],
+      "cutpoint_min_separation": 1e-09,
+      "cutpoint_quantiles": [
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ],
+      "cutpoint_source": "family_a_regressor_in_sample_predictions_inner_train",
+      "proportional_odds_c_grid": [
+        0.1,
+        1.0,
+        10.0
+      ],
+      "proportional_odds_impl": "frank_hall_ordinal_decomposition_sklearn_logisticregression",
+      "selection_metric_primary": "class_unit_mae",
+      "selection_metric_secondary": "qwk"
+    },
+    "exp_e": {
+      "channel_10ghz": "mag",
+      "fold_assignment": "sorted_subject_id_array_split",
+      "gate_10ghz_m": [
+        1.0,
+        2.0
+      ],
+      "log_10ghz": "off",
+      "log_77ghz": "off",
+      "model": "ridge",
+      "n_folds": 4,
+      "reduction_10ghz": "A",
+      "ridge_alpha": 1.0,
+      "tiling_10ghz": "T1",
+      "tiling_77ghz": "T1_77"
+    },
+    "exp_f": {
+      "clock_encoding": "session_index_one_hot",
+      "covariates_primary": [
+        "age",
+        "height",
+        "baseline_mass",
+        "bmi"
+      ],
+      "covariates_sensitivity": [
+        "age",
+        "height"
+      ],
+      "radar_representation_rule": "exp_a_selected_feature_config_per_fold",
+      "ridge_alphas": [
+        0.001,
+        0.01,
+        0.03,
+        0.1,
+        0.3,
+        1.0,
+        3.0,
+        10.0
+      ],
+      "target_sensitivity": "signed_kg_change"
+    },
+    "exp_g": {
+      "alpha_grid": [
+        0.0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
+        1.0
+      ],
+      "alpha_tie_break": "closest_to_one",
+      "objective": "subject_balanced_oof_mae",
+      "seed_pairing": true
+    },
+    "model_grid": {
+      "baseline_learning_rate": [
+        0.0003,
+        0.001,
+        0.003
+      ],
+      "baseline_weight_decay": [
+        0.0,
+        0.0001
+      ],
+      "gbm_learning_rate": [
+        0.01,
+        0.1
+      ],
+      "gbm_max_depth": [
+        2,
+        3
+      ],
+      "gbm_n_estimators": [
+        100,
+        300
+      ],
+      "knn_n_neighbors": [
+        3,
+        5,
+        7,
+        9,
+        11,
+        13,
+        15
+      ],
+      "rf_max_depth": [
+        3,
+        5,
+        null
+      ],
+      "rf_n_estimators": [
+        100,
+        300
+      ],
+      "ridge_alphas": [
+        0.001,
+        0.01,
+        0.03,
+        0.1,
+        0.3,
+        1.0,
+        3.0,
+        10.0
+      ],
+      "svr_c": [
+        0.1,
+        1.0,
+        10.0,
+        100.0
+      ],
+      "svr_epsilon": [
+        0.01,
+        0.1,
+        0.3
+      ]
+    },
+    "paths": {
+      "data_10ghz_dir": "/ibex/user/sosagojm/dehydration_loso_diagnostic/data/10ghz",
+      "data_77ghz_dir": "/ibex/user/sosagojm/dehydration_loso_diagnostic/data/77ghz",
+      "results_dir": "/ibex/user/sosagojm/dehydration_radar_2/results",
+      "weight_xlsx": "/ibex/user/sosagojm/dehydration_loso_diagnostic/data/weight/metadata_subjects_info.xlsx"
+    },
+    "preprocess": {
+      "bandwidth_hz": 500000000.0,
+      "butter_order": 4,
+      "chirp_time_s": 0.001024,
+      "edge_trim": 32,
+      "fft_gate_transition_hz": 500.0,
+      "fs_hz": 520834.0,
+      "gate_method": "butterworth",
+      "mask_taper": true,
+      "model_gate_m": [
+        1.0,
+        2.0
+      ],
+      "peak_neighbors": 1,
+      "standardize": "robust"
+    },
+    "preprocess77": {
+      "bandwidth_hz": 2000000000.0,
+      "butter_order": 4,
+      "chirp_time_s": 0.000512,
+      "fs_hz": 500000.0,
+      "gate_m": [
+        2.0,
+        4.0
+      ],
+      "standardize": "robust"
+    },
+    "protocol_freeze": {
+      "fft_gate_transition_hz": 500.0,
+      "option_b_mask_taper": true,
+      "option_b_peak_neighbors": 1,
+      "qc77_min_in_band_energy_ratio": 0.3
+    },
+    "qc": {
+      "flatline_max_bin_fraction": 0.25,
+      "histogram_bins": 200,
+      "in_band_margin_hz": 1000.0,
+      "min_frame_fraction": 0.5,
+      "min_in_band_energy_ratio": 0.3,
+      "qc_gate_m": [
+        0.9,
+        3.0
+      ],
+      "rms_robust_z_threshold": 4.5
+    },
+    "qc77": {
+      "flatline_max_bin_fraction": 0.25,
+      "flatline_skip_leading_bins": 1,
+      "histogram_bins": 128,
+      "in_band_margin_hz": 1953.125,
+      "min_frame_fraction": 0.5,
+      "min_in_band_energy_ratio": 0.3
+    },
+    "run": {
+      "device": "cpu",
+      "seed": 20260721,
+      "seed_set": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "search_10ghz": {
+      "budget_k": 12,
+      "channel": [
+        "mag",
+        "iq"
+      ],
+      "log_branches": [
+        "off",
+        "on_frozen_eps",
+        "on_tuned_eps"
+      ],
+      "model_families": [
+        "ridge",
+        "svr",
+        "rf",
+        "gbm",
+        "knn"
+      ],
+      "range_gate_m": [
+        [
+          1.0,
+          2.0
+        ],
+        [
+          0.9,
+          3.0
+        ]
+      ],
+      "reduction": [
+        "A",
+        "B"
+      ],
+      "stage1_anchor_model": "ridge",
+      "stage1_anchor_ridge_alpha": 1.0,
+      "tiling": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "tuned_eps_k": 0.1
+    },
+    "search_77ghz": {
+      "budget_k": 12,
+      "channel": "iq",
+      "gate_m": [
+        2.0,
+        4.0
+      ],
+      "log_branches": [
+        "off",
+        "on_frozen_eps",
+        "on_tuned_eps"
+      ],
+      "model_families": [
+        "ridge",
+        "svr",
+        "rf",
+        "gbm",
+        "knn"
+      ],
+      "reduction": "slow_time_iq_primary",
+      "stage1_anchor_model": "ridge",
+      "stage1_anchor_ridge_alpha": 1.0,
+      "tiling": [
+        "T1_77",
+        "T2_77",
+        "T3_77"
+      ],
+      "tuned_eps_k": 0.1
+    },
+    "split": {
+      "min_train_subjects": 3,
+      "n_inner_max": 5
+    },
+    "stats": {
+      "bootstrap_b": 10000,
+      "ci_fallback": "percentile",
+      "ci_method": "bca",
+      "composite_baseline_comparison": "single_uncorrected",
+      "confidence_level": 0.95,
+      "expb_aggregate_estimand": "session_weighted_equal_weight_per_session",
+      "expb_paired_test_estimand": "subject_weighted_complete_case_s1_s4",
+      "expf_exploratory_correction": "none_reported_individually",
+      "holm_family_baseline_per_family": 3,
+      "holm_family_expb_per_session": 4,
+      "holm_family_expf_primary": 2,
+      "paired_test": "wilcoxon_signed_rank",
+      "per_subject_pearson_r_min_sessions": 3,
+      "resample_unit": "subject",
+      "robustness_min_distinct_subjects": 4,
+      "robustness_min_successful_replicates": 100,
+      "robustness_ordinal_min_classes": 5,
+      "robustness_replicates_r": 200,
+      "seed_collapse_additive": "average_per_subject_before_resample",
+      "seed_collapse_pooled": "average_metric_across_seeds_within_resample",
+      "undefined_metric_skip_threshold_pct": 5.0
+    },
+    "wst": {
+      "backend": "numpy",
+      "log_epsilon": 1e-06,
+      "max_order": 2,
+      "tilings": [
+        {
+          "invariance_ms": 0.2,
+          "q": [
+            10,
+            4
+          ]
+        },
+        {
+          "invariance_ms": 0.3,
+          "q": [
+            8,
+            2
+          ]
+        },
+        {
+          "invariance_ms": 0.4,
+          "q": [
+            6,
+            2
+          ]
+        }
+      ]
+    },
+    "wst77": {
+      "backend": "numpy",
+      "log_epsilon": 1e-06,
+      "max_order": 2,
+      "tilings": [
+        {
+          "invariance_ms": 20.0,
+          "q": [
+            8,
+            4
+          ]
+        },
+        {
+          "invariance_ms": 40.0,
+          "q": [
+            6,
+            4
+          ]
+        },
+        {
+          "invariance_ms": 60.0,
+          "q": [
+            4,
+            2
+          ]
+        }
+      ]
+    }
+  },
+  "resolved_config_fingerprint": "894a928fe298a4bb0353cdd31776f3256289190f194e43830e6ea90f9e8698e1",
+  "schema_version": "quality_training_sensitivity_provenance_v2",
+  "seeds": {
+    "inner_split_seed_rule": "session_split_seed + 1000 + zero_based_outer_fold",
+    "model_seed_set": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "session_split_seed": 20260829
+  },
+  "source_hashes": {
+    "exp_a_sources": "23cae7d561dda5b894d2a70e2c31bc934f0b9884b470ce554517c9efc2f1c635",
+    "quality_provenance": "bb7679ec275cbc91edf22467e53cd76ed0372f379e3a1541447b01a5c65c3297",
+    "reference_manifest": "7921fddf4d5fc32feca0b612c27973afd39e5146d7cba056017677441802ba5d",
+    "session_quality": "1f75a61601ac7e2b9d7debad5ad8a67afd418c66b7652365622152f40df085da"
+  },
+  "store_lineage": {
+    "band_dir": "/ibex/user/sosagojm/dehydration_radar_2/results/features/10ghz",
+    "build_commits": [
+      "4aa814d1338ec25671d34bf0f1a73dac91762fe9"
+    ],
+    "fingerprints_sha256": "c0f8959693de99019a674ecea7a34127f5ab80fe39176f3d8a9cc8c1482f075d",
+    "n_fingerprints": 73,
+    "qc_config_hashes": [
+      "0602c9078619a58fae85462b2afdb87b44e6d764feda9d13efc0ec8f89cfb96b"
+    ],
+    "spec_hashes": [
+      "34499094ee9675b25bcc1d3d930bb24890363b5159931901fa377cd48d323f8d"
+    ],
+    "store_versions": [
+      2
+    ]
+  },
+  "timestamp_utc": "2026-08-30T20:57:33.015378+00:00"
+}
